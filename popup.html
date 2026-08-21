@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 480px;
+      height: 520px;
+      display: flex;
+      flex-direction: column;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: #1a1d21;
+      background: #fbfbfc;
+      letter-spacing: 0.01em;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1b1b1c; color: #d6d6d6; }
+      input { color: #d6d6d6 !important; }
+      input::placeholder { color: #5c5c5c !important; }
+      .tab-item .url { color: #7a7a7a !important; }
+      .tab-item .title mark { color: #4daafc !important; }
+      .empty { color: #7a7a7a !important; }
+    }
+    input {
+      padding: 11px 14px;
+      font-size: 14px;
+      border: none;
+      outline: none;
+      background: transparent;
+    }
+    input::placeholder { color: #b0b6bd; }
+    .view-tabs {
+      display: flex;
+      align-items: stretch;
+      gap: 18px;
+      padding: 8px 14px 0;
+      border-bottom: 1px solid #e8eaed;
+    }
+    .view-tab {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 5px 1px 7px;
+      color: #8b949e;
+      font-family: inherit;
+      position: relative;
+      transition: color 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .view-tab:hover { color: #57606a; }
+    .view-tab::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; bottom: -1px;
+      height: 2px;
+      background: #1a1d21;
+      opacity: 0;
+      transform: scaleX(0.4);
+      transition: opacity 0.15s, transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+    }
+    .view-tab.active { color: #1a1d21; font-weight: 600; }
+    .view-tab.active::after { opacity: 1; transform: scaleX(1); }
+    .view-tabs-spacer { flex: 1; }
+    @media (prefers-color-scheme: dark) {
+      .view-tabs { border-color: #2e2e2e !important; }
+      .view-tab { color: #7a7a7a !important; }
+      .view-tab:hover { color: #b8b8b8 !important; }
+      .view-tab.active { color: #e8e8e8 !important; }
+      .view-tab::after { background: #e8e8e8 !important; }
+    }
+    .search-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 12px 6px;
+      padding: 0 4px;
+      background: #fff;
+      border: 1px solid #e4e7eb;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), inset 0 1px 2px rgba(16, 24, 40, 0.03);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .search-wrap:focus-within {
+      border-color: #b3bdc9;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 0 0 3px rgba(46, 96, 158, 0.08);
+    }
+    .search-wrap input { flex: 1; }
+    @media (prefers-color-scheme: dark) {
+      .search-wrap { background: #232323 !important; border-color: #333 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25) !important; }
+      .search-wrap:focus-within { border-color: #4a4a4a !important; box-shadow: 0 0 0 3px rgba(83, 155, 245, 0.1) !important; }
+    }
+    .settings-btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 7px;
+      color: #8b949e;
+      border-radius: 6px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .settings-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    /* 快捷键悬浮气泡: hover 问号按钮时弹出,不占布局 */
+    #helpBtn { position: relative; }
+    .help-popover {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 10;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(31, 35, 40, 0.15);
+      padding: 10px 14px;
+      width: 260px;
+      cursor: default;
+    }
+    #helpBtn:hover .help-popover,
+    .help-popover:hover { display: block; }
+    .help-popover::before {
+      content: '';
+      position: absolute;
+      top: -5px;
+      right: 14px;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-left: 1px solid #d0d7de;
+      border-top: 1px solid #d0d7de;
+      transform: rotate(45deg);
+    }
+    @media (prefers-color-scheme: dark) {
+      .help-popover { background: #2a2a2a !important; border-color: #3c3c3c !important; box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important; }
+      .help-popover::before { background: #2a2a2a !important; border-color: #3c3c3c !important; }
+    }
+    .settings-btn:hover { background: rgba(15, 23, 42, 0.05); color: #1f2328; }
+    @media (prefers-color-scheme: dark) {
+      .settings-btn { color: #8a8a8a !important; }
+      .settings-btn:hover { background: rgba(255,255,255,0.07) !important; color: #d6d6d6 !important; }
+    }
+    .settings-panel {
+      padding: 12px 14px;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 12px;
+      display: none;
+    }
+    .settings-panel.open { display: block; }
+    .settings-panel label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .settings-panel .hint { margin-top: 8px; color: #8b949e; }
+    .settings-panel .hint a { color: #0969da; text-decoration: none; }
+    .clean-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 8px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      color: #cf222e;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .clean-btn:hover { background: #ffebe9; border-color: #cf222e; }
+    .clean-btn svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      .clean-btn { background: #2a2a2a !important; border-color: #3c3c3c !important; color: #f85149 !important; }
+      .clean-btn:hover { background: #3d1216 !important; border-color: #f85149 !important; }
+    }
+    .shortcut-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .shortcut-table td {
+      padding: 3px 0;
+      font-size: 12px;
+      color: #57606a;
+    }
+    .shortcut-table td:first-child {
+      width: 60px;
+      color: #1f2328;
+      font-weight: 600;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    @media (prefers-color-scheme: dark) {
+      .shortcut-table td { color: #9d9d9d !important; }
+      .shortcut-table td:first-child { color: #d4d4d4 !important; }
+    }
+    #results {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      /* 负左右margin占满容器宽(吸顶遮底),内容用 padding 对齐行的缩进 */
+      margin: 4px 0 1px;
+      padding: 5px 16px;
+      font-size: 10.5px;
+      color: #6b7280;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.12s;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      /* 吸顶时必须有实底,否则下一个组头追上来会与当前吸顶头叠加穿帮 */
+      background: #fbfbfc;
+      box-shadow: 0 1px 0 #e8eaed; /* 底部细线: 吸顶时与穿行的行分层 */
+    }
+    .group-header:hover { color: #374151; background: #f2f3f5; }
+    @media (prefers-color-scheme: dark) {
+      .group-header { color: #8a8a8a !important; background: #1b1b1c !important; box-shadow: 0 1px 0 #2e2e2e !important; }
+      .group-header:hover { color: #c0c0c0 !important; background: #242425 !important; }
+    }
+    .caret {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: #8b949e;
+      transition: transform 0.15s ease;
+    }
+    .caret svg {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .group-header.collapsed .caret { transform: rotate(-90deg); }
+    .group-header.active { background: rgba(46, 96, 158, 0.08) !important; color: #2e609e !important; }
+    @media (prefers-color-scheme: dark) {
+      .group-header.active { background: rgba(83, 155, 245, 0.12) !important; color: #7ab5f8 !important; }
+    }
+    .group-count {
+      color: #9ca3af;
+      font-weight: 500;
+      font-size: 10px;
+      margin-left: auto;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      .group-count { color: #7a7a7a !important; }
+    }
+    .group-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 2.5px rgba(0,0,0,0.04);
+    }
+    .tab-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 12px 7px 14px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin: 0 6px;
+      transition: background 0.12s;
+      position: relative;
+    }
+    /* 选中态: 左侧 2px 主色细节条 + 极淡底色,克制但有存在感 */
+    .tab-item::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 20%;
+      width: 2px; height: 60%;
+      border-radius: 1px;
+      background: #2e609e;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .tab-item:hover { background: rgba(15, 23, 42, 0.035); }
+    .tab-item.active { background: rgba(46, 96, 158, 0.07); }
+    .tab-item.active::before { opacity: 1; }
+    @media (prefers-color-scheme: dark) {
+      .tab-item:hover { background: rgba(255, 255, 255, 0.045) !important; }
+      .tab-item.active { background: rgba(83, 155, 245, 0.1) !important; }
+      .tab-item::before { background: #539bf5 !important; }
+    }
+    .tab-item img {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      margin-top: 2px; /* 对齐标题行基线,与两行文字的顶部对齐 */
+    }
+    .group-ordinal {
+      flex-shrink: 0;
+      width: 18px;
+      font-size: 10px;
+      color: #8b949e;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      margin-top: 4px; /* 与标题行基线对齐 */
+    }
+    @media (prefers-color-scheme: dark) {
+      .group-ordinal { color: #808080 !important; }
+    }
+    .tab-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .tab-item .title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+      line-height: 1.35;
+    }
+    .tab-item .title mark {
+      background: transparent;
+      color: #0969da;
+      font-weight: 700;
+    }
+    .tab-item .url {
+      font-size: 11px;
+      color: #8b949e;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: rtl;
+      text-align: left;
+      line-height: 1.3;
+    }
+    .tab-item .url mark {
+      background: transparent;
+      color: #0550ae;
+      font-weight: 700;
+    }
+    .win-prefix {
+      color: #bf8700;
+    }
+    @media (prefers-color-scheme: dark) {
+      .win-prefix { color: #e3b341 !important; }
+    }
+    .tab-item {
+      position: relative;
+    }
+    .last-used {
+      flex-shrink: 0;
+      font-size: 10px;
+      color: #57606a;
+      background: #eff1f4;
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-left: 4px;
+      margin-top: 3px; /* 行改为顶对齐后,tag 与标题行对齐 */
+      white-space: nowrap;
+      transition: opacity 0.1s;
+    }
+    .tab-item:hover .last-used,
+    .tab-item.active .last-used {
+      opacity: 0;
+    }
+    .close-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%) translateX(6px);
+      width: 20px;
+      height: 20px;
+      border: none;
+      border-radius: 50%;
+      background: #e5e7eb;
+      color: #57606a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.1s, transform 0.1s;
+    }
+    .close-btn svg {
+      width: 11px;
+      height: 11px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+    }
+    .tab-item:hover .close-btn,
+    .tab-item.active .close-btn {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+    .close-btn:hover {
+      background: #d93025;
+      color: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      .close-btn { background: #3c3c3c !important; color: #9d9d9d !important; }
+      .close-btn:hover { background: #d93025 !important; color: #fff !important; }
+    }
+    .last-used.hot {
+      color: #1e8e3e;
+      background: #e6f4ea;
+      font-weight: 600;
+    }
+    .last-used.today {
+      color: #0969da;
+      background: #ddf4ff;
+    }
+    .last-used.recent {
+      color: #57606a;
+      background: #f0f2f5;
+    }
+    .last-used.stale {
+      color: #9a6700;
+      background: #fff8c5;
+    }
+    .last-used.zombie {
+      color: #cf222e;
+      background: #ffebe9;
+    }
+    .last-used.current {
+      color: #0969da;
+      background: #ddf4ff;
+      font-weight: 600;
+    }
+    @media (prefers-color-scheme: dark) {
+      .last-used { color: #9d9d9d !important; background: #333 !important; }
+      .last-used.hot { color: #57ab5a !important; background: #1b3a25 !important; }
+      .last-used.today { color: #539bf5 !important; background: #121d2f !important; }
+      .last-used.recent { color: #9d9d9d !important; background: #333 !important; }
+      .last-used.stale { color: #e3b341 !important; background: #3a2c00 !important; }
+      .last-used.zombie { color: #f85149 !important; background: #3d1216 !important; }
+      .last-used.current { color: #539bf5 !important; background: #121d2f !important; }
+    }
+    .empty {
+      padding: 40px 0;
+      text-align: center;
+      color: #8b949e;
+    }
+    .undo-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px 8px 14px;
+      font-size: 12px;
+      color: #57606a;
+      background: #f6f8fa;
+      border-top: 1px solid #e5e5e5;
+      cursor: default;
+      overflow: hidden;
+    }
+    /* 左侧金色竖条: 比整条黄底克制,仍有"注意"的指向性 */
+    .undo-bar::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: #d4a72c;
+    }
+    .undo-msg {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .undo-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: none;
+      background: #1f2328;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 4px 12px;
+      border-radius: 6px;
+    }
+    .undo-btn:hover { background: #424a53; }
+    .undo-btn svg {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    /* 倒计时进度条: 从满到空,走完即失效 */
+    .undo-progress {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 2px;
+      width: 100%;
+      background: #d4a72c;
+      transform-origin: left;
+      animation: undo-countdown 6s linear forwards;
+    }
+    @keyframes undo-countdown {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
+    @media (prefers-color-scheme: dark) {
+      .undo-bar { color: #9d9d9d !important; background: #262626 !important; border-color: #3c3c3c !important; }
+      .undo-bar::before { background: #e3b341 !important; }
+      .undo-btn { background: #d4a72c !important; color: #24292f !important; }
+      .undo-btn:hover { background: #e3b341 !important; }
+      .undo-progress { background: #e3b341 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="grouped">分组</button>
+    <button class="view-tab" data-view="recent">最近使用</button>
+    <button class="view-tab" data-view="current">当前窗口</button>
+  </div>
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="搜索标签页…" autofocus>
+    <button id="helpBtn" class="settings-btn" title="快捷键">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.8-2.8 2.2-2.8 3.5"/><circle cx="12" cy="17.2" r="0.5" fill="currentColor"/></svg>
+      <div class="help-popover">
+        <table class="shortcut-table">
+          <tr><td>↑ ↓</td><td>上下选择(跨分组)</td></tr>
+          <tr><td>← →</td><td>收起 / 展开分组</td></tr>
+          <tr><td>Tab</td><td>切换视图</td></tr>
+          <tr><td>Enter</td><td>切换到选中标签</td></tr>
+          <tr><td>⌘⌫</td><td>关闭选中标签</td></tr>
+          <tr><td>⌘Z</td><td>撤销刚才的关闭</td></tr>
+          <tr><td>⌘⇧K</td><td>清理 7 天未用的标签</td></tr>
+          <tr><td>Esc</td><td>清空搜索词 / 关闭</td></tr>
+          <tr><td>⌘E</td><td>呼出本弹窗(全局)</td></tr>
+        </table>
+      </div>
+    </button>
+    <button id="settingsBtn" class="settings-btn" title="设置">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.08a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+    </button>
+  </div>
+  <div id="settingsPanel" class="settings-panel">
+    <label>
+      <input type="checkbox" id="optFuzzy"> 模糊匹配(关闭后仅子串匹配)
+    </label>
+    <label>
+      <input type="checkbox" id="optShowUrl"> 始终显示 URL 行
+    </label>
+    <button id="cleanBtn" class="clean-btn">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      清理僵尸标签(7 天以上未使用,⌘⇧K)
+    </button>
+    <div class="hint">
+      全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 ⌘E
+    </div>
+  </div>
+  <div id="results"></div>
+  <div id="undoBar" class="undo-bar" style="display:none"></div>
+  <script src="popup.js"></script></body>
+</html>
