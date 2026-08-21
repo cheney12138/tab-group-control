@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Group Search",
+  "version": "1.0.0",
+  "description": "按分组搜索并切换标签页(配合 Tabbiy 等自动分组插件使用)",
+  "permissions": ["tabs", "tabGroups", "sessions"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "搜索标签页 (Ctrl+Shift+S)"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+E",
+        "mac": "Command+E"
+      },
+      "description": "打开标签页搜索"
+    }
+  },
+  "icons": {}
+}
