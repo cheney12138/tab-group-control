@@ -1,16 +1,28 @@
 {
   "manifest_version": 3,
   "name": "Tab Group Search",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "按分组搜索并切换标签页(配合 Tabbiy 等自动分组插件使用)",
-  "permissions": ["tabs", "tabGroups", "sessions", "favicon", "bookmarks", "history", "storage"],
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "sessions",
+    "favicon",
+    "bookmarks",
+    "history",
+    "storage"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": ["_favicon/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "_favicon/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {
