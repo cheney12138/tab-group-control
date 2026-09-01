@@ -3,10 +3,19 @@
   "name": "Tab Group Search",
   "version": "1.0.0",
   "description": "按分组搜索并切换标签页(配合 Tabbiy 等自动分组插件使用)",
-  "permissions": ["tabs", "tabGroups", "sessions"],
+  "permissions": ["tabs", "tabGroups", "sessions", "favicon", "bookmarks", "history", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["_favicon/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "搜索标签页 (Ctrl+Shift+S)"
+    "default_title": "搜索标签页 (⌘E)"
   },
   "commands": {
     "_execute_action": {
@@ -14,7 +23,14 @@
         "default": "Ctrl+E",
         "mac": "Command+E"
       },
-      "description": "打开标签页搜索"
+      "description": "打开标签页搜索弹窗"
+    },
+    "previous-tab": {
+      "suggested_key": {
+        "default": "Alt+E",
+        "mac": "Alt+E"
+      },
+      "description": "返回上一个标签(A/B 互跳)"
     }
   },
   "icons": {}
