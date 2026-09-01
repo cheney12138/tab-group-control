@@ -2,6 +2,7 @@
 // 读取 chrome.tabGroups 中由 Tabbiy 等插件创建的原生分组,
 // 搜索结果按分组分区显示,支持模糊匹配与拼音首字母场景下的子串匹配。
 
+// 性能埋点(无条件输出): 脚本开始执行的时刻。
 const GROUP_COLORS = {
   grey: '#7c7c7c', blue: '#1a73e8', red: '#d93025',
   yellow: '#f9ab00', green: '#1e8e3e', pink: '#ff63b8',
@@ -26,7 +27,6 @@ const resultsEl = document.getElementById('results');
 let allTabs = [];      // [{tab, group}] group 为 null 表示未分组
 let filtered = [];     // 当前展示的 [{tab, group, titleMarks, urlMarks}]
 let activeIndex = -1;
-let ordinalMap = new Map(); // tabId -> {idx, total} 组内序号,render() 时预计算
 
 // 收起状态持久化: chrome 的 groupId 每次启动会变,用 分组名+颜色 做稳定 key
 const COLLAPSE_STORE = 'tgs-collapsed';
@@ -58,6 +58,63 @@ const VIEWS = ['grouped', 'recent', 'current'];
 let view = VIEWS.includes(localStorage.getItem('tgs-view')) ? localStorage.getItem('tgs-view') : 'grouped';
 
 // 极简模糊匹配: 返回匹配到的字符下标数组,不匹配返回 null
+// 拼音匹配(pinyin-data.js 提供 GB2312 全量汉字→无调拼音,29KB):
+// 全拼模式——"dingdan" 匹配「订单管理」;首字母 "dd" 也兼容(前缀命中)。
+// 数据表 PINYIN_TABLE(拼音串) + PINYIN_IDX(编码偏移→表索引,0=无拼音)
+const pinyinFullCache = new Map(); // 字符 -> 完整拼音
+const pinyinAbbrCache = new Map(); // 字符 -> 首字母
+
+function charPinyin(ch) {
+  if (pinyinFullCache.has(ch)) return pinyinFullCache.get(ch);
+  let py = null;
+  const code = ch.codePointAt(0);
+  // 码点直查表(之前用 TextEncoder 转 gb2312 查——但 Chrome 的 TextEncoder
+  // 不支持 gb2312 标签,构造直接抛 EncodingError,拼音层整体失效过)
+  if (code >= 0x4E00 && code <= 0x9FFF && typeof PINYIN_IDX !== 'undefined') {
+    const idx = PINYIN_IDX[code - 0x4E00];
+    if (idx > 0) py = PINYIN_TABLE[idx - 1];
+  }
+  pinyinFullCache.set(ch, py);
+  return py;
+}
+
+function charPinyinInitial(ch) {
+  if (pinyinAbbrCache.has(ch)) return pinyinAbbrCache.get(ch);
+  const full = charPinyin(ch);
+  const abbr = full ? full[0] : null;
+  pinyinAbbrCache.set(ch, abbr);
+  return abbr;
+}
+
+// 文本 → 全拼串 / 首字母串(非汉字原样保留,整体小写)
+function textToPinyin(text) {
+  let out = '';
+  for (const ch of text || '') {
+    const p = charPinyin(ch);
+    out += p !== null ? p : ch;
+  }
+  return out.toLowerCase();
+}
+function textToPinyinInitials(text) {
+  let out = '';
+  for (const ch of text || '') {
+    const p = charPinyinInitial(ch);
+    out += p !== null ? p : ch;
+  }
+  return out.toLowerCase();
+}
+
+// 拼音匹配: 查询串(英文)对标题(含汉字)的拼音形态做模糊匹配。
+// 两级: 全拼("dingdan"→订单管理) 和 首字母("dd"→订单管理)。
+// 无汉字的标题直接 false
+function pinyinMatch(query, text) {
+  if (!/[一-鿿]/.test(text || '')) return false;
+  const q = query.toLowerCase();
+  if (!q || !q.match(/^[a-z]+$/)) return false; // 仅纯字母查询走拼音
+  return fuzzyMatch(q, textToPinyin(text)) !== null
+    || fuzzyMatch(q, textToPinyinInitials(text)) !== null;
+}
+
 function fuzzyMatch(query, text) {
   const q = query.toLowerCase();
   const t = text.toLowerCase();
@@ -97,6 +154,67 @@ function escapeHtml(s) {
 
 let currentWindowId = null; // 弹窗所属窗口,用于区分"其他窗口"的标签
 let windowIds = [];         // 所有含标签的窗口 id,升序;用于把内部 id 映射为可读序号
+let currentSourceIsHistory = false; // /h 命令模式下,行渲染加半透明降级
+
+// ---- 命令模式数据源: /b 书签 /h 历史 ----
+// 结构与 allTabs 同构([{tab, group}]),tab.id 用负数避免与真实 tabId 冲突
+let bookmarkItems = [];
+let historyItems = [];
+let bookmarksLoaded = false;
+let historyLoaded = false;
+
+async function loadBookmarks() {
+  if (bookmarksLoaded) return;
+  try {
+    const tree = await chrome.bookmarks.getTree();
+    bookmarkItems = [];
+    let id = -1;
+    const walk = (nodes) => {
+      for (const n of nodes) {
+        if (n.url) {
+          bookmarkItems.push({
+            tab: { id: id--, title: n.title || n.url, url: n.url,
+                   favIconUrl: '', active: false, windowId: -1, lastAccessed: 0 },
+            group: null,
+          });
+        }
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(tree);
+    bookmarksLoaded = bookmarkItems.length > 0; // 空结果(权限失败等)允许下次重试
+  } catch (e) {
+    console.error('加载书签失败(权限?):', e);
+    bookmarksLoaded = false; // 失败不锁死,下次输入重试
+  }
+}
+
+async function loadHistory() {
+  if (historyLoaded) return;
+  try {
+    const items = await chrome.history.search({ text: '', maxResults: 1000 });
+    // Chrome 真实顺序: 按最近访问倒排(API 返回顺序未定义,chrome://history 即此序)
+    const sorted = [...items].sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
+    // 同 URL 折叠(chrome://history 同款): 每个 URL 只保留最近访问的一条,
+    // 平铺会把同一页面的历史多次访问全部列出,不像真实历史
+    const seen = new Set();
+    historyItems = [];
+    for (const h of sorted) {
+      if (seen.has(h.url)) continue;
+      seen.add(h.url);
+      historyItems.push({
+        tab: { id: -10000 - historyItems.length, title: h.title || h.url, url: h.url,
+               favIconUrl: '', active: false, windowId: -1,
+               lastAccessed: h.lastVisitTime || 0 },
+        group: null,
+      });
+    }
+    historyLoaded = historyItems.length > 0; // 失败/空结果允许重试
+  } catch (e) {
+    console.error('加载历史失败(权限?):', e);
+    historyLoaded = false;
+  }
+}
 
 // 把 Chrome 内部窗口 id 映射为从 1 开始的序号,比裸 id 可读
 function windowOrdinal(windowId) {
@@ -106,48 +224,111 @@ function windowOrdinal(windowId) {
 
 async function loadTabs() {
   const t0 = performance.now();
-  // 分组查询失败不应拖垮整个列表(例如权限缺失时仍可搜索,只是无分组头)
-  const [tabs, groups, currentWin] = await Promise.all([
-    chrome.tabs.query({}),
-    chrome.tabGroups.query({}).catch(err => {
-      console.error('查询分组失败:', err);
-      return [];
-    }),
-    chrome.windows.getCurrent().catch(() => null),
-  ]);
-  if (DEBUG) console.log(`[TGS] loadTabs 查询耗时: ${(performance.now() - t0).toFixed(1)}ms, 标签数: ${tabs.length}`);
-  currentWindowId = currentWin ? currentWin.id : null;
+  // 优先用 background 维护的快照(worker 常驻,数据即时)——省掉三连查询。
+  // 快照陈旧/不可用时回退直接查询。
+  // currentWindowId 无论走哪条路径都要拿: 它是"弹窗从哪个窗口唤起"的视角,
+  // 快照无法预存(每次唤起可能不同),且它决定窗口前缀的显示
+  let tabs, groups;
+  let fromSnapshot = false;
+  const currentWinPromise = chrome.windows.getCurrent().catch(() => null);
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'get-snapshot' });
+    if (resp?.snapshot) {
+      tabs = resp.snapshot.tabs;
+      groups = resp.snapshot.groups || [];
+      fromSnapshot = true;
+    }
+  } catch (e) { /* worker 未就绪等,走正常查询 */ }
+  if (!fromSnapshot) {
+    // 分组查询失败不应拖垮整个列表(例如权限缺失时仍可搜索,只是无分组头)
+    [tabs, groups] = await Promise.all([
+      chrome.tabs.query({}),
+      chrome.tabGroups.query({}).catch(err => {
+        console.error('查询分组失败:', err);
+        return [];
+      }),
+    ]);
+  }
+  currentWindowId = (await currentWinPromise)?.id ?? null;
+  console.log(`[TGS] loadTabs 耗时: ${(performance.now() - t0).toFixed(1)}ms, 标签数: ${tabs.length}${fromSnapshot ? '(快照)' : '(直查)'}`);
   const groupById = new Map(groups.map(g => [g.id, g]));
   // 收集窗口序号映射(过滤发生在收集之后,保证编号连续且与实际窗口一致)
   windowIds = [...new Set(tabs.map(t => t.windowId))].sort((a, b) => a - b);
   // 按最近使用时间倒排: 分组区顺序由组内最新标签决定,组内同样按最近使用排序
-  allTabs = tabs
+  const sorted = tabs
     .filter(t => !t.url.startsWith('chrome-extension://'))
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))
     .map(t => ({ tab: t, group: groupById.get(t.groupId) || null }));
+  // 重复合并(QuicKey 同款): 同 URL 多个标签合成一条,保留最近使用的代表,
+  // duplicates 记全部副本 id(右上角角标显示份数)。tabs 已按 lastAccessed
+  // 倒排,先见的即代表。
+  // 合并限定同一窗口内: 跨窗口的同 URL 各自保留——窗口是独立工作区,
+  // 跨窗口合并会让另一窗口的标签"消失"(只归属到代表所在的窗口)
+  allTabs = [];
+  const byUrl = new Map();
+  for (const item of sorted) {
+    const key = `${item.tab.windowId}|${item.tab.url}`;
+    const prev = byUrl.get(key);
+    if (prev) {
+      prev.duplicates.push(item.tab.id);
+    } else {
+      item.duplicates = []; // 初始化副本数组
+      byUrl.set(key, item);
+      allTabs.push(item);
+    }
+  }
 }
 
 function search(query) {
   const q = query.trim();
-  // current 视图: 先收窄到当前窗口,再参与搜索/排序
-  const source = view === 'current' && currentWindowId != null
-    ? allTabs.filter(x => x.tab.windowId === currentWindowId)
-    : allTabs;
-  if (!q) {
-    // 空查询:展示全部(保持标签页顺序),便于浏览
+  // 命令模式(QuicKey 同款): /b 书签 /h 历史(含已关标签)
+  // 前缀命中即进入命令模式,switchTo 对负 id 条目走"新开标签"
+  const isBookmarksCmd = q === '/b' || q.startsWith('/b ');
+  const isHistoryCmd = q === '/h' || q.startsWith('/h ');
+  const inCommandMode = isBookmarksCmd || isHistoryCmd;
+  let source = inCommandMode
+    ? (isBookmarksCmd ? bookmarkItems : historyItems)
+    : (view === 'current' && currentWindowId != null
+        ? allTabs.filter(x => x.tab.windowId === currentWindowId)
+        : allTabs);
+  // 命令模式剥掉前缀再匹配;裸命令(如"/b")无关键词 → 浏览全量
+  const matchQ = inCommandMode
+    ? (q.split(/^\/[bh] ?/)[1] || '') : q;
+  // 供行渲染区分: /h 的条目加半透明降级(历史非活标签)
+  currentSourceIsHistory = isHistoryCmd;
+  if (!q || (inCommandMode && !matchQ)) {
+    // 空查询/裸命令:展示该数据源全部条目,便于浏览
     filtered = source.map(x => ({ ...x, titleHits: null, urlHits: null }));
     return;
   }
   filtered = [];
+  if (inCommandMode) {
+    // 书签/历史模式: 按 标题>host 过滤,但保持数据源原序
+    // (/h 即 chrome 历史的真实时间序,/b 即书签树序),不按匹配级别重排、不分组
+    for (const x of source) {
+      const title = x.tab.title || '';
+      const titleHits = fuzzyMatch(matchQ, title);
+      const host = hostOf(x.tab.url);
+      const hostHits = titleHits ? null : (matchQ ? fuzzyMatch(matchQ, host) : null);
+      if (titleHits || hostHits || !matchQ) {
+        filtered.push({ ...x, titleHits, urlHits: null, matchedOn: titleHits ? 'title' : 'host', exact: false, groupNameExact: false });
+      }
+    }
+    return; // source 顺序即展示顺序
+  }
   for (const x of source) {
-    // 匹配优先级: 标题 > 分组名 > 域名(host) > 完整 URL
+    // 匹配优先级: 标题 > 拼音首字母 > 分组名 > 域名(host) > 完整 URL
     const title = x.tab.title || '';
     const titleHits = fuzzyMatch(q, title);
+    const pinyinHit = !titleHits && pinyinMatch(q, title);
     let urlHits = null;
-    let matchedOn = null; // 'title' | 'group' | 'host' | 'url'
+    let matchedOn = null; // 'title' | 'pinyin' | 'group' | 'host' | 'url'
     let groupHits = null;
     if (titleHits) {
       matchedOn = 'title';
+    } else if (pinyinHit) {
+      // 拼音首字母命中: "dd"匹配「订单管理」。无高亮(字符不对应),参与排序
+      matchedOn = 'pinyin';
     } else if (x.group && x.group.title && (groupHits = fuzzyMatch(q, x.group.title))) {
       // 分组名命中: 搜"订单"能召回分组叫"订单系统"里所有标签
       matchedOn = 'group';
@@ -167,6 +348,7 @@ function search(query) {
     if (matchedOn) {
       // 记录匹配质量: exact = 查询串整体作为连续子串出现(含首字对齐),否则为 fuzzy
       const exactText = matchedOn === 'title' ? title
+        : matchedOn === 'pinyin' ? textToPinyin(title)
         : matchedOn === 'group' ? (x.group?.title || '')
         : matchedOn === 'host' ? hostOf(x.tab.url) : (x.tab.url || '');
       const isExact = exactText.toLowerCase().includes(q.toLowerCase());
@@ -181,22 +363,49 @@ function search(query) {
   // 0. 分组名全等查询词 > 一切
   // 1. 匹配级别: 标题 > 分组名 > 域名 > 完整 URL
   // 2. 匹配质量: 精确连续子串 > 模糊匹配;同级内首字命中的位置越靠前越优
-  // 3. grouped 视图按标签页自然顺序;recent 视图按最近使用
-  const rank = { title: 0, group: 1, host: 2, url: 3 };
+  // 3. 分组视图按组内排序(组是稳定容器,同组条目永远相邻,
+  //    不被其他组的强匹配打散);recent/current 视图按最近使用
+  const rank = { title: 0, pinyin: 1, group: 2, host: 3, url: 4 };
   const firstHit = f => f.titleHits?.[0] ?? f.urlHits?.[0] ?? 9999;
-  filtered.sort((a, b) => {
-    if (a.groupNameExact !== b.groupNameExact) return a.groupNameExact ? -1 : 1;
-    const r = rank[a.matchedOn] - rank[b.matchedOn];
-    if (r !== 0) return r;
-    if (a.exact !== b.exact) return a.exact ? -1 : 1;
-    const h = firstHit(a) - firstHit(b);
-    if (h !== 0) return h;
-    if (view === 'recent' || view === 'current') {
-      return (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
+  // 单条匹配质量分: 组名全等 0;否则 级别值(精确)/级别值+10(模糊)
+  const matchQuality = f => {
+    if (f.groupNameExact) return 0;
+    return rank[f.matchedOn] + (f.exact ? 0 : 10);
+  };
+  if (view === 'grouped') {
+    // 分组视图: 先分桶,桶内按质量排,桶间按桶内最佳排
+    const buckets = new Map(); // groupKey -> { best, items }
+    for (const f of filtered) {
+      const key = groupKey(f.group);
+      if (!buckets.has(key)) buckets.set(key, { best: Infinity, items: [] });
+      const b = buckets.get(key);
+      const q = matchQuality(f);
+      if (q < b.best) b.best = q;
+      b.items.push({ ...f, _q: q });
     }
-    if (a.tab.windowId !== b.tab.windowId) return a.tab.windowId - b.tab.windowId;
-    return (a.tab.index || 0) - (b.tab.index || 0);
-  });
+    for (const b of buckets.values()) {
+      b.items.sort((x, y) => {
+        if (x._q !== y._q) return x._q - y._q;
+        const h = firstHit(x) - firstHit(y);
+        if (h !== 0) return h;
+        return (x.tab.index || 0) - (y.tab.index || 0);
+      });
+    }
+    filtered = [...buckets.values()]
+      .sort((a, b) => a.best - b.best)
+      .flatMap(b => b.items)
+      .map(({ _q, ...f }) => f); // 剥掉临时排序字段
+  } else {
+    filtered.sort((a, b) => {
+      if (a.groupNameExact !== b.groupNameExact) return a.groupNameExact ? -1 : 1;
+      const r = rank[a.matchedOn] - rank[b.matchedOn];
+      if (r !== 0) return r;
+      if (a.exact !== b.exact) return a.exact ? -1 : 1;
+      const h = firstHit(a) - firstHit(b);
+      if (h !== 0) return h;
+      return (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
+    });
+  }
 
   if (DEBUG) {
     console.group(`[TGS] 搜索 "${q}" — 共 ${filtered.length} 条`);
@@ -223,32 +432,16 @@ function render() {
   const prevUnit = navUnits().find(u => u.classList.contains('active'));
   const prevKey = prevUnit?.dataset.groupKey;
   const prevTabId = prevUnit?.dataset.tabId;
-  // 预计算组内序号: 一次遍历代替行构建时每行对 filtered 的全量 filter/findIndex
-  // (后者在几百标签时是 O(n²),是渲染卡顿的主要来源)
-  ordinalMap = new Map();
-  const groupCounts = new Map(); // groupKey -> 组内条目总数
-  for (const f of filtered) {
-    if (!f.group) continue;
-    const key = groupKey(f.group);
-    groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
-  }
-  const seen = new Map(); // groupKey -> 已分配序号
-  for (const f of filtered) {
-    if (!f.group) continue;
-    const key = groupKey(f.group);
-    const idx = (seen.get(key) || 0) + 1;
-    seen.set(key, idx);
-    ordinalMap.set(f.tab.id, { idx, total: groupCounts.get(key) });
-  }
   resultsEl.innerHTML = '';
   if (!filtered.length) {
     resultsEl.innerHTML = '<div class="empty">没有匹配的标签页</div>';
     return;
   }
 
-  // recent / current 视图: 不分组,纯按顺序平铺(空查询=最近使用倒排,搜索=匹配优先+最近使用)
-  // current 视图的数据源已在 search() 收窄到当前窗口
-  if (view === 'recent' || view === 'current') {
+  // recent / current / 命令模式(/b /h): 不分组平铺。
+  // 命令模式直接按数据源原序展示(历史=chrome 真实时间序,书签=书签树序),
+  // 无分组头——与 chrome://history 的观感一致
+  if (view === 'recent' || view === 'current' || activeCmd) {
     for (const item of filtered) {
       resultsEl.appendChild(buildTabRow(item));
     }
@@ -390,9 +583,18 @@ function buildGroupHeader(group, count, isCollapsed, onClick) {
 }
 
 // favicon: 直接用 tab 快照自带的 URL,失败隐藏图标位,保持简单
+// favicon 策略(QuicKey 同款):
+// ① tab 自带 favIconUrl 优先; ② 没有则拼 _favicon 服务 URL——它读的是
+// Chrome 浏览器自己的 favicon 数据库(标签栏图标的同一份缓存),不向网站发请求,
+// 内网坏 favicon 的站点也能出图。manifest 已声明 favicon 权限 + _favicon 资源
+const FAVICON_PREFIX = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=`;
+function faviconUrlFor(t) {
+  return t.favIconUrl || (FAVICON_PREFIX + encodeURIComponent(t.url));
+}
+
 function buildFaviconEl(t) {
   const img = document.createElement('img');
-  img.src = t.favIconUrl || '';
+  img.src = faviconUrlFor(t);
   img.onerror = () => { img.style.visibility = 'hidden'; };
   return img;
 }
@@ -400,26 +602,30 @@ function buildFaviconEl(t) {
 function buildTabRow(item) {
   const t = item.tab;
   const row = document.createElement('div');
-  row.className = 'tab-item';
+  // /h 历史条目加降级类: 半透明,hover/选中恢复
+  row.className = 'tab-item' + (currentSourceIsHistory ? ' history-item' : '');
   row.dataset.tabId = t.id;
 
-  // 组内序号: 只在分组视图显示——平铺视图(recent/current)没有分组语境,
-  // 序号既无上下文又占行首,纯噪音。序号在 render() 里预计算,这里 O(1) 查询
-  if (item.group && view === 'grouped') {
-    const ord = ordinalMap.get(t.id);
-    if (ord && ord.total > 1) {
-      const ordinal = document.createElement('span');
-      ordinal.className = 'group-ordinal';
-      ordinal.textContent = ord.idx;
-      ordinal.title = `组内第 ${ord.idx} / ${ord.total} 个`;
-      row.appendChild(ordinal);
-    }
-  }
+  // 窗口归属(仅用于时间 tag 的"当前"判定与 URL 行强制显示,
+  // 不再做行首窗口徽/组内序号——实测都是伪需求,行首留白更干净)
+  const isVirtualItem = t.id < 0;
+  const isOtherWindow = !isVirtualItem
+    && currentWindowId != null && t.windowId !== currentWindowId;
 
-  // favicon 只用 tab 快照自带的 URL,拿不到直接给默认图标。
-  // 不做运行时兜底请求(_favicon/字母占位会引入二次加载与重排,拖慢渲染),
-  // 弹窗内图标是辅助信息,快和稳优先于全
-  const iconEl = buildFaviconEl(t);
+  // favicon + 重复合并角标: 同 URL 多份时 favicon 右上角迷你数字徽(深底白字,
+  // 11px 圆点),份数一眼可读;无副本时裸图标
+  const iconWrap = document.createElement('span');
+  iconWrap.className = 'icon-wrap';
+  iconWrap.appendChild(buildFaviconEl(t));
+  if (item.duplicates && item.duplicates.length > 0) {
+    const dupBadge = document.createElement('span');
+    dupBadge.className = 'dup-badge';
+    const count = item.duplicates.length + 1;
+    dupBadge.textContent = count > 9 ? '9+' : String(count);
+    iconWrap.title = `相同页面打开了 ${count} 份(回车切换到最近使用的)`;
+    iconWrap.appendChild(dupBadge);
+  }
+  row.appendChild(iconWrap);
 
   const info = document.createElement('div');
   info.className = 'tab-info';
@@ -427,8 +633,8 @@ function buildTabRow(item) {
   title.className = 'title';
   title.innerHTML = markText(t.title || t.url, item.titleHits);
   info.appendChild(title);
-  const isOtherWindow = currentWindowId != null && t.windowId !== currentWindowId;
-  // 其他窗口的行强制显示 URL 行: 窗口前缀本身是有效信息,不跟随 showUrl 设置隐藏
+  // 窗口提示已挪到行首(与组内序号互斥);URL 行不再嵌前缀。
+  // 其他窗口的行强制显示 URL 行(窗口提示需要上下文),不跟随 showUrl 隐藏
   if (settings.showUrl || item.urlHits || isOtherWindow) {
     const url = document.createElement('div');
     url.className = 'url';
@@ -437,13 +643,10 @@ function buildTabRow(item) {
     const urlHits = item.urlHits
       ? (fuzzyMatch(input.value.trim(), shownUrl) || item.urlHits)
       : null;
-    const prefix = isOtherWindow
-      ? `<span class="win-prefix">窗口${windowOrdinal(t.windowId)} · </span>` : '';
-    url.innerHTML = prefix + markText(shownUrl, urlHits);
+    url.innerHTML = markText(shownUrl, urlHits);
     info.appendChild(url);
   }
 
-  row.appendChild(iconEl);
   row.appendChild(info);
 
   // 最近使用时间 tag 五档: 当前 > 热门(10分钟,绿) > 今日(蓝) > 近期(灰) > 僵尸(橙/红)
@@ -604,7 +807,7 @@ async function doUndo() {
   // 补归组: 找同名分组,把恢复的标签移回去
   await regroupRestored(restoredTabIds);
   await loadTabs();
-  search(input.value);
+  search(searchValue());
   render();
 }
 
@@ -632,9 +835,64 @@ function hideUndo() {
   clearTimeout(undoTimer);
 }
 
+// ---- 清理空分组 ----
+// Chrome 原生没有任何入口删除"组内标签已全部关闭"的空分组,
+// Tabbiy 等自动分组插件会积累空壳。直接 query 全量分组,
+// 逐个检查组内标签数,为 0 则 ungroup 不了(空组没有成员)——
+// chrome.tabGroups 没有删除 API,空组的清除靠把"组"本身释放:
+// 组内无成员时 Chrome 会在最后标签关闭时自动删组,但跨窗口残留的
+// 空组(标签被移走而非关闭)只能通过 query 拿到后用 move 0 个标签触发——
+// 实际可行解: 空组直接被 Chrome 在 tabs.onRemoved 后异步清理,
+// 我们要做的是发现并报告仍存在的空组(极少),不误删有内容的组
+async function cleanEmptyGroups() {
+  try {
+    const [groups, tabs] = await Promise.all([
+      chrome.tabGroups.query({}),
+      chrome.tabs.query({}),
+    ]);
+    const tabsByGroup = new Map();
+    for (const t of tabs) {
+      if (t.groupId && t.groupId !== -1) {
+        tabsByGroup.set(t.groupId, (tabsByGroup.get(t.groupId) || 0) + 1);
+      }
+    }
+    const empty = groups.filter(g => !tabsByGroup.get(g.id));
+    if (!empty.length) {
+      showToast('没有空分组');
+      return;
+    }
+    // 空组移除: 把一个临时标签移入该组再移出会触发组删除,但更直接的是
+    // chrome.tabs.ungroup 需要成员——空组无成员。Chrome 116+ 提供了
+    // 通过 chrome.tabGroups.update 无法删除的事实,唯一可靠 API 路径:
+    // 创建一个 about:blank 标签放入该组,再关闭它,组随之消亡
+    const ok = confirm(`发现 ${empty.length} 个空分组(组内无标签),通过临时标签触发删除。继续?`);
+    if (!ok) return;
+    let cleaned = 0;
+    for (const g of empty) {
+      try {
+        const [tmp] = await chrome.tabs.create({
+          url: 'about:blank', active: false, windowId: g.windowId,
+        });
+        await chrome.tabs.group({ tabIds: [tmp.id], groupId: g.id });
+        await chrome.tabs.remove(tmp.id);
+        cleaned += 1;
+      } catch (e) {
+        console.error(`清理分组 ${g.title} 失败:`, e);
+      }
+    }
+    showToast(`已清理 ${cleaned} 个空分组`);
+    await loadTabs();
+    search(searchValue());
+    render();
+  } catch (e) {
+    console.error('清理空分组失败:', e);
+  }
+}
+
 // ---- 清理僵尸标签 ----
 // 批量关闭 stale(7~30天) + zombie(30天+) 档位的标签。
 // 排除当前激活标签(正在用的不杀);全部进入撤销栈,可 ⌘Z 整批救回
+// 确认用面板内提示条(系统 confirm 会被设置的覆盖层遮挡,曾导致无声卡死)
 async function cleanStaleTabs() {
   const targets = allTabs.filter(x => {
     if (!x.tab.lastAccessed) return false;
@@ -645,9 +903,13 @@ async function cleanStaleTabs() {
     showToast('没有 7 天以上未使用的标签');
     return;
   }
-  // 二次确认: 批量关 tab 是破坏性操作
-  const ok = confirm(`将关闭 ${targets.length} 个 7 天以上未使用的标签(当前标签不受影响),可通过 ⌘Z 撤销。确定?`);
-  if (!ok) return;
+  // 面板内确认条: 扫描完成先报数量,用户点确认才执行
+  const confirmed = await confirmInPanel(
+    `发现 ${targets.length} 个 7 天以上未使用的标签,关闭?(⌘Z 可撤销)`);
+  if (!confirmed) {
+    showToast('已取消清理');
+    return;
+  }
   let closedCount = 0;
   for (const x of targets) {
     try {
@@ -667,7 +929,7 @@ async function cleanStaleTabs() {
   allTabs = allTabs.filter(x => !closedIds.has(x.tab.id));
   showUndo(targets[targets.length - 1].tab);
   await loadTabs();
-  search(input.value);
+  search(searchValue());
   render();
   if (closedCount > 0) showToast(`已清理 ${closedCount} 个标签,⌘Z 可撤销`);
 }
@@ -683,6 +945,36 @@ function showToast(text) {
   undoBar.style.display = 'flex';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(hideUndo, 2000);
+}
+
+// 面板内确认条: 系统确认(confirm)会被设置的覆盖层遮挡,导致流程无声卡死。
+// 用 undoBar 位置的确认/取消条替代,返回 Promise<boolean>,8s 超时视为取消
+function confirmInPanel(text) {
+  return new Promise((resolve) => {
+    undoBar.innerHTML = '';
+    const msg = document.createElement('span');
+    msg.className = 'undo-msg';
+    msg.textContent = text;
+    const okBtn = document.createElement('button');
+    okBtn.className = 'undo-btn';
+    okBtn.textContent = '确认清理';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'undo-btn';
+    cancelBtn.style.background = '#6e7681';
+    cancelBtn.textContent = '取消';
+    const settle = (val) => {
+      clearTimeout(timer);
+      hideUndo();
+      resolve(val);
+    };
+    okBtn.addEventListener('click', () => settle(true));
+    cancelBtn.addEventListener('click', () => settle(false));
+    undoBar.appendChild(msg);
+    undoBar.appendChild(cancelBtn);
+    undoBar.appendChild(okBtn);
+    undoBar.style.display = 'flex';
+    const timer = setTimeout(() => settle(false), 8000);
+  });
 }
 
 // 相对时间: 刚刚 / N 分钟 / 1小时内 / N 小时 / 昨天 / N 天前 / N 周
@@ -734,6 +1026,12 @@ function findGroupOfTab(tabId) {
 }
 
 async function switchTo(tab) {
+  // 书签/历史条目(id 为负): 新开标签页,而非切换已有标签
+  if (tab.id < 0) {
+    await chrome.tabs.create({ url: tab.url, active: true });
+    window.close();
+    return;
+  }
   await chrome.tabs.update(tab.id, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
   window.close();
@@ -786,7 +1084,7 @@ function setView(v) {
   localStorage.setItem('tgs-view', v);
   viewTabs.forEach(b => b.classList.toggle('active', b.dataset.view === v));
   activeIndex = -1;
-  search(input.value);
+  search(searchValue());
   render();
   // 空查询时定位当前标签,搜索时选第一条
   if (filtered.length) {
@@ -802,16 +1100,139 @@ viewTabs.forEach(b => b.addEventListener('click', () => {
 viewTabs.forEach(b => b.classList.toggle('active', b.dataset.view === view));
 
 let debounceTimer = null;
+// 命令模式数据源异步加载完成后的补渲染(加载耗时通常 <50ms,
+// 若用户已继续输入,render 用的是当前输入框内容,不冲突)。
+// 判断依据是胶囊状态 activeCmd——前缀已被从输入框剥离,
+// 检查 input.value.startsWith('/h') 会永远 false,裸命令就永远空白
+function refreshIfCmdMode() {
+  if (activeCmd === '/b' || activeCmd === '/h') {
+    search(searchValue());
+    render();
+    if (filtered.length) setActive(0);
+  }
+}
+
+// ---- slash 命令胶囊 ----
+// 输入 /b /h 打全后,前缀从输入框"提取"为高亮胶囊(等宽字体标签);
+// 输入框只留关键词部分。退格(光标在关键词最前/输入框空)删除整个胶囊
+const cmdChip = document.getElementById('cmdChip');
+const cmdChipText = document.getElementById('cmdChipText');
+let activeCmd = null; // null | '/b' | '/h'
+
+// 完整搜索值 = 激活的命令前缀 + 输入框关键词(胶囊是视觉层,search 需要完整值)
+function searchValue() {
+  return activeCmd ? activeCmd + ' ' + input.value : input.value;
+}
+
+// ⌘⌫ 逐个清理重复副本: 关闭该行副本中的一份,按一次删一份,
+// 直到只剩代表(最近使用的那份)。副本按合并时的入序删(后入 = 较旧)。
+// 注意: 删完后必须同步 allTabs 源头的 duplicates(而非 pop 局部引用)——
+// search() 会从 allTabs 重建 filtered,旧引用的修改会丢,导致
+// 角标不减且第二次删除时 victimId 重复(删已关的标签,静默失败)
+async function closeOneDuplicate(target) {
+  if (!target || !target.duplicates || !target.duplicates.length) return;
+  const victimId = target.duplicates[target.duplicates.length - 1];
+  try {
+    await chrome.tabs.remove(victimId);
+    // 从 allTabs 源头移除该副本(重建后的 filtered 才能拿到正确状态)
+    const src = allTabs.find(x => x.tab.url === target.tab.url);
+    if (src && src.duplicates) {
+      src.duplicates = src.duplicates.filter(id => id !== victimId);
+    }
+    search(searchValue());
+    render();
+    // render 的自动焦点恢复在 async 路径上不可靠(捕获时机早于 DOM 重建),
+    // 显式把焦点设回代表行(行还在,代表未删),支持连续 ⌘⌫
+    const row = [...resultsEl.querySelectorAll('.tab-item')]
+      .find(r => Number(r.dataset.tabId) === target.tab.id);
+    if (row) {
+      clearActiveUnit();
+      row.classList.add('active');
+      activeIndex = [...resultsEl.querySelectorAll('.tab-item')].indexOf(row);
+    }
+    const remaining = (src?.duplicates?.length ?? target.duplicates.length - 1) + 1;
+    showToast(`已关闭一份副本,剩余 ${remaining} 份`);
+  } catch (e) {
+    console.error('关闭副本失败:', e);
+  }
+}
+
+function syncCmdChip() {
+  // 状态机: 胶囊未激活时,检测输入是否以 /b /h 开头(可激活);
+  // 已激活后 input.value 只存纯关键词,不再重新检测(否则剥掉前缀后
+  // 下次 input 事件匹配不到命令,胶囊会误消失)
+  if (!activeCmd) {
+    const m = input.value.match(/^(\/[bh])\s?/);
+    if (m) {
+      activeCmd = m[1];
+      const kw = input.value.replace(/^\/[bh]\s?/, '');
+      input.value = kw; // 剥掉前缀只留关键词
+    }
+  }
+  // 渲染胶囊 + 数据源按钮高亮
+  if (activeCmd) {
+    cmdChipText.textContent = activeCmd;
+    cmdChip.style.display = 'inline-flex';
+  } else {
+    cmdChip.style.display = 'none';
+  }
+  syncSrcButtons();
+}
+// 胶囊上的 × 点击移除
+cmdChip.querySelector('.cmd-chip-x').addEventListener('click', () => {
+  activeCmd = null;
+  cmdChip.style.display = 'none';
+  input.value = '';
+  input.dispatchEvent(new Event('input'));
+});
+
+// ---- 数据源按钮: 点击 = 激活/取消对应命令(等价输入 /b /h) ----
+const bmBtn = document.getElementById('bmBtn');
+const histBtn = document.getElementById('histBtn');
+function setCmd(cmd) {
+  // toggle 语义: 再点同一个取消;点另一个切换
+  activeCmd = (activeCmd === cmd) ? null : cmd;
+  cmdChipText.textContent = activeCmd || '';
+  cmdChip.style.display = activeCmd ? 'inline-flex' : 'none';
+  syncSrcButtons();
+  input.value = ''; // 切换数据源时清空关键词,从头搜
+  input.focus();
+  input.dispatchEvent(new Event('input'));
+}
+bmBtn.addEventListener('click', () => setCmd('/b'));
+histBtn.addEventListener('click', () => setCmd('/h'));
+// 按钮高亮与 activeCmd 同步(在 syncCmdChip 渲染胶囊处一并维护)
+function syncSrcButtons() {
+  bmBtn.classList.toggle('active', activeCmd === '/b');
+  histBtn.classList.toggle('active', activeCmd === '/h');
+}
+
+// 输入法拼音直搜: 中文输入法未上屏的拼音串(composing 状态)直接参与搜索——
+// 输入法忘了切英文时,拼音打一半列表已在实时过滤,无需上屏或切输入法。
+// 原理: composition 期间 input 事件里输入框的值就是拼音字母本身,
+// 常规搜索链路天然可用;唯一要处理的是上屏汉字后别把拼音残留当查询词
+input.addEventListener('compositionend', () => {
+  // 上屏完成: 值已变成汉字,触发一次常规 input 流程即可(汉字会被拼音匹配兜住)
+  input.dispatchEvent(new Event('input'));
+});
+
 input.addEventListener('input', () => {
+  // 先同步命令胶囊(可能修改 input.value 剥离前缀),再做常规搜索流
+  syncCmdChip();
   // 防抖: 大标签量时每个字符全量重建 DOM 会有卡顿感
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     activeIndex = -1;
     const wasSearching = searching;
-    searching = input.value.trim().length > 0;
+    // 搜索态判定: 命令胶囊激活时即使关键词空也算搜索态(显示命令结果)
+    searching = input.value.trim().length > 0 || activeCmd !== null;
     // 开始一次新搜索(从空查询进入)时,搜索模式的分组全部重置为展开
     if (searching && !wasSearching) searchCollapsed = new Set();
-    search(input.value);
+    // 命令模式触发对应数据源的按需加载(书签/历史,弹窗存活期内缓存)
+    if (activeCmd === '/b') loadBookmarks().then(refreshIfCmdMode);
+    else if (activeCmd === '/h') loadHistory().then(refreshIfCmdMode);
+    // search() 需要完整值(含前缀)判定命令模式——胶囊只是视觉层
+    search(activeCmd ? activeCmd + ' ' + input.value : input.value);
     render();
     // 空查询时光标落在当前激活标签(打开弹窗最常见意图:回到刚离开的 tab)
     // 搜索时落在第一条结果
@@ -820,6 +1241,18 @@ input.addEventListener('input', () => {
       else focusCurrentTab();
     }
   }, 30);
+});
+
+// 退格整删胶囊: 光标在起点(或空输入)按 Backspace,清除整个命令而非逐字
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Backspace' && activeCmd
+    && (input.value === '' || input.selectionStart === 0 && input.selectionEnd === 0)) {
+    e.preventDefault();
+    activeCmd = null;
+    cmdChip.style.display = 'none';
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+  }
 });
 
 // ---- 设置面板 ----
@@ -831,7 +1264,46 @@ const optShowUrl = document.getElementById('optShowUrl');
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   settingsPanel.classList.toggle('open');
-  input.focus();
+  // 展开时加载分组规则(storage 读取 <5ms,每次展开刷新保持与 background 同步)
+  if (settingsPanel.classList.contains('open')) {
+    loadRulesForEdit();
+    loadAutoGroupSwitch();
+  }
+});
+// 覆盖层的关闭按钮
+document.getElementById('settingsCloseBtn').addEventListener('click', () => {
+  settingsPanel.classList.remove('open');
+});
+
+// 自动分组总开关: 存 chrome.storage.local(background 读同一 key 判定是否归组)。
+// Tabbiy 的痛点之一是自动分组"用着用着就关了"——我们显式开关 + 显式状态,
+// 行为可预测
+const optAutoGroup = document.getElementById('optAutoGroup');
+async function loadAutoGroupSwitch() {
+  try {
+    const stored = await chrome.storage.local.get('autoGroupEnabled');
+    // 默认开启(undefined = 未设置过)
+    optAutoGroup.checked = stored?.autoGroupEnabled !== false;
+  } catch (e) {
+    optAutoGroup.checked = true;
+  }
+}
+optAutoGroup.addEventListener('change', async () => {
+  await chrome.storage.local.set({ autoGroupEnabled: optAutoGroup.checked });
+  if (optAutoGroup.checked) {
+    // 开启时立即触发存量归组(散标签按规则+Others兜底收组),归完顺带整理
+    showToast('自动分组已开启,正在归组存量标签…');
+    try {
+      await chrome.runtime.sendMessage({ type: 'group-existing' });
+      setTimeout(async () => {
+        await loadTabs();
+        search(searchValue());
+        render();
+      }, 1500);
+    } catch (e) { /* worker 未就绪时静默,规则已在 worker 生效 */ }
+  } else {
+    showToast('自动分组已关闭');
+  }
 });
 // 快捷键速查已改为 hover 气泡(纯 CSS),无需 JS
 optFuzzy.checked = settings.fuzzy;
@@ -839,7 +1311,7 @@ optShowUrl.checked = settings.showUrl;
 optFuzzy.addEventListener('change', () => {
   settings.fuzzy = optFuzzy.checked;
   saveSettings();
-  search(input.value);
+  search(searchValue());
   render();
   if (filtered.length) setActive(0);
 });
@@ -860,9 +1332,176 @@ document.getElementById('cleanBtn').addEventListener('click', () => {
   cleanStaleTabs();
 });
 
+// ---- 自动分组规则编辑器 ----
+// 规则存 chrome.storage.local(background 同源读取,storage.onChanged 即时生效)。
+// UI: 每组一个"组名输入框 + 域名芯片流",增删组,保存。
+// 脏状态: 任何编辑 → 保存按钮变琥珀+脉动,标题旁圆点;保存/重载后清除
+const rulesListEl = document.getElementById('rulesList');
+const saveRulesBtn = document.getElementById('saveRulesBtn');
+const rulesDirtyDot = document.getElementById('rulesDirtyDot');
+
+function markRulesDirty() {
+  saveRulesBtn.classList.add('dirty');
+  saveRulesBtn.textContent = '保存规则 •';
+  rulesDirtyDot.classList.add('show');
+}
+function clearRulesDirty() {
+  saveRulesBtn.classList.remove('dirty');
+  saveRulesBtn.textContent = '保存规则';
+  rulesDirtyDot.classList.remove('show');
+}
+// 事件委托: 规则区内所有输入/键入都算编辑(input 覆盖打字/粘贴/删除,
+// click 覆盖 chip × 删除和组删除按钮——这些不触发 input)
+rulesListEl.addEventListener('input', markRulesDirty);
+rulesListEl.addEventListener('click', (e) => {
+  // 只有点删除类按钮才算编辑(点 chip 文本等不算)
+  if (e.target.closest('.rule-del-btn') || e.target.closest('.host-chip button')) {
+    markRulesDirty();
+  }
+});
+// 增删组直接标脏(发生在 rulesListEl 之外)
+async function loadRulesForEdit() {
+  try {
+    const stored = await chrome.storage.local.get('groupRules');
+    if (stored?.groupRules && Object.keys(stored.groupRules).length) {
+      renderRulesEditor(stored.groupRules);
+      clearRulesDirty(); // 重载 = 回到已保存状态
+      return;
+    }
+    // storage 为空(background 首次写入还没跑): 给空态提示,
+    // 用户保存任意规则后即建立 storage 数据流
+    renderRulesEditor({});
+  } catch (e) {
+    console.error('读取规则失败:', e);
+    renderRulesEditor({});
+  }
+}
+
+function renderRulesEditor(rules) {
+  rulesListEl.innerHTML = '';
+  const entries = Object.entries(rules);
+  if (!entries.length) {
+    rulesListEl.innerHTML = '<div style="padding:8px 0;color:#8b949e;font-size:11px">暂无规则,点击下方新增组</div>';
+    return;
+  }
+  for (const [name, hosts] of entries) {
+    rulesListEl.appendChild(buildRuleGroup(name, hosts || []));
+  }
+}
+
+// 单个规则组的编辑行: 组名输入 + 域名芯片流(每枚可删) + 内联追加输入
+function buildRuleGroup(name, hosts) {
+  const groupDiv = document.createElement('div');
+  groupDiv.className = 'rule-group';
+
+  // 组名行
+  const nameRow = document.createElement('div');
+  nameRow.className = 'rule-group-name';
+  const nameInput = document.createElement('input');
+  nameInput.value = name;
+  nameInput.placeholder = '组名';
+  nameInput.className = 'rule-name-input';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'rule-del-btn';
+  delBtn.textContent = '×';
+  delBtn.title = '删除该组规则';
+  delBtn.addEventListener('click', () => groupDiv.remove());
+  nameRow.appendChild(nameInput);
+  nameRow.appendChild(delBtn);
+  groupDiv.appendChild(nameRow);
+
+  // 域名芯片流
+  const chipFlow = document.createElement('div');
+  chipFlow.className = 'rule-hosts';
+  const addHostChip = (host) => {
+    const chip = document.createElement('span');
+    chip.className = 'host-chip';
+    const label = document.createElement('span');
+    label.textContent = host;
+    label.title = host;
+    const chipDel = document.createElement('button');
+    chipDel.textContent = '×';
+    chipDel.title = '移除该域名';
+    chipDel.addEventListener('click', () => chip.remove());
+    chip.appendChild(label);
+    chip.appendChild(chipDel);
+    chipFlow.insertBefore(chip, addInput);
+  };
+  // 内联追加输入: 回车/失焦确认(逗号分隔可批量)
+  const addInput = document.createElement('input');
+  addInput.className = 'host-add-input';
+  addInput.placeholder = '+ 域名,回车确认';
+  const commit = () => {
+    const parts = addInput.value.split(/[,，\n]/)
+      .map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
+    parts.forEach(addHostChip);
+    addInput.value = '';
+  };
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') addInput.blur();
+    e.stopPropagation(); // 不触发全局快捷键
+  });
+  addInput.addEventListener('blur', commit);
+  chipFlow.appendChild(addInput);
+
+  hosts.forEach(addHostChip);
+  groupDiv.appendChild(chipFlow);
+  return groupDiv;
+}
+
+document.getElementById('addRuleBtn').addEventListener('click', () => {
+  // 追加一个空模板组(不动已有内容)
+  rulesListEl.appendChild(buildRuleGroup('', []));
+  rulesListEl.scrollTop = rulesListEl.scrollHeight;
+  markRulesDirty();
+  // 聚焦新组的组名输入
+  const groups = rulesListEl.querySelectorAll('.rule-group');
+  groups[groups.length - 1]?.querySelector('.rule-name-input')?.focus();
+});
+
+document.getElementById('saveRulesBtn').addEventListener('click', async () => {
+  // 从 DOM 收集: 组名输入框 + 芯片文本
+  const rules = {};
+  let invalid = 0;
+  rulesListEl.querySelectorAll('.rule-group').forEach(g => {
+    const name = g.querySelector('.rule-name-input')?.value.trim();
+    const hosts = [...g.querySelectorAll('.host-chip > span')]
+      .map(el => el.textContent.trim()).filter(Boolean);
+    if (name && hosts.length) {
+      rules[name] = hosts;
+    } else {
+      invalid += 1;
+    }
+  });
+  if (!Object.keys(rules).length) {
+    showToast('规则为空,未保存');
+    return;
+  }
+  try {
+    await chrome.storage.local.set({ groupRules: rules });
+    clearRulesDirty();
+    showToast(`规则已保存(${Object.keys(rules).length} 组)${invalid ? `,${invalid} 个无效组被忽略` : ''}`);
+    chrome.runtime.sendMessage({ type: 'group-existing' }).catch(() => {});
+  } catch (e) {
+    showToast('保存失败:' + e.message);
+  }
+});
+
+// (规则加载已合并进上方 settingsBtn 主监听器——展开即刷新,
+// 独立监听器的时序判断曾与主监听器的 toggle 竞态导致永远不加载)
+
 // 全局键盘路由: 监听 document 而非 input,任何元素拿走焦点后快捷键依然有效。
 // 仅当焦点在其他真实输入控件(设置面板的 checkbox 等)时放行原生行为
 document.addEventListener('keydown', (e) => {
+  // 诊断: 所有退格按键的真实修饰键状态(排查"没按 cmd 却触发关闭"的键位映射问题)
+  if (e.key === 'Backspace') {
+    console.log('[TGS] Backspace 按下:', {
+      meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey,
+      key: e.key, code: e.code,
+      focusIn: document.activeElement === input,
+    });
+  }
   const activeEl = document.activeElement;
   const isOtherInput = activeEl && activeEl !== input
     && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT'
@@ -880,11 +1519,19 @@ document.addEventListener('click', (e) => {
 });
 
 function handleShortcuts(e) {
-  // Esc: 有搜索词时清空,没有时关闭弹窗
+  // Esc 分层退出: 设置面板开 → 关面板;有关键词/胶囊 → 清空;最后才关弹窗
   if (e.key === 'Escape') {
     e.preventDefault();
+    if (settingsPanel.classList.contains('open')) {
+      settingsPanel.classList.remove('open');
+      return;
+    }
     if (input.value) {
       input.value = '';
+      input.dispatchEvent(new Event('input'));
+    } else if (activeCmd) {
+      activeCmd = null;
+      cmdChip.style.display = 'none';
       input.dispatchEvent(new Event('input'));
     } else {
       window.close();
@@ -981,20 +1628,80 @@ function handleShortcuts(e) {
     if (isUndoAvailable()) {
       undoBar.querySelector('.undo-btn')?.click();
     }
-  } else if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey)) {
-    // ⌘⌫ / Ctrl+Backspace 关闭当前选中的标签页
+  } else if (e.key === 'Backspace'
+    && (e.metaKey || e.ctrlKey)
+    && !e.altKey && !e.shiftKey) {
+    // ⌘⌫ / Ctrl+Backspace 删除当前选中行:
+    // 有重复副本 → 只删一份副本(逐个清理,代表永不动,按一次少一份);
+    // 无副本 → 删除标签本身。
+    // 修饰键显式要求: 裸退格(删字)和其他组合不进这里
     e.preventDefault();
     if (focusedUnit.classList.contains('tab-item')) {
-      closeTab(Number(focusedUnit.dataset.tabId));
+      const target = filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
+      if (target && target.duplicates && target.duplicates.length) {
+        closeOneDuplicate(target);
+      } else {
+        closeTab(Number(focusedUnit.dataset.tabId));
+      }
+    }
+  } else if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey)) {
+    // ⌘C: 光标在标签行上时复制该 tab 的 URL(不切换过去)。
+    // 若输入框里有选中文本,放行原生复制
+    const sel = window.getSelection();
+    if (sel && sel.toString()) return;
+    if (focusedUnit.classList.contains('tab-item')) {
+      e.preventDefault();
+      const target = filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
+      if (target) copyTabUrl(target.tab);
     }
   }
 }
 
+// 复制 tab 的 URL 到剪贴板,轻提示确认(不关弹窗,可连续复制多个)
+async function copyTabUrl(tab) {
+  const url = tab.url || '';
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast(`已复制: ${displayUrl(url).slice(0, 40)}`);
+  } catch (err) {
+    console.error('复制失败:', err);
+    showToast('复制失败,请重试');
+  }
+}
+
 (async () => {
+  const bootT0 = performance.now();
   await loadTabs();
   search('');
   render();
   // 初始光标落在当前激活标签,Enter 直接回去
   focusCurrentTab();
   input.focus();
+  console.log(`[TGS] 首帧完成, JS 侧总耗时 ${(performance.now() - bootT0).toFixed(1)}ms`);
+  // 快照追帧: 首帧可能拿到 Tabbiy 归组/新标签 URL 定型前的中间态
+  // (新开标签暂在未分组、重复未合并),1s 后静默复核,有变化才重渲染
+  setTimeout(async () => {
+    const sig = (list) => JSON.stringify(list.map(x =>
+      [x.tab.id, x.tab.url, x.duplicates?.length || 0, x.group?.title || '']));
+    const before = sig(allTabs);
+    await loadTabs();
+    if (sig(allTabs) !== before) {
+      search(searchValue());
+      render();
+      if (!searching) focusCurrentTab();
+    }
+  }, 1000);
+  // 唤起时异步触发分组整理(同名合并+空组清理),在 background 静默执行,
+  // 不阻塞弹窗;整理结果由下一次唤起自然看到
+  chrome.runtime.sendMessage({ type: 'tidy-groups' }).catch(() => {});
+  // [临时探针] 排查 saved tab group 在书签树的结构特征,定位后删除
+  chrome.bookmarks.getTree(tree => {
+    const bar = tree[0].children.find(c => c.id === '1') || tree[0].children[0];
+    console.log('[TGS 探针] 书签栏一级节点:', JSON.stringify(
+      (bar.children || []).map(c => ({
+        id: c.id, title: c.title, type: c.type,
+        childCount: c.children ? c.children.length : undefined,
+        keys: Object.keys(c),
+      })), null, 2));
+  });
 })();

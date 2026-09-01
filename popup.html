@@ -88,6 +88,71 @@
       box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 0 0 3px rgba(46, 96, 158, 0.08);
     }
     .search-wrap input { flex: 1; }
+    /* 数据源按钮: 搜索框左缘的书签/历史入口,点击激活对应命令(等价 /b /h) */
+    .src-btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 5px;
+      margin-left: 4px;
+      color: #8b949e;
+      border-radius: 6px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      transition: color 0.12s, background 0.12s;
+    }
+    .src-btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .src-btn:hover { color: #1f6feb; background: rgba(31, 111, 235, 0.08); }
+    /* 命令激活时对应按钮高亮 */
+    .src-btn.active { color: #1f6feb; background: #ddf4ff; }
+    @media (prefers-color-scheme: dark) {
+      .src-btn { color: #7a7a7a !important; }
+      .src-btn:hover { color: #79c0ff !important; background: rgba(121, 192, 255, 0.1) !important; }
+      .src-btn.active { color: #79c0ff !important; background: #121d2f !important; }
+    }
+    /* slash 命令胶囊: 打全 /b /h 后的前缀变成不可分割的命令标签 */
+    .cmd-chip {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: 8px;
+      padding: 2px 6px 2px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1f6feb;
+      background: #ddf4ff;
+      border: 1px solid #54aeff66;
+      border-radius: 5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      cursor: default;
+      user-select: none;
+    }
+    .cmd-chip-x {
+      cursor: pointer;
+      color: #54aeff;
+      font-size: 13px;
+      line-height: 1;
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+    .cmd-chip-x:hover { background: #54aeff33; }
+    @media (prefers-color-scheme: dark) {
+      .cmd-chip { color: #79c0ff !important; background: #121d2f !important; border-color: #1f6feb66 !important; }
+      .cmd-chip-x { color: #79c0ff !important; }
+    }
+    /* 历史条目半透明: /h 的结果非当前打开的标签,视觉降级区分 */
+    .tab-item.history-item { opacity: 0.62; }
+    .tab-item.history-item:hover, .tab-item.history-item.active { opacity: 1; }
     @media (prefers-color-scheme: dark) {
       .search-wrap { background: #232323 !important; border-color: #333 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25) !important; }
       .search-wrap:focus-within { border-color: #4a4a4a !important; box-shadow: 0 0 0 3px rgba(83, 155, 245, 0.1) !important; }
@@ -152,13 +217,43 @@
       .settings-btn { color: #8a8a8a !important; }
       .settings-btn:hover { background: rgba(255,255,255,0.07) !important; color: #d6d6d6 !important; }
     }
+    /* 设置面板: 全屏覆盖层(不再挤压 tab 列表),自带关闭按钮 */
     .settings-panel {
-      padding: 12px 14px;
-      border-bottom: 1px solid #e5e5e5;
+      position: absolute;
+      inset: 0;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 20;
+      padding: 14px 16px 16px;
       font-size: 12px;
       display: none;
+      background: #fbfbfc;
+      overflow-y: auto;
     }
     .settings-panel.open { display: block; }
+    .settings-panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e8eaed;
+    }
+    .settings-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1d21;
+    }
+    .settings-close-btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #8b949e;
+      font-size: 15px;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .settings-close-btn:hover { background: #f0f0f0; color: #1a1d21; }
     .settings-panel label {
       display: flex;
       align-items: center;
@@ -168,6 +263,152 @@
       user-select: none;
     }
     .settings-panel .hint { margin-top: 8px; color: #8b949e; }
+    /* 自动分组规则编辑器: 对齐主列表的紧凑风格,无大圆角 */
+    .rules-header {
+      margin-top: 14px;
+      font-weight: 600;
+      color: #6b7280;
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .rules-list {
+      margin-top: 5px;
+      max-height: 230px;
+      overflow-y: auto;
+      padding: 0;
+    }
+    .rule-group {
+      padding: 7px 0 8px;
+      border-bottom: 1px solid #ebeef2;
+    }
+    .rule-group:last-child { border-bottom: none; }
+    .rule-group-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rule-group-name input {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 600;
+      color: #1a1d21;
+      border: none;
+      padding: 1px 2px;
+      background: transparent;
+      outline: none;
+      font-family: inherit;
+    }
+    .rule-del-btn {
+      border: none;
+      background: none;
+      color: #b0b6bd;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    .rule-del-btn:hover { background: #ffebe9; color: #cf222e; }
+    /* 域名芯片流: 每域名一枚 chip,×单独删,底部"+"补加 */
+    .rule-hosts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 5px;
+    }
+    .host-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: #57606a;
+      background: #f0f2f5;
+      border-radius: 4px;
+      padding: 1px 3px 1px 6px;
+      max-width: 100%;
+    }
+    .host-chip span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .host-chip button {
+      border: none;
+      background: none;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    .host-chip button:hover { color: #cf222e; background: #ffebe9; }
+    .host-add-input {
+      font-size: 10.5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: #57606a;
+      border: none;
+      border-bottom: 1px dashed #c9ced6;
+      background: transparent;
+      outline: none;
+      padding: 1px 2px;
+      width: 130px;
+    }
+    .host-add-input:focus { border-bottom-color: #1f6feb; }
+    .rules-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .rules-add-btn, .rules-save-btn {
+      flex: 1;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      font-size: 11.5px;
+      font-family: inherit;
+      padding: 4px 0;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .rules-add-btn:hover { border-color: #1f6feb; color: #1f6feb; }
+    .rules-save-btn {
+      background: #1f2328;
+      color: #fff;
+      border-color: #1f2328;
+      font-weight: 600;
+    }
+    .rules-save-btn:hover { background: #424a53; }
+    /* 脏状态: 规则被编辑未保存时,保存按钮琥珀色 + 轻微脉动,提醒保存 */
+    .rules-save-btn.dirty {
+      background: #d4a72c;
+      border-color: #d4a72c;
+      color: #24292f;
+      animation: save-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes save-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(212, 167, 44, 0.45); }
+      50% { box-shadow: 0 0 0 5px rgba(212, 167, 44, 0); }
+    }
+    /* 面板标题旁的未保存圆点 */
+    .dirty-dot {
+      display: none;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #d4a72c;
+      margin-left: 6px;
+      vertical-align: 1px;
+    }
+    .dirty-dot.show { display: inline-block; }
+    @media (prefers-color-scheme: dark) {
+      .rule-group { border-color: #2a2a2a !important; }
+      .rule-group-name input { color: #e0e0e0 !important; }
+      .host-chip { background: #2c2c2e !important; color: #b0b6bd !important; }
+      .rules-add-btn, .rules-save-btn { background: #2a2a2a !important; border-color: #3c3c3c !important; color: #d6d6d6 !important; }
+      .rules-save-btn { background: #d4a72c !important; border-color: #d4a72c !important; color: #24292f !important; }
+    }
     .settings-panel .hint a { color: #0969da; text-decoration: none; }
     .clean-btn {
       display: flex;
@@ -330,17 +571,34 @@
       flex-shrink: 0;
       margin-top: 2px; /* 对齐标题行基线,与两行文字的顶部对齐 */
     }
-    .group-ordinal {
+    /* favicon 容器 + 重复合并角标: 右上角迷你数字圆点(深底白字) */
+    .icon-wrap {
+      position: relative;
       flex-shrink: 0;
-      width: 18px;
-      font-size: 10px;
-      color: #8b949e;
-      text-align: right;
+      margin-top: 2px; /* 对齐标题行基线 */
+    }
+    .dup-badge {
+      position: absolute;
+      right: -5px;
+      top: -5px;
+      min-width: 11px;
+      height: 11px;
+      line-height: 11px;
+      text-align: center;
+      font-size: 8px;
+      font-weight: 700;
+      color: #fff;
+      background: #d9534f;
+      border-radius: 6px;
+      padding: 0 2.5px;
+      border: 1.5px solid #fbfbfc;
+      pointer-events: none;
+      z-index: 2;
       font-variant-numeric: tabular-nums;
-      margin-top: 4px; /* 与标题行基线对齐 */
+      box-sizing: content-box;
     }
     @media (prefers-color-scheme: dark) {
-      .group-ordinal { color: #808080 !important; }
+      .dup-badge { border-color: #1b1b1c !important; }
     }
     .tab-info {
       flex: 1;
@@ -375,12 +633,6 @@
       background: transparent;
       color: #0550ae;
       font-weight: 700;
-    }
-    .win-prefix {
-      color: #bf8700;
-    }
-    @media (prefers-color-scheme: dark) {
-      .win-prefix { color: #e3b341 !important; }
     }
     .tab-item {
       position: relative;
@@ -481,7 +733,11 @@
       color: #8b949e;
     }
     .undo-bar {
-      position: relative;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 30; /* 高于设置覆盖层(20): 覆盖层开着时确认条/toast 仍可见 */
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -567,6 +823,16 @@
     <button class="view-tab" data-view="current">当前窗口</button>
   </div>
   <div class="search-wrap">
+    <button id="bmBtn" class="src-btn" title="搜索书签 (/b)">
+      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>
+    </button>
+    <button id="histBtn" class="src-btn" title="搜索历史 (/h)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+    </button>
+    <span id="cmdChip" class="cmd-chip" style="display:none">
+      <span id="cmdChipText"></span>
+      <span class="cmd-chip-x" title="移除命令 (⌫)">×</span>
+    </span>
     <input id="search" type="text" placeholder="搜索标签页…" autofocus>
     <button id="helpBtn" class="settings-btn" title="快捷键">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.8-2.8 2.2-2.8 3.5"/><circle cx="12" cy="17.2" r="0.5" fill="currentColor"/></svg>
@@ -576,11 +842,13 @@
           <tr><td>← →</td><td>收起 / 展开分组</td></tr>
           <tr><td>Tab</td><td>切换视图</td></tr>
           <tr><td>Enter</td><td>切换到选中标签</td></tr>
-          <tr><td>⌘⌫</td><td>关闭选中标签</td></tr>
+          <tr><td>⌘C</td><td>复制选中标签的 URL</td></tr>
+          <tr><td>⌘⌫</td><td>删除选中项(有重复时先逐份删副本)</td></tr>
           <tr><td>⌘Z</td><td>撤销刚才的关闭</td></tr>
           <tr><td>⌘⇧K</td><td>清理 7 天未用的标签</td></tr>
           <tr><td>Esc</td><td>清空搜索词 / 关闭</td></tr>
           <tr><td>⌘E</td><td>呼出本弹窗(全局)</td></tr>
+          <tr><td>/b /h</td><td>搜索 书签 / 历史(输入命令后接关键词)</td></tr>
         </table>
       </div>
     </button>
@@ -589,21 +857,35 @@
     </button>
   </div>
   <div id="settingsPanel" class="settings-panel">
+    <div class="settings-panel-head">
+      <span class="settings-panel-title">设置<span id="rulesDirtyDot" class="dirty-dot" title="规则有未保存的修改"></span></span>
+      <button id="settingsCloseBtn" class="settings-close-btn" title="关闭 (Esc)">✕</button>
+    </div>
     <label>
       <input type="checkbox" id="optFuzzy"> 模糊匹配(关闭后仅子串匹配)
     </label>
     <label>
       <input type="checkbox" id="optShowUrl"> 始终显示 URL 行
     </label>
+    <label>
+      <input type="checkbox" id="optAutoGroup"> 自动分组(新标签按规则域名归组)
+    </label>
     <button id="cleanBtn" class="clean-btn">
       <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
       清理僵尸标签(7 天以上未使用,⌘⇧K)
     </button>
+    <div class="rules-header">自动分组规则(域名 → 组)</div>
+    <div id="rulesList" class="rules-list"></div>
+    <div class="rules-actions">
+      <button id="addRuleBtn" class="rules-add-btn">+ 新增组</button>
+      <button id="saveRulesBtn" class="rules-save-btn">保存规则</button>
+    </div>
     <div class="hint">
       全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 ⌘E
     </div>
   </div>
   <div id="results"></div>
   <div id="undoBar" class="undo-bar" style="display:none"></div>
+  <script src="pinyin-data.js"></script>
   <script src="popup.js"></script></body>
 </html>
