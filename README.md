@@ -1,61 +1,69 @@
 # Tab Group Search
 
-一个为「标签页分组 + 多环境开发」场景设计的 Chrome 标签页搜索/切换弹窗。
+A Chrome extension for managing large numbers of tabs in multi-environment development workflows: **search & switch + automatic tab grouping**, in one place.
 
-配合 [Tabbiy](https://chromewebstore.google.com) 等自动分组插件使用：分组交给它们管,本扩展只负责**在分组之上快速搜索和切换**——只读分组、不写分组,两边互不冲突。
+## Overview
 
-## 功能
+### 🔍 Search & Switch
 
-- **四级匹配搜索**: 标题 > 分组名 > 域名 > 完整 URL;精确子串优先于模糊匹配,命中字符高亮
-- **分组名全等置顶**: 搜索词恰好等于分组名时,该组整组排最前
-- **三个视图**(`Tab` 键循环切换):
-  - **分组** — 按标签分组分区显示,可收起/展开(状态持久化)
-  - **最近使用** — 纯按 lastAccessed 倒排
-  - **当前窗口** — 只显示本窗口标签,排除多窗口干扰
-- **多窗口感知**: 其他窗口的标签带「窗口N ·」前缀;「当前」标记全局唯一
-- **时间档位 tag**: 当前 / 10分钟内(绿) / 24小时内(蓝) / 7天内(灰) / 30天内(琥珀) / 更久(红)
-- **组内序号**: 分组视图下每行显示组内位置,便于口播定位
-- **关闭与撤销**: `⌘⌫` 关闭选中标签,底部提示条 6 秒内可撤销(`⌘Z`),恢复时自动移回原分组、带回浏览历史
-- **僵尸清理**: `⌘⇧K` 一键关闭 7 天以上未使用的标签(当前标签豁免,可整批撤销)
-- **深色模式**: 跟随系统
+- **Tiered matching**: title > pinyin > group name > domain > full URL. Exact substring matches rank above fuzzy ones, with matched characters highlighted
+- **Full pinyin matching**: `dingdan` → 「订单管理」, `djtx` (initials) also hits. Powered by a built-in Unicode codepoint-indexed table covering 20,924 CJK characters — no runtime encoding conversion, zero dependencies
+- **Exact group name boost**: when the query exactly equals a group name, that group is pinned to the top
+- **Command modes**: `/b` searches bookmarks, `/h` searches history (Chrome's native time ordering, same-URL collapsed). Or click the 🔗 / 🕐 buttons inside the search box
+- **Duplicate merging**: multiple tabs with the same URL collapse into one row with a count badge on the favicon; `⌘⌫` removes duplicates one at a time
+- **Three views** (cycle with `Tab`): Grouped (collapsible sections) / Recently Used / Current Window
 
-## 安装(开发者模式)
+### 🗂 Automatic Tab Grouping
 
-1. 下载本仓库代码
-2. 打开 `chrome://extensions/`,右上角开启「开发者模式」
-3. 点击「加载已解压的扩展程序」,选择本项目目录
-4. 到 `chrome://extensions/shortcuts` 把「打开标签页搜索」设为 `⌘E`(或其他顺手快捷键)
+- **Domain rule engine**: each group is bound to a list of domains; new tabs and in-page navigations are grouped automatically
+- **Same-name group reuse**: before creating a group, existing same-name groups are looked up first — no duplicate group accumulation
+- **Others fallback**: tabs matching no rule go into an `Others` group, so the tab bar stays organized
+- **Rule editor**: chip-style editing in the settings panel (group name + domain chips), saved rules take effect immediately, with unsaved-change indication
+- **Master switch**: enable/disable at will; enabling triggers an immediate re-grouping of existing tabs. Predictable behavior, no silent failures
+- **Auto-collapse groups**: switching tabs collapses all other groups in the window — only the active group stays expanded
 
-## 快捷键
+### ⌨️ More
 
-| 按键 | 行为 |
+- **Go to previous tab** (`⌥E`): MRU-stack based A↔B toggling, falls back to earlier entries when the target has been closed
+- **Time tier tags**: current / 10 min (green) / 24 h (blue) / 7 d (grey) / 30 d (amber) / older (red)
+- **Stale tab cleanup** (`⌘⇧K`): close all tabs unused for 7+ days in one shot, undoable
+- **Undo**: closed tabs can be restored with `⌘Z` within 6 seconds — back to their original groups, with browsing history intact
+- **Performance**: event-driven worker keep-alive + tab snapshot (popup renders instantly), favicons served from Chrome's built-in cache
+- **Dark mode**: follows the system
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
 |---|---|
-| `⌘E` | 呼出弹窗(全局,可在 Chrome shortcuts 页自定义) |
-| `↑ ↓` | 上下选择(跨分组,含分组头) |
-| `→ / ←` | 收起 / 展开当前分组 |
-| `Tab` | 循环切换 分组 / 最近使用 / 当前窗口 视图 |
-| `Enter` | 切换到选中标签 |
-| `⌘⌫` | 关闭选中标签 |
-| `⌘Z` | 撤销刚才的关闭 |
-| `⌘⇧K` | 清理 7 天以上未使用的标签 |
-| `Esc` | 清空搜索词;已空则关闭弹窗 |
+| `⌘E` | Open the popup (global, customizable via Chrome's shortcuts page) |
+| `⌥E` | Go to previous tab (A/B toggle) |
+| `↑ ↓` | Navigate (across groups, including group headers) |
+| `→ / ←` | Collapse / expand group |
+| `Tab` | Cycle views: Grouped / Recent / Current Window |
+| `Enter` | Switch to the selected tab |
+| `⌘C` | Copy the selected tab's URL |
+| `⌘⌫` | Delete selection (removes duplicates one at a time when present, otherwise closes the tab) |
+| `⌘Z` | Undo last close |
+| `⌘⇧K` | Clean up tabs unused for 7+ days |
+| `Esc` | Layered exit: close settings → clear query → close popup |
 
-Windows 上 `⌘` 对应 `Ctrl`。
+On Windows, `⌘` maps to `Ctrl`.
 
-## 设置
+## Installation (Developer Mode)
 
-弹窗右上角 ⚙:
+1. Download this repository
+2. Open `chrome://extensions/` and enable **Developer mode** (top right)
+3. Click **Load unpacked** and select the project directory
+4. Open `chrome://extensions/shortcuts` to confirm key bindings (`⌘E` for popup, `⌥E` for previous tab)
 
-- **模糊匹配** — 关闭后仅支持连续子串匹配
-- **始终显示 URL 行** — 关闭后仅 URL 命中的行显示第二行(其他窗口的行始终显示)
-- **清理僵尸标签** — 同 `⌘⇧K`
+## Known Limitations
 
-## 已知限制
+- **Saved tab groups cannot be managed by extensions**: saved-but-not-open groups shown on the bookmarks bar are outside every extension API (`tabGroups` only covers open groups; they don't exist in the `bookmarks` tree either). They must be removed manually
+- **Polyphonic characters use the common reading**: 「重」 → zhong (chong as in Chongqing won't match); initial-letter and raw-text matching serve as fallbacks
+- **Auto-collapse is fully managed**: manually expanded groups get collapsed again when you switch tabs (think of it as peek-then-auto-close)
+- **MV3 worker idle**: the first invocation after a long idle may have slight latency (event-driven keep-alive covers most cases); a second press recovers instantly
 
-- Chrome 冷启动后头几秒快捷键可能无响应(MV3 扩展 service worker 按需唤醒的通病),再按一次即可
-- 撤销恢复依赖 `chrome.sessions`,弹窗关闭后快照丢失
-- 分组颜色沿用 Chrome 原生 9 色,组多时必然撞色(Chrome API 限制)
+## Tech
 
-## 技术栈
-
-纯原生 JS + DOM,无框架无依赖。Manifest V3,权限仅 `tabs` / `tabGroups` / `sessions`。
+Plain JavaScript + DOM, no frameworks, no dependencies. Manifest V3.
+Permissions: `tabs` / `tabGroups` / `sessions` / `favicon` / `bookmarks` / `history` / `storage`.
