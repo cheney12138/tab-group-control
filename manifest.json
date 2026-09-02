@@ -39,7 +39,7 @@
     },
     "previous-tab": {
       "suggested_key": {
-        "default": "Alt+E",
+        "default": "Alt+Q",
         "mac": "Alt+E"
       },
       "description": "返回上一个标签(A/B 互跳)"

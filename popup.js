@@ -3,6 +3,10 @@
 // 搜索结果按分组分区显示,支持模糊匹配与拼音首字母场景下的子串匹配。
 
 // 性能埋点(无条件输出): 脚本开始执行的时刻。
+// 平台适配: Windows 下 UI 文案的修饰键符号用 Ctrl,mac 用 ⌘
+const IS_MAC = navigator.userAgent.includes('Mac');
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+
 const GROUP_COLORS = {
   grey: '#7c7c7c', blue: '#1a73e8', red: '#d93025',
   yellow: '#f9ab00', green: '#1e8e3e', pink: '#ff63b8',
@@ -23,6 +27,16 @@ function saveSettings() {
 }
 
 const input = document.getElementById('search');
+// HTML 里的修饰键占位符填充(mac: ⌘ / Windows: Ctrl+)
+document.querySelectorAll('.k-c, .k-cmd').forEach(el => el.textContent = MOD);
+// Windows 下 ⌫/⇧ 等 mac 符号换成文字
+if (!IS_MAC) {
+  document.querySelectorAll('.help-popover td:first-child').forEach(td => {
+    td.innerHTML = td.innerHTML
+      .replace('⌫', 'Backspace')
+      .replace('⇧', 'Shift+');
+  });
+}
 const resultsEl = document.getElementById('results');
 let allTabs = [];      // [{tab, group}] group 为 null 表示未分组
 let filtered = [];     // 当前展示的 [{tab, group, titleMarks, urlMarks}]
@@ -195,12 +209,16 @@ async function loadHistory() {
     const items = await chrome.history.search({ text: '', maxResults: 1000 });
     // Chrome 真实顺序: 按最近访问倒排(API 返回顺序未定义,chrome://history 即此序)
     const sorted = [...items].sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
+    // 当前打开的标签 URL 集合: /h 的目的是找回"没开着的"页面,
+    // 已开着的(尤其当前标签,它必然是最新历史)从结果中排除
+    const openUrls = new Set(allTabs.map(x => x.tab.url).filter(Boolean));
     // 同 URL 折叠(chrome://history 同款): 每个 URL 只保留最近访问的一条,
     // 平铺会把同一页面的历史多次访问全部列出,不像真实历史
     const seen = new Set();
     historyItems = [];
     for (const h of sorted) {
       if (seen.has(h.url)) continue;
+      if (openUrls.has(h.url)) continue; // 已开着的页面不进历史列表
       seen.add(h.url);
       historyItems.push({
         tab: { id: -10000 - historyItems.length, title: h.title || h.url, url: h.url,
@@ -426,6 +444,14 @@ function search(query) {
 // 搜索模式下强制全部展开,只有空查询浏览时才应用收起状态
 let searching = false;
 
+// 空态文案按数据源区分(纯机器文案的认知成本小优化)
+function emptyMessage() {
+  if (activeCmd === '/b') return '书签里没有匹配项';
+  if (activeCmd === '/h') return '历史里没找到这条记录';
+  if (searching) return '没有匹配的标签页,试试拼音首字母?';
+  return '没有打开的标签页';
+}
+
 function render() {
   const t0 = performance.now();
   // 记住重渲染前的焦点,重建后尽量恢复
@@ -434,7 +460,7 @@ function render() {
   const prevTabId = prevUnit?.dataset.tabId;
   resultsEl.innerHTML = '';
   if (!filtered.length) {
-    resultsEl.innerHTML = '<div class="empty">没有匹配的标签页</div>';
+    resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
     return;
   }
 
@@ -669,7 +695,7 @@ function buildTabRow(item) {
   const closeBtn = document.createElement('button');
   closeBtn.className = 'close-btn';
   closeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  closeBtn.title = '关闭标签页 (⌘⌫)';
+  closeBtn.title = `关闭标签页 (${MOD}Backspace)`;
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     closeTab(t.id);
@@ -702,7 +728,7 @@ async function closeTab(tabId) {
   if (newRows.length) {
     setActive(Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1));
   } else {
-    resultsEl.innerHTML = '<div class="empty">没有匹配的标签页</div>';
+    resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
   }
   // 撤销快照带上原分组信息,恢复后用于归组(sessions.restore 不触发 onCreated,
   // Tabbiy 等自动分组插件感知不到恢复的标签,需要我们主动移回原组)
@@ -736,7 +762,7 @@ function showUndo(snapshot) {
   btn.className = 'undo-btn';
   btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>撤销';
   // 撤销可用 ⌘Z 快捷键触发,按钮上加提示
-  btn.title = '恢复刚关闭的标签 (⌘Z)';
+  btn.title = `恢复刚关闭的标签 (${MOD}Z)`;
   btn.addEventListener('click', doUndo);
   undoBar.appendChild(msg);
   undoBar.appendChild(btn);
@@ -905,7 +931,7 @@ async function cleanStaleTabs() {
   }
   // 面板内确认条: 扫描完成先报数量,用户点确认才执行
   const confirmed = await confirmInPanel(
-    `发现 ${targets.length} 个 7 天以上未使用的标签,关闭?(⌘Z 可撤销)`);
+    `发现 ${targets.length} 个 7 天以上未使用的标签,关闭?(${MOD}Z 可撤销)`);
   if (!confirmed) {
     showToast('已取消清理');
     return;
@@ -931,7 +957,7 @@ async function cleanStaleTabs() {
   await loadTabs();
   search(searchValue());
   render();
-  if (closedCount > 0) showToast(`已清理 ${closedCount} 个标签,⌘Z 可撤销`);
+  if (closedCount > 0) showToast(`已清理 ${closedCount} 个标签,${MOD}Z 可撤销`);
 }
 
 // 轻量提示: 复用 undoBar 位置显示无按钮信息,2 秒自动消失
