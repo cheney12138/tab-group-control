@@ -118,20 +118,34 @@ async function autoGroupTab(tab) {
   }
 }
 
-// 启动/安装时: 批量归组存量标签(一次性,逐个归组复用上面的组逻辑)。
-// 未命中规则的散标签也归入 Others(与事件路径一致);已在组里的不动(尊重手动分组)
+// 启动/安装/规则保存时: 批量归组存量标签。
+// 规则优先: 命中规则的标签无论当前在哪个组(含 Others/旧规则组)都迁入规则组——
+// "已在组里"只代表历史状态,不代表用户意志(全自动管理场景没有手动分组)。
+// 未命中规则的: 散着的归入 Others 兜底,已在其他组里的不动(避免规则外乱迁)
 async function groupExistingTabs() {
   await switchReady;
   if (!autoGroupEnabled) return;
   try {
+    // 先从 storage 重读规则重建索引——归组消息可能与 storage.onChanged
+    // (重建索引)竞态:消息先到时用的还是旧索引,新保存的规则对存量不生效。
+    // 这里自读自建,不依赖外部时序
+    const stored = await chrome.storage.local.get('groupRules');
+    if (stored?.groupRules) rebuildHostIndex(stored.groupRules);
     const tabs = await chrome.tabs.query({});
     let grouped = 0;
     for (const tab of tabs) {
-      // 已在组里的不动(尊重手动分组)
-      if (tab.groupId && tab.groupId !== -1) continue;
-      // chrome:// 等内部页面 autoGroupTab 内部会跳过,此处不重复判断
-      await autoGroupTab(tab);
-      grouped += 1;
+      if (!tab.url || tab.url.startsWith('chrome')) continue;
+      const hit = matchGroup(tab.url);
+      if (hit) {
+        // 命中规则: 任何状态都归入规则组(autoGroupTab 内部会跳过已在同名组的)
+        await autoGroupTab(tab);
+        grouped += 1;
+      } else if (tab.groupId === -1 || !tab.groupId) {
+        // 未命中且散着: Others 兜底
+        await autoGroupTab(tab);
+        grouped += 1;
+      }
+      // 未命中且已在某组: 不动
     }
     if (grouped > 0) console.log(`[TGS] 存量归组: ${grouped} 个标签`);
     refreshSnapshot();
@@ -196,12 +210,31 @@ async function foldOtherGroups(activeTabId) {
 let recentTabIds = []; // 最近使用的 tabId 序列,[0] 是上一个(最新的已切走)
 const MAX_RECENT = 30;
 
+// 防抖: 一次跨窗口跳转会连发两个事件——onFocusChanged(此时 tabs.update
+// 可能尚未生效,query 到的是目标窗口的旧 active)和 onActivated(时序最准)。
+// 只认最后一次,避免旧 active 被错误提升到栈顶污染 MRU 顺序
+let trackTimer = null;
 function trackRecentTab(tabId) {
-  // 从栈中移除该 id(避免重复),再压到已活跃端
-  recentTabIds = recentTabIds.filter(id => id !== tabId);
-  recentTabIds.unshift(tabId);
-  if (recentTabIds.length > MAX_RECENT) recentTabIds.length = MAX_RECENT;
+  if (trackTimer) clearTimeout(trackTimer);
+  trackTimer = setTimeout(() => {
+    trackTimer = null;
+    // 从栈中移除该 id(避免重复),再压到已活跃端
+    recentTabIds = recentTabIds.filter(id => id !== tabId);
+    recentTabIds.unshift(tabId);
+    if (recentTabIds.length > MAX_RECENT) recentTabIds.length = MAX_RECENT;
+    // 持久化到 storage.session(worker 被杀后 MRU 不丢,
+    // 否则重启空栈→⌥E 空转——两台机器都复现的根因)
+    chrome.storage.session.set({ recentTabs: recentTabIds }).catch(() => {});
+  }, 150);
 }
+
+// worker 冷启动: 恢复上次会话的 MRU 栈
+chrome.storage.session.get('recentTabs').then((s) => {
+  if (Array.isArray(s?.recentTabs)) {
+    recentTabIds = s.recentTabs.filter(id => Number.isInteger(id));
+    console.log(`[TGS] MRU 栈已恢复: ${recentTabIds.length} 条`);
+  }
+}).catch(() => {});
 
 async function gotoPreviousTab() {
   // 栈顶(最新)是当前标签,跳到 [1];若 [1] 不存在(刚启动只有一次切换)则跳 [0]
@@ -215,13 +248,32 @@ async function gotoPreviousTab() {
       await chrome.tabs.update(targetId, { active: true });
       return; // 激活成功(trackRecentTab 会被 onActivated 重新压栈)
     } catch (e) {
-      // 标签已关闭,从栈里移除,继续往后找
+      // 标签已关闭,从栈里移除,继续往后找(同步持久化,防死 id 复活)
       recentTabIds.splice(targetIdx, 1);
+      chrome.storage.session.set({ recentTabs: recentTabIds }).catch(() => {});
     }
   }
 }
 chrome.tabs.onRemoved.addListener(refreshSnapshot);
-chrome.windows.onFocusChanged.addListener(refreshSnapshot);
+// 切换窗口不触发 tabs.onActivated——这里补压 MRU 栈,否则窗口间的
+// 来回切换全不进栈,⌥E 互跳会跳过它们(多窗口下"失灵"的主因)。
+// WINDOW_ID_NONE = 所有窗口失焦(切去了别的 app),不压
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  refreshSnapshot();
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    if (!chrome.runtime.lastError && tabs?.length) trackRecentTab(tabs[0].id);
+  });
+});
+// tab 被 Chrome 自动丢弃(discard,内存紧张时后台 tab 会发生)时 id 会
+// 重新分配——栈里原位换新 id,否则留死 id,⌥E 会跳到比预期更早的标签
+chrome.tabs.onReplaced.addListener((newTabId, oldTabId) => {
+  const idx = recentTabIds.indexOf(oldTabId);
+  if (idx > -1) {
+    recentTabIds[idx] = newTabId;
+    chrome.storage.session.set({ recentTabs: recentTabIds }).catch(() => {});
+  }
+});
 
 // onCreated/onUpdated: 保活 + 自动归组(新标签/页面跳转到规则域名)
 chrome.tabs.onCreated.addListener((tab) => {
@@ -238,15 +290,28 @@ loadRules().then(() => {
   refreshSnapshot();
   groupExistingTabs();
 });
+// Chrome 启动: 预热快照(MRU 栈在下方冷启动恢复)。
+// worker 本身随 Chrome 拉起,不需要"唤醒";但启动期磁盘忙,
+// 首次 tabs.query 可能拿到"恢复中"的中间态(标题/图标未定型)。
+// 延迟 2s 再刷一次快照,等会话恢复基本完成后用最终态覆盖,
+// 弹窗首唤起时快照即新鲜
+chrome.runtime.onStartup.addListener(() => {
+  setTimeout(refreshSnapshot, 2000);
+});
 // 安装/更新: 规则重载(用户可能在设置面板改过 storage,storage 变化自动生效)
 chrome.runtime.onInstalled.addListener(() => {
   loadRules().then(groupExistingTabs);
 });
-// 规则变更(popup 设置面板写入 storage)时重建索引
+// 规则变更(popup 设置面板写入 storage)时: 重建索引 + 立即存量归组。
+// 之前只重建索引、依赖 popup 发 group-existing 消息触发归组——但 worker
+// 休眠时消息会直接丢失(receiving end not exist),且 storage 写入不依赖
+// worker,导致"规则保存成功但存量永远不归"。onChanged 由浏览器投递,
+// worker 活着时必达,归组挂在这里才是可靠路径
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.groupRules) {
     rebuildHostIndex(changes.groupRules.newValue);
-    console.log('[TGS] 分组规则已更新');
+    console.log('[TGS] 分组规则已更新,触发存量归组');
+    groupExistingTabs();
   }
 });
 

@@ -10,7 +10,9 @@
     "favicon",
     "bookmarks",
     "history",
-    "storage"
+    "storage",
+    "activeTab",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"
@@ -40,10 +42,24 @@
     "previous-tab": {
       "suggested_key": {
         "default": "Alt+Q",
-        "mac": "Alt+E"
+        "mac": "Alt+Q"
       },
       "description": "返回上一个标签(A/B 互跳)"
     }
   },
-  "icons": {}
+  "icons": {},
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }

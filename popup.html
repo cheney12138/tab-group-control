@@ -1,27 +1,116 @@
 <!DOCTYPE html>
+<!-- TGS-BUILD: 2026-09-03 v3 (glass-search + sticky-fix) 验证缓存: popup 检查器里看到此注释=新代码 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* ============================================================
+     * 苹果风格色板: 所有颜色走 CSS 变量,深浅色各定义一套,
+     * 规则层不再需要 !important 覆盖——切色板即切主题。
+     * 色值取自 Apple HIG 系统色(浅色模式值 + 深色模式值)
+     * ============================================================ */
+    :root {
+      color-scheme: light dark; /* 原生滚动条/checkbox 跟随深浅色 */
+      --bg: #f5f5f7;                        /* 页面底(Apple 标志性浅灰) */
+      --surface: #ffffff;                   /* 卡片面 */
+      --fill: rgba(120, 120, 128, 0.10);    /* 填充底(输入框/分段控件容器) */
+      --fill-2: rgba(120, 120, 128, 0.16);  /* 填充底·深一档 */
+      --text: #1d1d1f;                      /* 主文字 */
+      --text-2: #6e6e73;                    /* 次级文字 */
+      --text-3: #8e8e93;                    /* 三级文字 */
+      --placeholder: rgba(60, 60, 67, 0.32);
+      --hairline: rgba(0, 0, 0, 0.10);      /* 发丝线(分隔线/描边) */
+      --header-line: rgba(0, 0, 0, 0.055);  /* 组头底线: 比通用发丝线更淡(吸顶时叠在毛玻璃上,浓了像黑线) */
+      --hover: rgba(0, 0, 0, 0.04);         /* 通用 hover 底 */
+      --accent: #0071e3;                    /* Apple 蓝 */
+      --accent-hi: #0077ed;
+      --tint: rgba(0, 113, 227, 0.09);      /* 蓝色淡底(选中态) */
+      --tint-2: rgba(0, 113, 227, 0.13);
+      --ring: rgba(0, 122, 255, 0.20);      /* 聚焦光环 */
+      --danger: #d70015;                    /* 危险·文字 */
+      --danger-solid: #ff3b30;              /* 危险·实底 */
+      --danger-bg: rgba(255, 59, 48, 0.10);
+      --amber: #ff9500;                     /* 系统橙(脏状态/撤销条) */
+      --seg-active: #ffffff;                /* 分段控件激活块 */
+      --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+      --header-bg: #f5f5f7;               /* 吸顶组头: 实底(毛玻璃只留给搜索框) */
+      --header-hover: rgba(0, 0, 0, 0.04);
+      --pop-bg: #ffffff;                  /* 气泡/推送条: 实底 */
+      --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.14);
+      --dot-ring: rgba(0, 0, 0, 0.06);      /* 竖色条细描边 */
+      --btn-2: #6e6e73;                     /* 次级实底按钮 */
+      --media-btn-bg: #ffffff;            /* 媒体控制圆钮: 实底白 */
+      --media-btn-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+      --push-shadow: 0 4px 18px rgba(0, 0, 0, 0.12); /* 推送胶囊的柔和投影 */
+      --search-bg: rgba(255, 255, 255, 0.48);    /* 搜索框毛玻璃底(未聚焦) */
+      --search-bg-focus: rgba(255, 255, 255, 0.68); /* 聚焦: 更实一档,玻璃不关 */
+      --plate-bg: rgba(245, 245, 247, 0.55);    /* 磨砂底板: 半透,行从下面滚过被糊出 */
+      --tag-hot-c: #248a3d;   --tag-hot-bg: rgba(52, 199, 89, 0.13);
+      --tag-info-c: #0066cc;  --tag-info-bg: rgba(0, 113, 227, 0.10);
+      --tag-mid-c: #6e6e73;   --tag-mid-bg: rgba(120, 120, 128, 0.12);
+      --tag-stale-c: #b25000; --tag-stale-bg: rgba(255, 149, 0, 0.13);
+      --tag-zombie-c: #d70015; --tag-zombie-bg: rgba(255, 59, 48, 0.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1e;
+        --surface: #2c2c2e;
+        --fill: rgba(120, 120, 128, 0.22);
+        --fill-2: rgba(120, 120, 128, 0.32);
+        --text: #f5f5f7;
+        --text-2: #98989d;
+        --text-3: #7c7c80;
+        --placeholder: rgba(235, 235, 245, 0.38);
+        --hairline: rgba(255, 255, 255, 0.12);
+        --header-line: rgba(255, 255, 255, 0.07);
+        --hover: rgba(255, 255, 255, 0.06);
+        --accent: #0a84ff;
+        --accent-hi: #3395ff;
+        --tint: rgba(10, 132, 255, 0.16);
+        --tint-2: rgba(10, 132, 255, 0.22);
+        --ring: rgba(10, 132, 255, 0.32);
+        --danger: #ff453a;
+        --danger-solid: #ff453a;
+        --danger-bg: rgba(255, 69, 58, 0.16);
+        --amber: #ff9f0a;
+        --seg-active: #5e5e62;
+        --seg-shadow: none;
+        --header-bg: #1c1c1e;
+        --header-hover: rgba(255, 255, 255, 0.06);
+        --pop-bg: #2c2c2e;
+        --shadow-pop: 0 10px 32px rgba(0, 0, 0, 0.6);
+        --dot-ring: rgba(255, 255, 255, 0.10);
+        --btn-2: #5b5b60;
+        --media-btn-bg: #404042;
+        --media-btn-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+        --push-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+        --search-bg: rgba(255, 255, 255, 0.07);  /* 深色下白玻璃微透(未聚焦) */
+        --search-bg-focus: rgba(255, 255, 255, 0.12); /* 聚焦: 微实一档 */
+        --plate-bg: rgba(28, 28, 30, 0.60);     /* 深色磨砂底板 */
+        --tag-hot-c: #30d158;   --tag-hot-bg: rgba(48, 209, 88, 0.18);
+        --tag-info-c: #409cff;  --tag-info-bg: rgba(10, 132, 255, 0.22);
+        --tag-mid-c: #98989d;   --tag-mid-bg: rgba(120, 120, 128, 0.26);
+        --tag-stale-c: #ff9f0a; --tag-stale-bg: rgba(255, 159, 10, 0.18);
+        --tag-zombie-c: #ff453a; --tag-zombie-bg: rgba(255, 69, 58, 0.16);
+      }
+    }
+    /* 弹窗整体上浮入场: 打开瞬间 translateY(4px)→0 + 淡入,
+     * 叠在 Chrome popup 自身的出现动画之上,更顺滑 */
+    @keyframes panel-enter {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     body {
+      animation: panel-enter 0.14s ease-out;
       width: 480px;
       height: 520px;
       display: flex;
       flex-direction: column;
       font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 13px;
-      color: #1a1d21;
-      background: #fbfbfc;
-      letter-spacing: 0.01em;
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1b1b1c; color: #d6d6d6; }
-      input { color: #d6d6d6 !important; }
-      input::placeholder { color: #5c5c5c !important; }
-      .tab-item .url { color: #7a7a7a !important; }
-      .tab-item .title mark { color: #4daafc !important; }
-      .empty { color: #7a7a7a !important; }
+      color: var(--text);
+      background: var(--bg);
     }
     input {
       padding: 11px 14px;
@@ -29,64 +118,79 @@
       border: none;
       outline: none;
       background: transparent;
+      color: var(--text);
     }
-    input::placeholder { color: #b0b6bd; }
+    input::placeholder { color: var(--placeholder); }
+    /* 视图切换: 分段控件(macOS 系统设置同款)——填充灰容器 +
+     * 白色浮起的激活块。它是磨砂底板的一部分(之间无间隙) */
     .view-tabs {
       display: flex;
-      align-items: stretch;
-      gap: 18px;
-      padding: 8px 14px 0;
-      border-bottom: 1px solid #e8eaed;
+      gap: 2px;
+      margin: 2px 0 6px; /* 在底板内: 上留白由 plate 的 padding 提供 */
+      padding: 2px;
+      background: var(--fill);
+      border-radius: 9px;
     }
     .view-tab {
+      flex: 1;
       border: none;
       background: none;
       cursor: pointer;
       font-size: 12px;
-      padding: 5px 1px 7px;
-      color: #8b949e;
+      padding: 4px 0 5px;
+      color: var(--text-2);
       font-family: inherit;
-      position: relative;
-      transition: color 0.15s;
-      letter-spacing: 0.02em;
+      border-radius: 7px;
+      transition: color 0.15s, background 0.15s;
+      letter-spacing: 0.01em;
     }
-    .view-tab:hover { color: #57606a; }
-    .view-tab::after {
-      content: '';
-      position: absolute;
-      left: 0; right: 0; bottom: -1px;
-      height: 2px;
-      background: #1a1d21;
-      opacity: 0;
-      transform: scaleX(0.4);
-      transition: opacity 0.15s, transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active {
+      color: var(--text);
+      font-weight: 600;
+      background: var(--seg-active);
+      box-shadow: var(--seg-shadow);
     }
-    .view-tab.active { color: #1a1d21; font-weight: 600; }
-    .view-tab.active::after { opacity: 1; transform: scaleX(1); }
     .view-tabs-spacer { flex: 1; }
-    @media (prefers-color-scheme: dark) {
-      .view-tabs { border-color: #2e2e2e !important; }
-      .view-tab { color: #7a7a7a !important; }
-      .view-tab:hover { color: #b8b8b8 !important; }
-      .view-tab.active { color: #e8e8e8 !important; }
-      .view-tab::after { background: #e8e8e8 !important; }
+    /* 搜索框: 毛玻璃浮在列表上方(内容从框后掠过被糊出透明感)。
+     * 需要 position: relative 建立 stacking context——backdrop-filter
+     * 才能把下方兄弟元素(#results)纳入取景;聚焦时实白底,可读性优先 */
+    /* 搜索框外层: 全宽磨砂底板。搜索框是圆角胶囊,上下滚动时内容会从
+     * 圆角四周的缝隙漏出——底板把"搜索框+列表顶部"包成一块整体,
+     * 缝隙处透出的是底板的磨砂而不是滚动的行。底板从分段控件下沿
+     * 一直铺到与列表无缝衔接,本身带 blur(把底下掠过的行糊掉) */
+    /* 底板把分段控件也一起包进来: 从分段控件上沿直接铺到列表,
+     * 顶部无 margin(与上方控件零间隙),#results 负 margin 上叠
+     * 的深度=底板总高,滚动内容从整块底板下方掠过 */
+    .search-plate {
+      position: relative;
+      z-index: 6; /* 高于吸顶组头(5),低于推送条(40) */
+      margin: 0 0 -1px; /* -1px 咬住列表容器顶,无接缝 */
+      padding: 8px 12px 7px;
+      background: var(--plate-bg);
+      -webkit-backdrop-filter: saturate(180%) blur(18px);
+      backdrop-filter: saturate(180%) blur(18px);
     }
     .search-wrap {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 10px 12px 6px;
       padding: 0 4px;
-      background: #fff;
-      border: 1px solid #e4e7eb;
+      background: var(--search-bg);
+      border: 1px solid var(--hairline);
       border-radius: 10px;
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), inset 0 1px 2px rgba(16, 24, 40, 0.03);
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
+    /* 聚焦: 仍是玻璃,只是更实一档(文字可读性) + 蓝环。
+     * 唤起弹窗 autofocus 意味着搜索框几乎永远处于聚焦态——
+     * 若聚焦关玻璃,效果等于从不存在 */
     .search-wrap:focus-within {
-      border-color: #b3bdc9;
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 0 0 3px rgba(46, 96, 158, 0.08);
+      background: var(--search-bg-focus);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--ring);
     }
+    .search-fade { display: none; } /* 旧方案残留,已废弃 */
     .search-wrap input { flex: 1; }
     /* 数据源按钮: 搜索框左缘的书签/历史入口,点击激活对应命令(等价 /b /h) */
     .src-btn {
@@ -95,7 +199,7 @@
       cursor: pointer;
       padding: 5px;
       margin-left: 4px;
-      color: #8b949e;
+      color: var(--text-3);
       border-radius: 6px;
       flex-shrink: 0;
       display: flex;
@@ -111,14 +215,19 @@
       stroke-linecap: round;
       stroke-linejoin: round;
     }
-    .src-btn:hover { color: #1f6feb; background: rgba(31, 111, 235, 0.08); }
-    /* 命令激活时对应按钮高亮 */
-    .src-btn.active { color: #1f6feb; background: #ddf4ff; }
-    @media (prefers-color-scheme: dark) {
-      .src-btn { color: #7a7a7a !important; }
-      .src-btn:hover { color: #79c0ff !important; background: rgba(121, 192, 255, 0.1) !important; }
-      .src-btn.active { color: #79c0ff !important; background: #121d2f !important; }
+    /* PNG 图标保留原色: 只用透明度做状态区分,不做灰度/反色滤镜
+       (用户提供的是彩色图标,变色会破坏观感) */
+    .src-btn img {
+      width: 16px;
+      height: 16px;
+      opacity: 0.8;
+      transition: opacity 0.12s;
     }
+    .src-btn:hover img,
+    .src-btn.active img { opacity: 1; }
+    .src-btn:hover { color: var(--accent); background: var(--tint); }
+    /* 命令激活时对应按钮高亮 */
+    .src-btn.active { color: var(--accent); background: var(--tint-2); }
     /* slash 命令胶囊: 打全 /b /h 后的前缀变成不可分割的命令标签 */
     .cmd-chip {
       flex-shrink: 0;
@@ -129,9 +238,9 @@
       padding: 2px 6px 2px 9px;
       font-size: 11px;
       font-weight: 600;
-      color: #1f6feb;
-      background: #ddf4ff;
-      border: 1px solid #54aeff66;
+      color: var(--accent);
+      background: var(--tint);
+      border: 1px solid rgba(0, 113, 227, 0.28);
       border-radius: 5px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       cursor: default;
@@ -139,30 +248,22 @@
     }
     .cmd-chip-x {
       cursor: pointer;
-      color: #54aeff;
+      color: var(--accent);
       font-size: 13px;
       line-height: 1;
       padding: 0 2px;
       border-radius: 3px;
     }
-    .cmd-chip-x:hover { background: #54aeff33; }
-    @media (prefers-color-scheme: dark) {
-      .cmd-chip { color: #79c0ff !important; background: #121d2f !important; border-color: #1f6feb66 !important; }
-      .cmd-chip-x { color: #79c0ff !important; }
-    }
+    .cmd-chip-x:hover { background: var(--tint-2); }
     /* 历史条目半透明: /h 的结果非当前打开的标签,视觉降级区分 */
     .tab-item.history-item { opacity: 0.62; }
     .tab-item.history-item:hover, .tab-item.history-item.active { opacity: 1; }
-    @media (prefers-color-scheme: dark) {
-      .search-wrap { background: #232323 !important; border-color: #333 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25) !important; }
-      .search-wrap:focus-within { border-color: #4a4a4a !important; box-shadow: 0 0 0 3px rgba(83, 155, 245, 0.1) !important; }
-    }
     .settings-btn {
       border: none;
       background: none;
       cursor: pointer;
       padding: 7px;
-      color: #8b949e;
+      color: var(--text-3);
       border-radius: 6px;
       flex-shrink: 0;
       display: flex;
@@ -170,14 +271,21 @@
       justify-content: center;
     }
     .settings-btn svg {
-      width: 16px;
-      height: 16px;
       stroke: currentColor;
       fill: none;
       stroke-width: 1.6;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
+    /* 按钮内 PNG 图标(用户提供的彩色图标): 原色显示,透明度做状态 */
+    .settings-btn img {
+      width: 16px;
+      height: 16px;
+      opacity: 0.8;
+      transition: opacity 0.12s;
+    }
+    .settings-btn:hover img { opacity: 1; }
+    .settings-btn:hover { background: var(--hover); color: var(--text); }
     /* 快捷键悬浮气泡: hover 问号按钮时弹出,不占布局 */
     #helpBtn { position: relative; }
     .help-popover {
@@ -186,10 +294,10 @@
       top: calc(100% + 6px);
       right: 0;
       z-index: 10;
-      background: #fff;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(31, 35, 40, 0.15);
+      background: var(--pop-bg);
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      box-shadow: var(--shadow-pop);
       padding: 10px 14px;
       width: 260px;
       cursor: default;
@@ -203,19 +311,10 @@
       right: 14px;
       width: 8px;
       height: 8px;
-      background: #fff;
-      border-left: 1px solid #d0d7de;
-      border-top: 1px solid #d0d7de;
+      background: var(--pop-bg);
+      border-left: 1px solid var(--hairline);
+      border-top: 1px solid var(--hairline);
       transform: rotate(45deg);
-    }
-    @media (prefers-color-scheme: dark) {
-      .help-popover { background: #2a2a2a !important; border-color: #3c3c3c !important; box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important; }
-      .help-popover::before { background: #2a2a2a !important; border-color: #3c3c3c !important; }
-    }
-    .settings-btn:hover { background: rgba(15, 23, 42, 0.05); color: #1f2328; }
-    @media (prefers-color-scheme: dark) {
-      .settings-btn { color: #8a8a8a !important; }
-      .settings-btn:hover { background: rgba(255,255,255,0.07) !important; color: #d6d6d6 !important; }
     }
     /* 设置面板: 全屏覆盖层(不再挤压 tab 列表),自带关闭按钮 */
     .settings-panel {
@@ -226,7 +325,7 @@
       padding: 14px 16px 16px;
       font-size: 12px;
       display: none;
-      background: #fbfbfc;
+      background: var(--bg);
       overflow-y: auto;
     }
     .settings-panel.open { display: block; }
@@ -236,24 +335,24 @@
       justify-content: space-between;
       margin-bottom: 10px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #e8eaed;
+      border-bottom: 1px solid var(--hairline);
     }
     .settings-panel-title {
       font-size: 13px;
       font-weight: 600;
-      color: #1a1d21;
+      color: var(--text);
     }
     .settings-close-btn {
       border: none;
       background: none;
       cursor: pointer;
-      color: #8b949e;
+      color: var(--text-3);
       font-size: 15px;
       line-height: 1;
       padding: 4px 8px;
       border-radius: 6px;
     }
-    .settings-close-btn:hover { background: #f0f0f0; color: #1a1d21; }
+    .settings-close-btn:hover { background: var(--hover); color: var(--text); }
     .settings-panel label {
       display: flex;
       align-items: center;
@@ -262,12 +361,12 @@
       cursor: pointer;
       user-select: none;
     }
-    .settings-panel .hint { margin-top: 8px; color: #8b949e; }
+    .settings-panel .hint { margin-top: 8px; color: var(--text-3); }
     /* 自动分组规则编辑器: 对齐主列表的紧凑风格,无大圆角 */
     .rules-header {
       margin-top: 14px;
       font-weight: 600;
-      color: #6b7280;
+      color: var(--text-2);
       font-size: 10.5px;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -276,11 +375,13 @@
       margin-top: 5px;
       max-height: 230px;
       overflow-y: auto;
-      padding: 0;
+      /* 右侧留出滚动条宽度,删除按钮(×)不被滚动条压住 */
+      padding: 0 10px 0 0;
+      scrollbar-gutter: stable;
     }
     .rule-group {
       padding: 7px 0 8px;
-      border-bottom: 1px solid #ebeef2;
+      border-bottom: 1px solid var(--hairline);
     }
     .rule-group:last-child { border-bottom: none; }
     .rule-group-name {
@@ -292,7 +393,7 @@
       flex: 1;
       font-size: 12px;
       font-weight: 600;
-      color: #1a1d21;
+      color: var(--text);
       border: none;
       padding: 1px 2px;
       background: transparent;
@@ -302,14 +403,14 @@
     .rule-del-btn {
       border: none;
       background: none;
-      color: #b0b6bd;
+      color: var(--text-3);
       cursor: pointer;
       font-size: 14px;
       line-height: 1;
       padding: 2px 5px;
       border-radius: 4px;
     }
-    .rule-del-btn:hover { background: #ffebe9; color: #cf222e; }
+    .rule-del-btn:hover { background: var(--danger-bg); color: var(--danger); }
     /* 域名芯片流: 每域名一枚 chip,×单独删,底部"+"补加 */
     .rule-hosts {
       display: flex;
@@ -323,8 +424,8 @@
       gap: 3px;
       font-size: 10.5px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      color: #57606a;
-      background: #f0f2f5;
+      color: var(--text-2);
+      background: var(--fill);
       border-radius: 4px;
       padding: 1px 3px 1px 6px;
       max-width: 100%;
@@ -337,26 +438,26 @@
     .host-chip button {
       border: none;
       background: none;
-      color: #8b949e;
+      color: var(--text-3);
       cursor: pointer;
       font-size: 11px;
       line-height: 1;
       padding: 1px 3px;
       border-radius: 3px;
     }
-    .host-chip button:hover { color: #cf222e; background: #ffebe9; }
+    .host-chip button:hover { color: var(--danger); background: var(--danger-bg); }
     .host-add-input {
       font-size: 10.5px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      color: #57606a;
+      color: var(--text-2);
       border: none;
-      border-bottom: 1px dashed #c9ced6;
+      border-bottom: 1px dashed var(--hairline);
       background: transparent;
       outline: none;
       padding: 1px 2px;
       width: 130px;
     }
-    .host-add-input:focus { border-bottom-color: #1f6feb; }
+    .host-add-input:focus { border-bottom-color: var(--accent); }
     .rules-actions {
       display: flex;
       gap: 6px;
@@ -364,32 +465,34 @@
     }
     .rules-add-btn, .rules-save-btn {
       flex: 1;
-      border: 1px solid #d0d7de;
-      background: #fff;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      color: var(--text);
       font-size: 11.5px;
       font-family: inherit;
       padding: 4px 0;
       border-radius: 4px;
       cursor: pointer;
     }
-    .rules-add-btn:hover { border-color: #1f6feb; color: #1f6feb; }
+    .rules-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+    /* 保存按钮: Apple 主按钮样式(系统蓝实底白字) */
     .rules-save-btn {
-      background: #1f2328;
+      background: var(--accent);
+      border-color: var(--accent);
       color: #fff;
-      border-color: #1f2328;
       font-weight: 600;
     }
-    .rules-save-btn:hover { background: #424a53; }
-    /* 脏状态: 规则被编辑未保存时,保存按钮琥珀色 + 轻微脉动,提醒保存 */
+    .rules-save-btn:hover { background: var(--accent-hi); }
+    /* 脏状态: 规则被编辑未保存时,保存按钮转系统橙 + 轻微脉动,提醒保存 */
     .rules-save-btn.dirty {
-      background: #d4a72c;
-      border-color: #d4a72c;
-      color: #24292f;
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #fff;
       animation: save-pulse 1.6s ease-in-out infinite;
     }
     @keyframes save-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(212, 167, 44, 0.45); }
-      50% { box-shadow: 0 0 0 5px rgba(212, 167, 44, 0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.45); }
+      50% { box-shadow: 0 0 0 5px rgba(255, 149, 0, 0); }
     }
     /* 面板标题旁的未保存圆点 */
     .dirty-dot {
@@ -397,35 +500,28 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #d4a72c;
+      background: var(--amber);
       margin-left: 6px;
       vertical-align: 1px;
     }
     .dirty-dot.show { display: inline-block; }
-    @media (prefers-color-scheme: dark) {
-      .rule-group { border-color: #2a2a2a !important; }
-      .rule-group-name input { color: #e0e0e0 !important; }
-      .host-chip { background: #2c2c2e !important; color: #b0b6bd !important; }
-      .rules-add-btn, .rules-save-btn { background: #2a2a2a !important; border-color: #3c3c3c !important; color: #d6d6d6 !important; }
-      .rules-save-btn { background: #d4a72c !important; border-color: #d4a72c !important; color: #24292f !important; }
-    }
-    .settings-panel .hint a { color: #0969da; text-decoration: none; }
+    .settings-panel .hint a { color: var(--accent); text-decoration: none; }
     .clean-btn {
       display: flex;
       align-items: center;
       gap: 6px;
       width: 100%;
       margin-top: 8px;
-      border: 1px solid #d0d7de;
-      background: #fff;
-      color: #cf222e;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      color: var(--danger);
       font-size: 12px;
       font-family: inherit;
       padding: 6px 10px;
       border-radius: 6px;
       cursor: pointer;
     }
-    .clean-btn:hover { background: #ffebe9; border-color: #cf222e; }
+    .clean-btn:hover { background: var(--danger-bg); border-color: var(--danger-solid); }
     .clean-btn svg {
       width: 13px;
       height: 13px;
@@ -436,10 +532,6 @@
       stroke-linejoin: round;
       flex-shrink: 0;
     }
-    @media (prefers-color-scheme: dark) {
-      .clean-btn { background: #2a2a2a !important; border-color: #3c3c3c !important; color: #f85149 !important; }
-      .clean-btn:hover { background: #3d1216 !important; border-color: #f85149 !important; }
-    }
     .shortcut-table {
       border-collapse: collapse;
       width: 100%;
@@ -447,52 +539,59 @@
     .shortcut-table td {
       padding: 3px 0;
       font-size: 12px;
-      color: #57606a;
+      color: var(--text-2);
     }
     .shortcut-table td:first-child {
       width: 60px;
-      color: #1f2328;
+      color: var(--text);
       font-weight: 600;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 11px;
       white-space: nowrap;
     }
-    @media (prefers-color-scheme: dark) {
-      .shortcut-table td { color: #9d9d9d !important; }
-      .shortcut-table td:first-child { color: #d4d4d4 !important; }
-    }
     #results {
       flex: 1;
       overflow-y: auto;
-      padding: 4px 0;
+      /* 负 margin 上叠进磨砂底板(56px=底板总高): 滚动内容从底板
+       * 正下方掠过,被半透明底板的 blur 糊出磨砂流动感。
+       * 底板是不透明矩形整体,上叠不会漏缝(之前漏缝是搜索框
+       * 圆角胶囊+独立光晕导致的)。
+       * 顶部 padding 补回上叠高度,首行仍从底板下沿起 */
+      margin-top: -56px;
+      padding: 56px 0 4px;
     }
+    /* 吸顶组头: 毛玻璃(半透明底 + backdrop blur),行从下面穿行时
+     * 被糊掉而不是穿帮——比实底更有层次。垂直度量(5px 上下 padding +
+     * 10.5px 字号)不能动: popup.js scrollPastSticky 按 23px 头高校正滚动 */
     .group-header {
       display: flex;
       align-items: center;
       gap: 7px;
-      /* 负左右margin占满容器宽(吸顶遮底),内容用 padding 对齐行的缩进 */
-      margin: 4px 0 1px;
-      padding: 5px 16px;
+      /* 注意不能有 margin-top: sticky 吸顶按 margin 边对齐滚动容器顶,
+       * 顶部 margin 会变成吸顶后与搜索框之间的一条滚动缝(行从缝里穿过)。
+       * 原顶部 4px 间距折叠进 padding-top(9px = 4px 间距 + 5px 原留白) */
+      margin: 0 0 1px;
+      padding: 9px 16px 5px;
       font-size: 10.5px;
-      color: #6b7280;
+      color: var(--text-2);
       font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       cursor: pointer;
       user-select: none;
-      transition: color 0.12s;
+      transition: color 0.12s, background 0.12s;
       position: sticky;
+      /* top: 0 相对滚动容器视口顶(#results 可视区顶=搜索框底边)。
+       * 组头吸顶时紧贴搜索框下缘;#results 的 49px 顶部 padding 属于
+       * 滚动内容,会随滚动消失,不影响吸顶位置 */
       top: 0;
       z-index: 5;
-      /* 吸顶时必须有实底,否则下一个组头追上来会与当前吸顶头叠加穿帮 */
-      background: #fbfbfc;
-      box-shadow: 0 1px 0 #e8eaed; /* 底部细线: 吸顶时与穿行的行分层 */
+      background: var(--header-bg);
+      /* 无底线: 吸顶交接时新旧组头短暂叠加,1px 底线在叠加处会重复
+       * 加深成"黑线"(叠的组头越多越明显)。组头实底与列表行的色差
+       * 已足够分层,不再需要线 */
     }
-    .group-header:hover { color: #374151; background: #f2f3f5; }
-    @media (prefers-color-scheme: dark) {
-      .group-header { color: #8a8a8a !important; background: #1b1b1c !important; box-shadow: 0 1px 0 #2e2e2e !important; }
-      .group-header:hover { color: #c0c0c0 !important; background: #242425 !important; }
-    }
+    .group-header:hover { color: var(--text); background: var(--header-hover); }
     .caret {
       display: inline-flex;
       align-items: center;
@@ -500,7 +599,7 @@
       width: 14px;
       height: 14px;
       flex-shrink: 0;
-      color: #8b949e;
+      color: var(--text-3);
       transition: transform 0.15s ease;
     }
     .caret svg {
@@ -513,20 +612,77 @@
       stroke-linejoin: round;
     }
     .group-header.collapsed .caret { transform: rotate(-90deg); }
-    .group-header.active { background: rgba(46, 96, 158, 0.08) !important; color: #2e609e !important; }
-    @media (prefers-color-scheme: dark) {
-      .group-header.active { background: rgba(83, 155, 245, 0.12) !important; color: #7ab5f8 !important; }
-    }
+    .group-header.active { background: var(--tint) !important; color: var(--accent) !important; }
     .group-count {
-      color: #9ca3af;
+      color: var(--text-3);
       font-weight: 500;
       font-size: 10px;
-      margin-left: auto;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0;
     }
-    @media (prefers-color-scheme: dark) {
-      .group-count { color: #7a7a7a !important; }
+    /* 蒙层式媒体控制: hover 行时内容整体置灰淡出(真正的"覆盖"感),
+     * 中央浮起圆形毛玻璃按钮(实底,非悬浮线条)。热区只在按钮 36px——
+     * 行点击仍是切换标签,不会误触播放控制 */
+    .media-overlay {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: var(--media-btn-bg);
+      box-shadow: var(--media-btn-shadow);
+      color: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, transform 0.15s;
+      z-index: 2;
+      pointer-events: none; /* 未浮现时不挡行点击 */
+    }
+    .tab-item:hover .media-overlay {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto; /* 热区生效: 仅此圆钮 */
+    }
+    /* 行内容置灰淡出: 图标和文字降到近灰阶,覆盖感(带过渡) */
+    .tab-item.has-media .icon-wrap,
+    .tab-item.has-media .tab-info {
+      transition: opacity 0.15s, filter 0.15s;
+    }
+    .tab-item.has-media:hover .icon-wrap,
+    .tab-item.has-media:hover .tab-info {
+      opacity: 0.18;
+      filter: saturate(0);
+    }
+    .media-overlay:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    .media-overlay svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: currentColor;
+      stroke-width: 2;
+    }
+    /* 关闭按钮层级最高: 置灰/浮钮都不挡它 */
+    .close-btn { z-index: 3; }
+    /* 组头迷你条形图: 长度∝组内标签数,跟随组色 */
+    .group-bar {
+      height: 3px;
+      min-width: 10px;
+      max-width: 40px;
+      border-radius: 2px;
+      margin-left: auto;
+      margin-right: 8px;
+      background: currentColor;
+      opacity: 0.4;
+      flex-shrink: 0;
     }
     /* 分组色标: 竖色条(标签侧脊隐喻),比方块精致;高度=文字行高,
      * 底色透出细描边增强对比 */
@@ -535,7 +691,16 @@
       height: 12px;
       border-radius: 2px;
       flex-shrink: 0;
-      box-shadow: 0 0 0 1.5px rgba(0,0,0,0.06);
+      box-shadow: 0 0 0 1.5px var(--dot-ring);
+    }
+    /* 列表行 stagger 入场: 逐行淡入+上浮,每行延迟 8ms(Raycast 式质感)。
+     * 只动 opacity/transform,不触发布局;搜索重渲染同样生效 */
+    .tab-item, .group-header {
+      animation: row-enter 0.16s ease-out backwards;
+    }
+    @keyframes row-enter {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .tab-item {
       display: flex;
@@ -555,21 +720,16 @@
       left: 0; top: 20%;
       width: 3px; height: 60%;
       border-radius: 2px;
-      background: #2e609e;
+      background: var(--accent);
       opacity: 0;
       transition: opacity 0.12s;
     }
-    .tab-item:hover { background: rgba(15, 23, 42, 0.035); }
-    .tab-item.active { background: rgba(46, 96, 158, 0.07); }
+    .tab-item:hover { background: var(--hover); }
+    .tab-item.active { background: var(--tint); }
     .tab-item.active::before { opacity: 1; }
     /* 选中时 favicon 微弹(触感反馈,1.08 察觉不到但手眼协调更顺) */
     .tab-item.active .icon-wrap { transform: scale(1.08); }
     .tab-item .icon-wrap { transition: transform 0.12s ease; }
-    @media (prefers-color-scheme: dark) {
-      .tab-item:hover { background: rgba(255, 255, 255, 0.045) !important; }
-      .tab-item.active { background: rgba(83, 155, 245, 0.1) !important; }
-      .tab-item::before { background: #539bf5 !important; }
-    }
     .tab-item img {
       width: 16px;
       height: 16px;
@@ -593,17 +753,14 @@
       font-size: 8px;
       font-weight: 700;
       color: #fff;
-      background: #b08800;
+      background: var(--amber);
       border-radius: 6px;
       padding: 0 2.5px;
-      border: 1.5px solid #fbfbfc;
+      border: 1.5px solid var(--bg);
       pointer-events: none;
       z-index: 2;
       font-variant-numeric: tabular-nums;
       box-sizing: content-box;
-    }
-    @media (prefers-color-scheme: dark) {
-      .dup-badge { border-color: #1b1b1c !important; }
     }
     .tab-info {
       flex: 1;
@@ -621,12 +778,12 @@
     }
     .tab-item .title mark {
       background: transparent;
-      color: #0969da;
+      color: var(--accent);
       font-weight: 700;
     }
     .tab-item .url {
       font-size: 11px;
-      color: #8b949e;
+      color: var(--text-3);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -636,17 +793,14 @@
     }
     .tab-item .url mark {
       background: transparent;
-      color: #0550ae;
+      color: var(--accent);
       font-weight: 700;
-    }
-    .tab-item {
-      position: relative;
     }
     .last-used {
       flex-shrink: 0;
       font-size: 10px;
-      color: #57606a;
-      background: #eff1f4;
+      color: var(--tag-mid-c);
+      background: var(--tag-mid-bg);
       border-radius: 4px;
       padding: 2px 6px;
       margin-left: 4px;
@@ -667,8 +821,8 @@
       height: 20px;
       border: none;
       border-radius: 50%;
-      background: #e5e7eb;
-      color: #57606a;
+      background: var(--fill-2);
+      color: var(--text-2);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -690,121 +844,114 @@
       transform: translateY(-50%) translateX(0);
     }
     .close-btn:hover {
-      background: #d93025;
+      background: var(--danger-solid);
       color: #fff;
     }
-    @media (prefers-color-scheme: dark) {
-      .close-btn { background: #3c3c3c !important; color: #9d9d9d !important; }
-      .close-btn:hover { background: #d93025 !important; color: #fff !important; }
-    }
-    .last-used.hot {
-      color: #1e8e3e;
-      background: #e6f4ea;
-      font-weight: 600;
-    }
-    .last-used.today {
-      color: #0969da;
-      background: #ddf4ff;
-    }
-    .last-used.recent {
-      color: #57606a;
-      background: #f0f2f5;
-    }
-    .last-used.stale {
-      color: #9a6700;
-      background: #fff8c5;
-    }
-    .last-used.zombie {
-      color: #cf222e;
-      background: #ffebe9;
-    }
-    .last-used.current {
-      color: #0969da;
-      background: #ddf4ff;
-      font-weight: 600;
-    }
-    @media (prefers-color-scheme: dark) {
-      .last-used { color: #9d9d9d !important; background: #333 !important; }
-      .last-used.hot { color: #57ab5a !important; background: #1b3a25 !important; }
-      .last-used.today { color: #539bf5 !important; background: #121d2f !important; }
-      .last-used.recent { color: #9d9d9d !important; background: #333 !important; }
-      .last-used.stale { color: #e3b341 !important; background: #3a2c00 !important; }
-      .last-used.zombie { color: #f85149 !important; background: #3d1216 !important; }
-      .last-used.current { color: #539bf5 !important; background: #121d2f !important; }
-    }
+    /* 最近使用时间 tag 五档: 当前 > 热门(10分钟) > 今日 / 近期 > 僵尸。
+     * 颜色用 Apple 系统色的文字/淡底组合,冷暖渐进 */
+    .last-used.hot { color: var(--tag-hot-c); background: var(--tag-hot-bg); font-weight: 600; }
+    .last-used.today { color: var(--tag-info-c); background: var(--tag-info-bg); }
+    .last-used.recent { color: var(--tag-mid-c); background: var(--tag-mid-bg); }
+    .last-used.stale { color: var(--tag-stale-c); background: var(--tag-stale-bg); }
+    .last-used.zombie { color: var(--tag-zombie-c); background: var(--tag-zombie-bg); }
+    .last-used.current { color: var(--tag-info-c); background: var(--tag-info-bg); font-weight: 600; }
     .empty {
       padding: 40px 0;
       text-align: center;
-      color: #8b949e;
+      color: var(--text-3);
     }
-    .undo-bar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 30; /* 高于设置覆盖层(20): 覆盖层开着时确认条/toast 仍可见 */
+    /* ============================================================
+     * 推送式通知(iOS push 同款): 底部悬浮胶囊,顺手可点。
+     * 三种形态共用——toast(纯文字)/undo(带撤销按钮)/confirm(确认+取消)。
+     * 出现: 底部上滑+轻微缩放(回弹曲线);消失: 下滑+淡出;
+     * 连续 push 时旧的先让位下滑(让位动画用独立的 push-away)。
+     * 视觉刻意淡: 次级文字色 + 柔投影,提示但不抢焦点
+     * ============================================================ */
+    .push-stack {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 40; /* 高于设置覆盖层(20) */
+      width: min(440px, calc(100% - 24px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none; /* 栈本身透传,子条目各自接事件 */
+    }
+    .push-banner {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 8px 12px 8px 14px;
-      font-size: 12px;
-      color: #57606a;
-      background: #f6f8fa;
-      border-top: 1px solid #e5e5e5;
+      gap: 10px;
+      padding: 9px 14px;
+      font-size: 12.5px;
+      color: var(--text-2);
+      background: var(--pop-bg);
+      border: 1px solid var(--hairline);
+      border-radius: 14px;
+      box-shadow: var(--push-shadow);
       cursor: default;
-      overflow: hidden;
+      pointer-events: auto;
+      animation: push-in 0.38s cubic-bezier(0.32, 1.6, 0.45, 1) both;
     }
-    /* 左侧金色竖条: 比整条黄底克制,仍有"注意"的指向性 */
-    .undo-bar::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      background: #d4a72c;
+    /* 让位动画: 旧条目被新条目顶走时下滑消失 */
+    .push-banner.push-away {
+      animation: push-out-top 0.22s ease-in forwards;
     }
-    .undo-msg {
+    /* 自动消失: 下滑+淡出 */
+    .push-banner.push-gone {
+      animation: push-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    /* 底部上滑入场(通知从屏幕下缘升起) */
+    @keyframes push-in {
+      from { opacity: 0; transform: translateY(16px) scale(0.94); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* 下滑退场(从哪来回哪去) */
+    @keyframes push-out {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(16px) scale(0.96); }
+    }
+    /* 让位: 被新条目顶走时向下滑出视野 */
+    @keyframes push-out-top {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(14px); }
+    }
+    /* 条目内文字: 主体白色(暗色模式跟随主题),副信息灰 */
+    .push-msg {
       flex: 1;
       min-width: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      font-weight: 500;
     }
-    .undo-btn {
+    /* 撤销/确认按钮: 苹果通知的同款文字按钮(蓝字无边框,非实底) */
+    .push-action {
       flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
       border: none;
-      background: #1f2328;
-      color: #fff;
-      font-size: 12px;
+      background: none;
+      color: var(--accent);
+      font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
       font-family: inherit;
-      padding: 4px 12px;
+      padding: 3px 8px;
       border-radius: 6px;
+      transition: background 0.12s;
     }
-    .undo-btn:hover { background: #424a53; }
-    .undo-btn svg {
-      width: 12px;
-      height: 12px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    /* 倒计时进度条: 从满到空,走完即失效 */
-    .undo-progress {
+    .push-action:hover { background: var(--tint); }
+    .push-action.secondary { color: var(--text-2); }
+    /* 撤销倒计时: 底部细进度条(收窄居中,系统蓝),走完即失效 */
+    .push-progress {
       position: absolute;
-      left: 0;
-      bottom: 0;
+      left: 14px;
+      right: 14px;
+      bottom: 4px;
       height: 2px;
-      width: 100%;
-      background: #d4a72c;
+      border-radius: 1px;
+      background: var(--accent);
+      opacity: 0.55;
       transform-origin: left;
       animation: undo-countdown 6s linear forwards;
     }
@@ -812,16 +959,10 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0); }
     }
-    @media (prefers-color-scheme: dark) {
-      .undo-bar { color: #9d9d9d !important; background: #262626 !important; border-color: #3c3c3c !important; }
-      .undo-bar::before { background: #e3b341 !important; }
-      .undo-btn { background: #d4a72c !important; color: #24292f !important; }
-      .undo-btn:hover { background: #e3b341 !important; }
-      .undo-progress { background: #e3b341 !important; }
-    }
   </style>
 </head>
 <body>
+  <div class="search-plate">
   <div class="view-tabs">
     <button class="view-tab active" data-view="grouped">分组</button>
     <button class="view-tab" data-view="recent">最近使用</button>
@@ -829,10 +970,10 @@
   </div>
   <div class="search-wrap">
     <button id="bmBtn" class="src-btn" title="搜索书签 (/b)">
-      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>
+      <img src="img/bookmarks.png" alt="书签">
     </button>
     <button id="histBtn" class="src-btn" title="搜索历史 (/h)">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <img src="img/history.png" alt="历史">
     </button>
     <span id="cmdChip" class="cmd-chip" style="display:none">
       <span id="cmdChipText"></span>
@@ -840,7 +981,7 @@
     </span>
     <input id="search" type="text" placeholder="搜索标签页…" autofocus>
     <button id="helpBtn" class="settings-btn" title="快捷键">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.8-2.8 2.2-2.8 3.5"/><circle cx="12" cy="17.2" r="0.5" fill="currentColor"/></svg>
+      <img src="img/help.png" alt="?">
       <div class="help-popover">
         <table class="shortcut-table">
           <tr><td>↑ ↓</td><td>上下选择(跨分组)</td></tr>
@@ -858,8 +999,9 @@
       </div>
     </button>
     <button id="settingsBtn" class="settings-btn" title="设置">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.08a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+      <img src="img/settings.png" alt="⚙">
     </button>
+  </div>
   </div>
   <div id="settingsPanel" class="settings-panel">
     <div class="settings-panel-head">
@@ -890,7 +1032,7 @@
     </div>
   </div>
   <div id="results"></div>
-  <div id="undoBar" class="undo-bar" style="display:none"></div>
+  <div id="pushStack" class="push-stack"></div>
   <script src="pinyin-data.js"></script>
   <script src="popup.js"></script></body>
 </html>
