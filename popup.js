@@ -7,10 +7,11 @@
 const IS_MAC = navigator.userAgent.includes('Mac');
 const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 
+// Chrome 组色名 → 苹果系统色(与弹窗整体配色统一)
 const GROUP_COLORS = {
-  grey: '#7c7c7c', blue: '#1a73e8', red: '#d93025',
-  yellow: '#f9ab00', green: '#1e8e3e', pink: '#ff63b8',
-  purple: '#a142f4', cyan: '#24c1e0', orange: '#fa903e',
+  grey: '#8e8e93', blue: '#0071e3', red: '#ff3b30',
+  yellow: '#ffcc00', green: '#34c759', pink: '#ff2d55',
+  purple: '#af52de', cyan: '#32ade6', orange: '#ff9500',
 };
 
 // 调试开关: 在弹窗 DevTools Console 里执行 localStorage.setItem('tgs-debug','1') 开启
@@ -169,6 +170,103 @@ function escapeHtml(s) {
 let currentWindowId = null; // 弹窗所属窗口,用于区分"其他窗口"的标签
 let windowIds = [];         // 所有含标签的窗口 id,升序;用于把内部 id 映射为可读序号
 let currentSourceIsHistory = false; // /h 命令模式下,行渲染加半透明降级
+// ---- 媒体 tab 探测 ----
+// tab.audible 是瞬时播放状态: 暂停即 false,Chrome API 无从识别"暂停中的
+// 媒体页"。打开弹窗时对可注入的页面批量探测一次——页面里有带源的
+// <video>/<audio> 即算媒体 tab(与 macOS 控制中心 Now Playing 卡片同语义:
+// 暂停了也保留恢复入口)。探测函数在页面里自查,命中才回发消息,
+// popup 收集 sender.tab.id,收到即给对应行补按钮(增量 patch,不重渲染)
+const mediaTabIds = new Set();
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.type === 'media-report' && sender.tab?.id > 0) {
+    mediaTabIds.add(sender.tab.id);
+    patchMediaBtn(sender.tab.id);
+  }
+});
+function probeMediaTabs() {
+  // 只注入 http(s) 且未被 Chrome discard 的页面(注入 discarded 页会
+  // 把它唤醒重载,不可接受);chrome:// 等不可注入页本来就没有媒体
+  const ids = allTabs.map(x => x.tab).filter(t =>
+    t.id > 0 && !t.discarded &&
+    (t.url?.startsWith('http://') || t.url?.startsWith('https://'))
+  ).map(t => t.id);
+  if (!ids.length) return;
+  // 注: executeScript 的 target 不支持 tabIds 数组(只有单 tabId),
+  // 逐个注入;injectionResults 全失败也静默,audible 兜底
+  for (const id of ids) {
+    chrome.scripting.executeScript({
+      target: { tabId: id },
+      func: () => {
+        // 判定与 macOS 控制中心同源: 只认 MediaSession——播放器页面才会
+        // 注册 metadata(暂停后依然保留),首页预览小视频/广告位不注册,
+        // 避免信息流页面误报。兜底: 正在播放且未静音的元素(个别站点
+        // 不注册 MediaSession,但播放中本就该可控)
+        if (navigator.mediaSession?.metadata) {
+          chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
+          return;
+        }
+        const playing = [...document.querySelectorAll('video, audio')].some(m =>
+          !m.paused && !m.ended && !m.muted && (m.src || m.currentSrc));
+        if (playing) chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
+      },
+    }).catch(() => {}); // 个别页面注入失败(受保护页面等),跳过即可
+  }
+}
+function patchMediaBtn(tabId) {
+  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+  if (!row || row.classList.contains('has-media')) return;
+  const t = allTabs.find(x => x.tab.id === tabId)?.tab;
+  if (!t) return;
+  row.classList.add('has-media');
+  const mediaBtn = buildMediaBtn(t);
+  mediaBtn.className = 'media-overlay';
+  row.appendChild(mediaBtn);
+}
+const SVG_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>';
+const SVG_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+
+// 媒体控制圆钮(hover 媒体行时浮现的中央按钮)。
+// 定义在顶层: buildTabRow(首帧渲染)和 patchMediaBtn(探测消息异步
+// 回来补按钮)两个作用域都要调用,原先嵌在 buildTabRow 里的局部声明
+// 在 patchMediaBtn 里够不着——ReferenceError 的根因
+function buildMediaBtn(t) {
+  const mediaBtn = document.createElement('button');
+  mediaBtn.title = t.audible ? '暂停' : '恢复播放';
+  mediaBtn.innerHTML = t.audible ? SVG_PAUSE : SVG_PLAY;
+  mediaBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const toggle = async () => chrome.tabs.sendMessage(t.id, { type: 'toggle-media' });
+    let resp = null;
+    try {
+      resp = await toggle();
+    } catch {
+      // 页面还没注入 content script(扩展刷新前开着的页面不会自动注入):
+      // 动态注入后重试一次
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: t.id },
+          files: ['content.js'],
+        });
+        resp = await toggle();
+      } catch (err2) {
+        showToast('控制失败: ' + (err2.message || String(err2)).slice(0, 60));
+        return;
+      }
+    }
+    if (resp?.action === 'paused') {
+      mediaBtn.innerHTML = SVG_PLAY;
+      mediaBtn.title = '恢复播放';
+      showToast('已暂停');
+    } else if (resp?.action === 'playing') {
+      mediaBtn.innerHTML = SVG_PAUSE;
+      mediaBtn.title = '暂停';
+      showToast('已恢复播放');
+    } else {
+      showToast('该页面没有可控的媒体');
+    }
+  });
+  return mediaBtn;
+}
 
 // ---- 命令模式数据源: /b 书签 /h 历史 ----
 // 结构与 allTabs 同构([{tab, group}]),tab.id 用负数避免与真实 tabId 冲突
@@ -444,6 +542,12 @@ function search(query) {
 // 搜索模式下强制全部展开,只有空查询浏览时才应用收起状态
 let searching = false;
 
+let staggerIdx = 0; // stagger 入场: render 内每行取号
+function staggerDelay() {
+  const i = Math.min(staggerIdx++, 12); // 封顶 12 行,后面同时入场
+  return `${i * 8}ms`;
+}
+
 // 空态文案按数据源区分(纯机器文案的认知成本小优化)
 function emptyMessage() {
   if (activeCmd === '/b') return '书签里没有匹配项';
@@ -459,6 +563,7 @@ function render() {
   const prevKey = prevUnit?.dataset.groupKey;
   const prevTabId = prevUnit?.dataset.tabId;
   resultsEl.innerHTML = '';
+  staggerIdx = 0; // stagger 入场计数器,每行取号后递增(封顶 12 防长列表拖尾)
   if (!filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
     return;
@@ -486,6 +591,7 @@ function render() {
       sections.get(key).items.push(item);
     }
     // Map 迭代序 = 首次插入序 = filtered 的排序序(组内最佳排名靠前的组先出现)
+    const maxCount = Math.max(...[...sections.values()].map(s => s.items.length));
     for (const { group, items } of sections.values()) {
       const key = groupKey(group);
       const isCollapsed = searchCollapsed.has(key);
@@ -493,7 +599,7 @@ function render() {
         if (searchCollapsed.has(key)) searchCollapsed.delete(key);
         else searchCollapsed.add(key);
         render();
-      }));
+      }, maxCount));
       if (!isCollapsed) {
         for (const item of items) resultsEl.appendChild(buildTabRow(item));
       }
@@ -519,6 +625,7 @@ function render() {
 
   // 分区只包含 filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
+  const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
   sections.forEach(section => {
     const key = groupKey(section.group);
     const isCollapsed = collapsed.has(key);
@@ -527,7 +634,7 @@ function render() {
       else collapsed.add(key);
       saveCollapsed();
       render();
-    }));
+    }, maxCount));
 
     if (!isCollapsed) {
       section.items.forEach(item => {
@@ -568,9 +675,11 @@ function restoreFocus(prevKey, prevTabId) {
 }
 
 // 分组头: group 为 null 表示未分组; onClick 为空时不可点击(搜索模式的分隔条)
-function buildGroupHeader(group, count, isCollapsed, onClick) {
+// maxCount: 本次渲染中最大的组内条目数(迷你条形图的分母),空则不画条
+function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
   const header = document.createElement('div');
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
+  header.style.animationDelay = staggerDelay();
   header.dataset.groupKey = groupKey(group);
   const caret = document.createElement('span');
   caret.className = 'caret';
@@ -579,7 +688,7 @@ function buildGroupHeader(group, count, isCollapsed, onClick) {
   if (group) {
     const dot = document.createElement('span');
     dot.className = 'group-dot';
-    dot.style.background = GROUP_COLORS[group.color] || '#7c7c7c';
+    dot.style.background = GROUP_COLORS[group.color] || '#8e8e93';
     header.appendChild(dot);
     const name = document.createElement('span');
     // 搜索时分组名也参与高亮,直观看到是分组名命中的召回
@@ -594,6 +703,18 @@ function buildGroupHeader(group, count, isCollapsed, onClick) {
     header.appendChild(name);
   }
   if (count != null) {
+    // 迷你条形图: 长度∝组内标签数/最大组,不读数字扫一眼知轻重
+    if (maxCount > 1) {
+      const bar = document.createElement('span');
+      bar.className = 'group-bar';
+      bar.style.width = `${Math.max(10, Math.round(count / maxCount * 40))}px`;
+      bar.style.background = group
+        ? (GROUP_COLORS[group.color] || '#8e8e93')
+        : '#8e8e93';
+      bar.style.opacity = '0.55';
+      bar.title = `${count} 个标签`;
+      header.appendChild(bar);
+    }
     const countEl = document.createElement('span');
     countEl.className = 'group-count';
     countEl.textContent = count;
@@ -630,6 +751,7 @@ function buildTabRow(item) {
   const row = document.createElement('div');
   // /h 历史条目加降级类: 半透明,hover/选中恢复
   row.className = 'tab-item' + (currentSourceIsHistory ? ' history-item' : '');
+  row.style.animationDelay = staggerDelay();
   row.dataset.tabId = t.id;
 
   // 窗口归属(仅用于时间 tag 的"当前"判定与 URL 行强制显示,
@@ -675,7 +797,17 @@ function buildTabRow(item) {
 
   row.appendChild(info);
 
-  // 最近使用时间 tag 五档: 当前 > 热门(10分钟,绿) > 今日(蓝) > 近期(灰) > 僵尸(橙/红)
+  // 蒙层式媒体控制: audible 管第一帧(探测未返回前即时可用),
+  // 探测结果(mediaTabIds)管暂停中的——有 MediaSession 即有恢复入口。
+  // buildMediaBtn 是顶层函数,探测消息回调(patchMediaBtn)也要用
+  if ((t.audible || mediaTabIds.has(t.id)) && t.id > 0) {
+    row.classList.add('has-media');
+    const mediaBtn = buildMediaBtn(t);
+    mediaBtn.className = 'media-overlay';
+    row.appendChild(mediaBtn);
+  }
+
+  // 最近使用时间 tag 五档: 当前 > 热门(10分钟,绿) > 今日(蓝) / 近期(灰) > 僵尸(橙/红)
   // 颜色由冷暖渐进,僵尸标签一眼可辨,便于顺手清理
   const tag = document.createElement('span');
   tag.className = 'last-used';
@@ -720,8 +852,24 @@ async function closeTab(tabId) {
     return;
   }
   // 同步本地数据
-  allTabs = allTabs.filter(x => x.tab.id !== tabId);
-  filtered = filtered.filter(f => f.tab.id !== tabId);
+  mediaTabIds.delete(tabId);
+  // 关的是重复合并行的代表且还有副本: 晋升一份副本为新代表,行保留。
+  // 整项丢弃的话,存活的副本会从列表消失,1s 复核时又把整行"复活"
+  // (带它自己的媒体按钮)——看起来像刚关的标签带着按钮回来了
+  const item = allTabs.find(x => x.tab.id === tabId);
+  const survivors = (item?.duplicates || []).filter(id => id !== tabId);
+  if (item && survivors.length) {
+    try {
+      const promoted = await chrome.tabs.get(survivors[0]); // 副本中最新的一份
+      item.tab = promoted;
+      item.duplicates = survivors.filter(id => id !== promoted.id);
+    } catch (e) {
+      allTabs = allTabs.filter(x => x.tab.id !== tabId);
+    }
+  } else if (item) {
+    allTabs = allTabs.filter(x => x.tab.id !== tabId);
+  }
+  search(searchValue()); // 从 allTabs 重建 filtered(晋升/移除都生效)
   // 就地重渲染,并让焦点落到被关闭行的相邻行
   render();
   const newRows = [...resultsEl.querySelectorAll('.tab-item')];
@@ -742,43 +890,70 @@ async function closeTab(tabId) {
   }
 }
 
+// ---- 推送式通知(iOS push 同款) ----
+// 三种形态共用一个栈容器: toast(纯文字)/undo(带撤销)/confirm(确认+取消)。
+// 出现=顶部滑入回弹,消失=下滑淡出,连续 push 旧的先上滑让位。
+const pushStack = document.getElementById('pushStack');
+
+// 通用条目工厂: 内容元素自由组装,自动处理入场/让位/定时消失。
+// opts.autoDismiss: 自动消失延迟(ms),0 = 不自动消失(confirm 由按钮/超时控制)
+function pushBanner(build, opts = {}) {
+  const autoDismiss = opts.autoDismiss ?? 2000;
+  // 连续 push 时: 现存条目先上滑让位(iOS 通知堆叠的观感)
+  for (const old of pushStack.children) {
+    old.classList.remove('push-gone');
+    old.classList.add('push-away');
+    old.addEventListener('animationend', () => old.remove(), { once: true });
+  }
+  const banner = document.createElement('div');
+  banner.className = 'push-banner';
+  build(banner);
+  pushStack.appendChild(banner);
+  // 自动消失: 播放下滑淡出后再移除;确认条手动关闭时同样走 dismissBanner
+  if (autoDismiss > 0) {
+    setTimeout(() => dismissBanner(banner), autoDismiss);
+  }
+  return banner;
+}
+// 优雅退场: 下滑+淡出动画结束后移除节点
+function dismissBanner(banner) {
+  if (!banner.isConnected) return;
+  banner.classList.remove('push-away');
+  banner.classList.add('push-gone');
+  banner.addEventListener('animationend', () => banner.remove(), { once: true });
+}
+
 // ---- 撤销关闭 ----
-const undoBar = document.getElementById('undoBar');
 let undoTimer = null;
 let undoStack = []; // 最近关闭的标签快照,支持连续撤销
 
 function showUndo(snapshot) {
   undoStack.push(snapshot);
-  undoBar.innerHTML = '';
-  const msg = document.createElement('span');
-  msg.className = 'undo-msg';
   const count = undoStack.length;
   const tab = snapshot.tab;
   const title = (tab.title || tab.url).slice(0, 30);
-  msg.textContent = count > 1
-    ? `已关闭 ${count} 个标签页(含「${title}」)`
-    : `已关闭「${title}」`;
-  const btn = document.createElement('button');
-  btn.className = 'undo-btn';
-  btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>撤销';
-  // 撤销可用 ⌘Z 快捷键触发,按钮上加提示
-  btn.title = `恢复刚关闭的标签 (${MOD}Z)`;
-  btn.addEventListener('click', doUndo);
-  undoBar.appendChild(msg);
-  undoBar.appendChild(btn);
-  // 倒计时进度条: 提示剩余可撤销时间
-  const progress = document.createElement('span');
-  progress.className = 'undo-progress';
-  undoBar.appendChild(progress);
-  // 重置进度条动画
-  progress.style.animation = 'none';
-  void progress.offsetWidth; // 强制 reflow 让动画重新开始
-  progress.style.animation = '';
-  undoBar.style.display = 'flex';
+  pushBanner((banner) => {
+    const msg = document.createElement('span');
+    msg.className = 'push-msg';
+    msg.textContent = count > 1
+      ? `已关闭 ${count} 个标签页(含「${title}」)`
+      : `已关闭「${title}」`;
+    const btn = document.createElement('button');
+    btn.className = 'push-action';
+    btn.textContent = '撤销';
+    btn.title = `恢复刚关闭的标签 (${MOD}Z)`;
+    btn.addEventListener('click', doUndo);
+    banner.appendChild(msg);
+    banner.appendChild(btn);
+    // 倒计时进度条: 剩余可撤销时间(条目相对定位收窄置底)
+    banner.style.position = 'relative';
+    const progress = document.createElement('span');
+    progress.className = 'push-progress';
+    banner.appendChild(progress);
+  }, { autoDismiss: 6000 });
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => {
     undoStack = [];
-    hideUndo();
   }, 6000);
 }
 
@@ -829,7 +1004,7 @@ async function doUndo() {
     }
   }
   undoStack = [];
-  hideUndo();
+  clearPushBanners(); // 通知条主动关闭(不等动画)
   // 补归组: 找同名分组,把恢复的标签移回去
   await regroupRestored(restoredTabIds);
   await loadTabs();
@@ -856,8 +1031,9 @@ async function regroupRestored(restored) {
   }
 }
 
-function hideUndo() {
-  undoBar.style.display = 'none';
+// 关闭栈里全部条目(撤销执行后/清理类操作切换提示时)
+function clearPushBanners() {
+  for (const b of [...pushStack.children]) dismissBanner(b);
   clearTimeout(undoTimer);
 }
 
@@ -960,45 +1136,42 @@ async function cleanStaleTabs() {
   if (closedCount > 0) showToast(`已清理 ${closedCount} 个标签,${MOD}Z 可撤销`);
 }
 
-// 轻量提示: 复用 undoBar 位置显示无按钮信息,2 秒自动消失
-let toastTimer = null;
+// 轻量提示: 推送条目,2 秒自动滑走
 function showToast(text) {
-  undoBar.innerHTML = '';
-  const msg = document.createElement('span');
-  msg.className = 'undo-msg';
-  msg.textContent = text;
-  undoBar.appendChild(msg);
-  undoBar.style.display = 'flex';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideUndo, 2000);
+  pushBanner((banner) => {
+    const msg = document.createElement('span');
+    msg.className = 'push-msg';
+    msg.textContent = text;
+    banner.appendChild(msg);
+  });
 }
 
 // 面板内确认条: 系统确认(confirm)会被设置的覆盖层遮挡,导致流程无声卡死。
-// 用 undoBar 位置的确认/取消条替代,返回 Promise<boolean>,8s 超时视为取消
+// 推送形态的确认/取消条,返回 Promise<boolean>,8s 超时视为取消
 function confirmInPanel(text) {
   return new Promise((resolve) => {
-    undoBar.innerHTML = '';
-    const msg = document.createElement('span');
-    msg.className = 'undo-msg';
-    msg.textContent = text;
-    const okBtn = document.createElement('button');
-    okBtn.className = 'undo-btn';
-    okBtn.textContent = '确认清理';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'undo-btn';
-    cancelBtn.style.background = '#6e7681';
-    cancelBtn.textContent = '取消';
+    let banner;
     const settle = (val) => {
       clearTimeout(timer);
-      hideUndo();
+      dismissBanner(banner);
       resolve(val);
     };
-    okBtn.addEventListener('click', () => settle(true));
-    cancelBtn.addEventListener('click', () => settle(false));
-    undoBar.appendChild(msg);
-    undoBar.appendChild(cancelBtn);
-    undoBar.appendChild(okBtn);
-    undoBar.style.display = 'flex';
+    banner = pushBanner((b) => {
+      const msg = document.createElement('span');
+      msg.className = 'push-msg';
+      msg.textContent = text;
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'push-action secondary';
+      cancelBtn.textContent = '取消';
+      const okBtn = document.createElement('button');
+      okBtn.className = 'push-action';
+      okBtn.textContent = '确认清理';
+      cancelBtn.addEventListener('click', () => settle(false));
+      okBtn.addEventListener('click', () => settle(true));
+      b.appendChild(msg);
+      b.appendChild(cancelBtn);
+      b.appendChild(okBtn);
+    }, { autoDismiss: 0 });
     const timer = setTimeout(() => settle(false), 8000);
   });
 }
@@ -1063,6 +1236,20 @@ async function switchTo(tab) {
   window.close();
 }
 
+// 滚入可视区,自动避开吸顶分组头: scrollIntoView({block:'nearest'})
+// 只保证进入容器视口,元素可能停在 sticky 组头底下被盖住——
+// 手动计算: 目标行顶部距容器顶部不足组头高度(~23px)时额外下滚
+function scrollPastSticky(el) {
+  el.scrollIntoView({ block: 'nearest' });
+  const container = resultsEl;
+  const stickyH = 28; // 分组头: 9px+5px padding + 10.5px 行高 + 1px 阴影线
+  // scrollIntoView 后二次校正: 若行顶落在吸顶组头底下,补滚 stickyH
+  const above = (el.offsetTop - container.offsetTop) - container.scrollTop;
+  if (above < stickyH) {
+    container.scrollTop -= (stickyH - above);
+  }
+}
+
 function setActive(idx) {
   const rows = resultsEl.querySelectorAll('.tab-item');
   if (!rows.length) return;
@@ -1071,7 +1258,7 @@ function setActive(idx) {
   const el = rows[activeIndex];
   if (el) {
     el.classList.add('active');
-    el.scrollIntoView({ block: 'nearest' });
+    scrollPastSticky(el);
   }
 }
 
@@ -1160,6 +1347,7 @@ async function closeOneDuplicate(target) {
   const victimId = target.duplicates[target.duplicates.length - 1];
   try {
     await chrome.tabs.remove(victimId);
+    mediaTabIds.delete(victimId); // 探测缓存同步清理,防幽灵按钮
     // 从 allTabs 源头移除该副本(重建后的 filtered 才能拿到正确状态)
     const src = allTabs.find(x => x.tab.url === target.tab.url);
     if (src && src.duplicates) {
@@ -1407,7 +1595,7 @@ function renderRulesEditor(rules) {
   rulesListEl.innerHTML = '';
   const entries = Object.entries(rules);
   if (!entries.length) {
-    rulesListEl.innerHTML = '<div style="padding:8px 0;color:#8b949e;font-size:11px">暂无规则,点击下方新增组</div>';
+    rulesListEl.innerHTML = '<div style="padding:8px 0;color:var(--text-3);font-size:11px">暂无规则,点击下方新增组</div>';
     return;
   }
   for (const [name, hosts] of entries) {
@@ -1587,7 +1775,7 @@ function handleShortcuts(e) {
     const el = units[next];
     clearActiveUnit();
     el.classList.add('active');
-    el.scrollIntoView({ block: 'nearest' });
+    scrollPastSticky(el);
     if (el.classList.contains('tab-item')) {
       activeIndex = [...resultsEl.querySelectorAll('.tab-item')].indexOf(el);
     } else {
@@ -1652,7 +1840,7 @@ function handleShortcuts(e) {
     // ⌘Z / Ctrl+Z 撤销最近关闭的标签
     e.preventDefault();
     if (isUndoAvailable()) {
-      undoBar.querySelector('.undo-btn')?.click();
+      doUndo();
     }
   } else if (e.key === 'Backspace'
     && (e.metaKey || e.ctrlKey)
@@ -1704,6 +1892,9 @@ async function copyTabUrl(tab) {
   focusCurrentTab();
   input.focus();
   console.log(`[TGS] 首帧完成, JS 侧总耗时 ${(performance.now() - bootT0).toFixed(1)}ms`);
+  console.log('[TGS] BUILD 2026-09-03 v4 (fade-band) — 看不到这行=Chrome 缓存了旧 popup');
+  // 首帧不阻塞: 媒体 tab 探测异步跑,命中一个补一个按钮
+  probeMediaTabs();
   // 快照追帧: 首帧可能拿到 Tabbiy 归组/新标签 URL 定型前的中间态
   // (新开标签暂在未分组、重复未合并),1s 后静默复核,有变化才重渲染
   setTimeout(async () => {
@@ -1720,14 +1911,5 @@ async function copyTabUrl(tab) {
   // 唤起时异步触发分组整理(同名合并+空组清理),在 background 静默执行,
   // 不阻塞弹窗;整理结果由下一次唤起自然看到
   chrome.runtime.sendMessage({ type: 'tidy-groups' }).catch(() => {});
-  // [临时探针] 排查 saved tab group 在书签树的结构特征,定位后删除
-  chrome.bookmarks.getTree(tree => {
-    const bar = tree[0].children.find(c => c.id === '1') || tree[0].children[0];
-    console.log('[TGS 探针] 书签栏一级节点:', JSON.stringify(
-      (bar.children || []).map(c => ({
-        id: c.id, title: c.title, type: c.type,
-        childCount: c.children ? c.children.length : undefined,
-        keys: Object.keys(c),
-      })), null, 2));
-  });
+
 })();
