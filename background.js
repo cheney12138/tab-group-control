@@ -40,14 +40,18 @@ function rebuildHostIndex(rules) {
 
 async function loadRules() {
   try {
-    // groupRulesInit 标记"写入过规则":空规则集是合法状态(用户删光了),
-    // 不能再用"空 = 首次运行"启发式——否则清空后重启会被默认规则复活
-    const stored = await chrome.storage.local.get(['groupRules', 'groupRulesInit']);
-    if (stored?.groupRulesInit) {
+    // 判定"已初始化"看 groupRules 键是否存在,而非规则是否非空——
+    // 空规则集是合法状态(用户删光了),不能被默认规则复活。
+    // (曾用独立标记位 groupRulesInit 判定,但标记只在首次写默认时落,
+    // 升级用户的存量 storage 里没有它 → 升级后第一次 loadRules 把已保存
+    // 的规则整个覆盖回 DEFAULT_RULES,"重载插件后删掉的分组全回来了"。
+    // 键存在性检查对老用户/新用户/刻意清空三种情况都正确)
+    const stored = await chrome.storage.local.get('groupRules');
+    if (stored && 'groupRules' in stored) {
       rebuildHostIndex(stored.groupRules || {});
     } else {
-      // 首次运行: 写入默认规则(用户的 Tabbiy 配置迁移)并落标记
-      await chrome.storage.local.set({ groupRules: DEFAULT_RULES, groupRulesInit: true });
+      // 全新安装: 写入默认规则(用户的 Tabbiy 配置迁移)
+      await chrome.storage.local.set({ groupRules: DEFAULT_RULES });
       rebuildHostIndex(DEFAULT_RULES);
     }
   } catch (e) {
@@ -107,7 +111,23 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-async function autoGroupTab(tab) {
+// 归组串行队列: onCreated/onUpdated 触发的 autoGroupTab 是 fire-and-forget
+// 并发的,与规则保存触发的 cleanup→groupExisting→tidy 长链路交错时,
+// tabGroups.query 查到的组可能在 tabs.group 执行前被并发流程搬空
+// (空组即时消亡)或被 tidy 合并删除——"No group with id" 报错的主因。
+// 排队执行消除自身并发,也顺带根治"两个标签同时 miss 各建一组"的
+// 重复组(重复组正是 tidy 合并竞态的原料)
+let groupQueue = Promise.resolve();
+function enqueueGroupOp(fn) {
+  const run = groupQueue.then(fn);
+  groupQueue = run.then(() => {}, () => {}); // 队列永续:吞掉错误继续排
+  return run;
+}
+function autoGroupTab(tab) {
+  return enqueueGroupOp(() => doAutoGroupTab(tab));
+}
+
+async function doAutoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
   if (!autoGroupEnabled) return;
   if (!tab || !tab.url || tab.url.startsWith('chrome')) return;
@@ -133,6 +153,24 @@ async function autoGroupTab(tab) {
       });
     }
   } catch (e) {
+    // 竞态兜底: "No group with id" = 查到的组在归组调用前已被删(空组消亡
+    // /同名组被 tidy 合并/窗口关闭)。重查一次,没有就重建——组只是壳,
+    // 标签才是数据,重建无损。队列化后此路径已罕见,属最后防线
+    if (/No group with id/i.test(String(e?.message || ''))) {
+      try {
+        const again = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
+        if (again.length) {
+          await chrome.tabs.group({ tabIds: [tab.id], groupId: again[0].id });
+        } else {
+          const gid = await chrome.tabs.group({ tabIds: [tab.id] });
+          await chrome.tabGroups.update(gid, { title: groupName, color: colorForGroup(groupName) });
+        }
+        return;
+      } catch (e2) {
+        console.error(`归组重试失败(${groupName}):`, e2);
+        return;
+      }
+    }
     console.error(`归组失败(${groupName}):`, e);
   }
 }
@@ -382,7 +420,9 @@ async function cleanupRemovedRules(oldRules, newRules) {
       // 当前组名须是被编辑过的规则组(手动组不动)
       const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
       if (!current || !oldGroupNames.has(current.title)) continue;
-      await moveTabFromRemovedRule(tab, current.title);
+      // 走归组串行队列,与事件驱动的 autoGroupTab 互斥
+      // (query→group 两步竞态与归组同源)
+      await enqueueGroupOp(() => moveTabFromRemovedRule(tab, current.title));
       moved += 1;
     }
     if (moved > 0) console.log(`[TGS] 规则删除清理: ${moved} 个标签迁入 Others`);

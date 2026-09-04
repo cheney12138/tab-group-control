@@ -19,7 +19,6 @@ const DEBUG = localStorage.getItem('tgs-debug') === '1';
 
 // ---- 设置 ----
 const settings = {
-  fuzzy: localStorage.getItem('tgs-fuzzy') !== '0',      // 模糊匹配,默认开
   showUrl: localStorage.getItem('tgs-showurl') !== '0',  // 始终显示 URL 行,默认开
   // 删除标签的快捷键。历史上默认 ⌘⌫,但 macOS 部分输入法/键盘工具会给
   // 裸退格误置 metaKey,"没按 ⌘ 也删标签"的 bug 反复出现的根源。
@@ -30,7 +29,6 @@ const settings = {
   deleteKey: localStorage.getItem('tgs-deletekey') || 'cmd-bs',
 };
 function saveSettings() {
-  localStorage.setItem('tgs-fuzzy', settings.fuzzy ? '1' : '0');
   localStorage.setItem('tgs-showurl', settings.showUrl ? '1' : '0');
   localStorage.setItem('tgs-deletekey', settings.deleteKey);
 }
@@ -139,13 +137,10 @@ function pinyinMatch(query, text) {
 }
 
 function fuzzyMatch(query, text) {
+  // 固定模糊匹配: 按序散字符命中(子串是其特例)。曾有「模糊匹配」开关
+  // 已删——低频配置不值得占设置面板,模糊匹配是更好的默认
   const q = query.toLowerCase();
   const t = text.toLowerCase();
-  if (!settings.fuzzy) {
-    // 子串模式: 查询串须作为连续子串出现
-    const idx = t.indexOf(q);
-    return idx === -1 ? null : Array.from({ length: q.length }, (_, i) => idx + i);
-  }
   const hits = [];
   let ti = 0;
   for (const qc of q) {
@@ -1508,7 +1503,6 @@ input.addEventListener('keydown', (e) => {
 // ---- 设置面板 ----
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
-const optFuzzy = document.getElementById('optFuzzy');
 const optShowUrl = document.getElementById('optShowUrl');
 
 settingsBtn.addEventListener('click', (e) => {
@@ -1583,15 +1577,8 @@ optOthersGroup.addEventListener('change', async () => {
   }, 1500);
 });
 // 快捷键速查已改为 hover 气泡(纯 CSS),无需 JS
-optFuzzy.checked = settings.fuzzy;
+// (模糊匹配开关已删: 功能保留、永远开启,不再暴露配置)
 optShowUrl.checked = settings.showUrl;
-optFuzzy.addEventListener('change', () => {
-  settings.fuzzy = optFuzzy.checked;
-  saveSettings();
-  search(searchValue());
-  render();
-  if (filtered.length) setActive(0);
-});
 optShowUrl.addEventListener('change', () => {
   settings.showUrl = optShowUrl.checked;
   saveSettings();
@@ -1745,23 +1732,153 @@ document.getElementById('addRuleBtn').addEventListener('click', () => {
   groups[groups.length - 1]?.querySelector('.rule-name-input')?.focus();
 });
 
-document.getElementById('saveRulesBtn').addEventListener('click', async () => {
-  // 从 DOM 收集: 组名输入框 + 芯片文本
+// ---- 规则 JSON 导入/导出 ----
+// 从当前编辑器 DOM 收集规则(与保存共用同一收集逻辑,导入合并以此为基底)
+function collectRulesFromEditor() {
   const rules = {};
-  let invalid = 0;
   rulesListEl.querySelectorAll('.rule-group').forEach(g => {
     const name = g.querySelector('.rule-name-input')?.value.trim();
     const hosts = [...g.querySelectorAll('.host-chip > span')]
       .map(el => el.textContent.trim()).filter(Boolean);
-    if (name && hosts.length) {
-      rules[name] = hosts;
-    } else {
-      invalid += 1;
-    }
+    if (name && hosts.length) rules[name] = hosts;
   });
+  return rules;
+}
+
+// 解析导入 JSON → { 组名: [域名] }。容忍两类格式:
+// 1. 本插件/Tabbiy 导出的扁平格式 { "组名": ["域名", ...] }
+// 2. [{ name/group, domains/hosts: [...] }] 数组格式(手写常见)
+// 域名归一化: 去协议/路径/尾斜杠(粘贴完整 URL 也能用),空项丢弃
+function parseRulesJson(text) {
+  const data = JSON.parse(text);
+  const raw = {};
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      if (!item || typeof item !== 'object') continue;
+      const name = (item.name ?? item.group ?? item.title ?? '').toString().trim();
+      const list = item.domains ?? item.hosts ?? item.urls ?? [];
+      if (name && Array.isArray(list)) raw[name] = list;
+    }
+  } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+    // 包一层 key 的导出({ rules: {...} })也解包
+    const obj = (data.rules && typeof data.rules === 'object' && !Array.isArray(data.rules))
+      ? data.rules : data;
+    for (const [k, v] of Object.entries(obj)) {
+      if (Array.isArray(v)) raw[k] = v;
+    }
+  } else {
+    throw new Error('JSON 顶层须是对象或数组');
+  }
+  const rules = {};
+  let hosts = 0;
+  for (const [name, list] of Object.entries(raw)) {
+    if (!name) continue;
+    const cleaned = [...new Set(list.map(x => {
+      if (typeof x !== 'string') return '';
+      return x.trim()
+        .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '') // 去协议
+        .replace(/^www\./, '')                    // www 归一(匹配用 host)
+        .split('/')[0].split('?')[0]              // 去路径/查询
+        .replace(/\/+$/, '');
+    }).filter(Boolean))];
+    if (cleaned.length) { rules[name] = cleaned; hosts += cleaned.length; }
+  }
+  return { rules, hosts };
+}
+
+document.getElementById('importRulesBtn').addEventListener('click', () => {
+  // 轻量弹层: 文本域粘贴 JSON → 解析合并进编辑器(不直接写 storage,
+  // 用户可在保存前检查/修改,保存动作与手工编辑完全一致)。
+  // 类名 rules-import-layer 供全局焦点兜底监听器豁免(见文件末尾),
+  // 否则点击弹层内任何位置焦点都会被抢回搜索框,textarea 打不了字
+  const layer = document.createElement('div');
+  layer.className = 'rules-import-layer';
+  layer.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:min(420px,92vw);background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);font-size:12px';
+  box.innerHTML = `
+    <div style="font-weight:600;margin-bottom:6px">导入规则 JSON</div>
+    <div style="color:var(--text-3);margin-bottom:8px;line-height:1.5">
+      粘贴 <code>{ "组名": ["域名", …] }</code> 格式(Tabbiy 导出兼容),
+      与当前编辑器内容<b>同名组合并域名、新组追加</b>,导入后仍需点「保存规则」。
+    </div>
+    <textarea class="import-json-area" style="width:100%;height:180px;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--hairline);border-radius:8px;background:var(--bg);color:var(--text);resize:vertical;outline:none"></textarea>
+    <div class="import-json-error" style="color:var(--danger,#e0457b);font-size:11px;margin-top:6px;min-height:14px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="io-cancel" style="padding:5px 14px;border:1px solid var(--hairline);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;font-size:11.5px">取消</button>
+      <button class="io-confirm" style="padding:5px 14px;border:none;background:var(--accent);color:#fff;border-radius:6px;cursor:pointer;font-size:11.5px;font-weight:600">导入</button>
+    </div>`;
+  layer.appendChild(box);
+  document.body.appendChild(layer);
+  const area = box.querySelector('.import-json-area');
+  const errEl = box.querySelector('.import-json-error');
+  area.focus();
+  const close = () => layer.remove();
+  layer.addEventListener('click', (e) => { if (e.target === layer) close(); });
+  box.querySelector('.io-cancel').addEventListener('click', close);
+  area.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // 不触发全局快捷键
+    if (e.key === 'Escape') close();
+  });
+  box.querySelector('.io-confirm').addEventListener('click', () => {
+    let parsed;
+    try {
+      parsed = parseRulesJson(area.value);
+    } catch (e) {
+      errEl.textContent = '解析失败: ' + (e.message || '不是合法 JSON');
+      return;
+    }
+    if (!Object.keys(parsed.rules).length) {
+      errEl.textContent = '没解析到任何有效规则(需要 { "组名": ["域名"] } 结构)';
+      return;
+    }
+    // 合并: 同名组域名并入(去重),新组按现有渲染顺序追加
+    const existing = collectRulesFromEditor();
+    const merged = { ...existing };
+    let addedGroups = 0, addedHosts = 0;
+    for (const [name, hosts] of Object.entries(parsed.rules)) {
+      if (merged[name]) {
+        const set = new Set(merged[name]);
+        for (const h of hosts) if (!set.has(h)) { set.add(h); addedHosts += 1; }
+        merged[name] = [...set];
+      } else {
+        merged[name] = hosts;
+        addedGroups += 1;
+        addedHosts += hosts.length;
+      }
+    }
+    renderRulesEditor(merged);
+    markRulesDirty();
+    close();
+    showToast(`已导入: 新增 ${addedGroups} 组${addedHosts ? `,共 ${addedHosts} 个域名` : ''},记得保存`);
+  });
+});
+
+document.getElementById('exportRulesBtn').addEventListener('click', () => {
+  const rules = collectRulesFromEditor();
+  if (!Object.keys(rules).length) {
+    showToast('当前没有可导出的规则');
+    return;
+  }
+  // 导出编辑器当前内容(含未保存修改),扁平 Tabbiy 兼容格式,键排序便于 diff
+  const ordered = {};
+  for (const k of Object.keys(rules).sort((a, b) => a.localeCompare(b, 'zh-CN'))) {
+    ordered[k] = rules[k];
+  }
+  const blob = new Blob([JSON.stringify(ordered, null, 2) + '\n'], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tab-group-rules.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('saveRulesBtn').addEventListener('click', async () => {
+  const rules = collectRulesFromEditor();
+  const invalid = rulesListEl.querySelectorAll('.rule-group').length - Object.keys(rules).length;
   if (!Object.keys(rules).length) {
     // 空集是合法状态(用户删光了所有规则)——存 {},让 storage.onChanged
-    // 走清理路径解散旧组。background 靠 groupRulesInit 标记区分
+    // 走清理路径解散旧组。background 以 groupRules 键的存在性区分
     // "从没设置过"和"刻意为空",不会回填默认规则
     await chrome.storage.local.set({ groupRules: {} });
     clearRulesDirty();
@@ -1807,6 +1924,9 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   // 设置面板内的交互(checkbox/链接)保持自身焦点
   if (e.target.closest('#settingsPanel')) return;
+  // 导入 JSON 弹层同理(textarea 要能正常点击定位/输入,
+  // 弹层挂在 body 下不在 #settingsPanel 内,须单独豁免)
+  if (e.target.closest('.rules-import-layer')) return;
   input.focus();
 });
 
