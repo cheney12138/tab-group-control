@@ -40,12 +40,14 @@ function rebuildHostIndex(rules) {
 
 async function loadRules() {
   try {
-    const stored = await chrome.storage.local.get('groupRules');
-    if (stored && stored.groupRules && Object.keys(stored.groupRules).length) {
-      rebuildHostIndex(stored.groupRules);
+    // groupRulesInit 标记"写入过规则":空规则集是合法状态(用户删光了),
+    // 不能再用"空 = 首次运行"启发式——否则清空后重启会被默认规则复活
+    const stored = await chrome.storage.local.get(['groupRules', 'groupRulesInit']);
+    if (stored?.groupRulesInit) {
+      rebuildHostIndex(stored.groupRules || {});
     } else {
-      // 首次运行: 写入默认规则(用户的 Tabbiy 配置迁移)
-      await chrome.storage.local.set({ groupRules: DEFAULT_RULES });
+      // 首次运行: 写入默认规则(用户的 Tabbiy 配置迁移)并落标记
+      await chrome.storage.local.set({ groupRules: DEFAULT_RULES, groupRulesInit: true });
       rebuildHostIndex(DEFAULT_RULES);
     }
   } catch (e) {
@@ -77,9 +79,13 @@ function colorForGroup(name) {
 // 状态就绪 Promise: worker 冷启动时 storage 读取是异步的,事件若在读取完成前
 // 到达会读到默认值 true(曾导致"关了开关仍归组")——归组前 await 就绪标记
 let autoGroupEnabled = true;
-let switchReady = chrome.storage.local.get('autoGroupEnabled')
+// Others 兜底开关: 未命中规则的散标签是否归入 Others 组。
+// 关闭时规则只管命中的域名,其余标签保持散着(可选配置,默认开保持旧行为)
+let othersEnabled = true;
+let switchReady = chrome.storage.local.get(['autoGroupEnabled', 'othersGroupEnabled'])
   .then((s) => {
     autoGroupEnabled = s?.autoGroupEnabled !== false;
+    othersEnabled = s?.othersGroupEnabled !== false;
   })
   .catch(() => {}); // 读取失败保持默认开
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -88,15 +94,28 @@ chrome.storage.onChanged.addListener((changes, area) => {
     switchReady = Promise.resolve(); // onChanged 已是最新的,无需再等
     console.log('[TGS] 自动分组:', autoGroupEnabled ? '开启' : '关闭');
   }
+  if (area === 'local' && 'othersGroupEnabled' in changes) {
+    othersEnabled = changes.othersGroupEnabled.newValue !== false;
+    console.log('[TGS] Others 兜底:', othersEnabled ? '开启' : '关闭');
+    // 开关即时生效: 开 → 散标签收进 Others;关 → 存量 Others 组解散。
+    // 挂 onChanged(浏览器投递,worker 活着必达),不依赖 popup 消息
+    if (othersEnabled) {
+      groupExistingTabs();
+    } else {
+      ungroupAllOthersGroups();
+    }
+  }
 });
 
 async function autoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
   if (!autoGroupEnabled) return;
   if (!tab || !tab.url || tab.url.startsWith('chrome')) return;
-  // 命中规则 → 规则组;未命中 → Others 兜底组(自动分组开启时所有标签都归组,
-  // 未匹配域名不再散落在未分组——"Others"是固定的,暂不支持自定义)
-  const groupName = matchGroup(tab.url) || 'Others';
+  // 命中规则 → 规则组;未命中 → Others 兜底组(可配置: othersGroupEnabled
+  // 关闭时未命中域名保持散着,规则只管命中的)
+  const hit = matchGroup(tab.url);
+  if (!hit && !othersEnabled) return;
+  const groupName = hit || 'Others';
   try {
     // 已在同名组里则跳过(避免 onUpdated 反复触发时抖动)
     if (tab.groupId && tab.groupId !== -1) {
@@ -309,11 +328,108 @@ chrome.runtime.onInstalled.addListener(() => {
 // worker 活着时必达,归组挂在这里才是可靠路径
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.groupRules) {
-    rebuildHostIndex(changes.groupRules.newValue);
+    const oldRules = changes.groupRules.oldValue || {};
+    const newRules = changes.groupRules.newValue || {};
+    rebuildHostIndex(newRules);
     console.log('[TGS] 分组规则已更新,触发存量归组');
-    groupExistingTabs();
+    // 串行链: 清理规则删除的遗留(被删的组、被移出的域名 → Others)
+    // → 存量归组(新规则命中的迁入) → 整理(收掉搬空的旧组)。
+    // 清理与归组处理的集合不相交,但整理必须等清理完成才能看到空组
+    cleanupRemovedRules(oldRules, newRules)
+      .then(() => groupExistingTabs())
+      .then(() => tidyGroups());
   }
 });
+
+// ---- 规则删除的遗留清理 ----
+// "编辑完分组之后,规则和分组没有消失"的核心根因: 归组逻辑单向(只拉进
+// 不踢出),删掉规则后旧 Chrome 组原封不动。这里用变更前后差集反向清理:
+//   1. 组名被删(old 有 new 无)→ 组内标签全部迁入 Others
+//   2. 域名被移出某组(组还在)→ 该域名的标签不再命中任何规则,
+//      若当前组名是被编辑过的规则组名 → 迁入 Others
+// 保护: 只清理"当前组名在 old 规则组名集合里"的标签——用户手动建的组
+// (组名不在规则里)不动。且只挂在规则变更路径,不进启动路径,避免每次
+// 重启都拆手动组
+async function cleanupRemovedRules(oldRules, newRules) {
+  await switchReady;
+  if (!autoGroupEnabled) return;
+  try {
+    // 差集: old 里有、new 里没有/已移出的 host → 所属标签应离开旧组
+    const removedHosts = new Map(); // host → 旧组名
+    for (const [name, hosts] of Object.entries(oldRules)) {
+      for (const h of hosts) {
+        removedHosts.set(String(h).replace(/\/+$/, ''), name);
+      }
+    }
+    for (const [name, hosts] of Object.entries(newRules)) {
+      for (const h of hosts) {
+        removedHosts.delete(String(h).replace(/\/+$/, ''));
+      }
+    }
+    if (!removedHosts.size) return;
+    // 旧规则组名集合(重命名也算"删旧组":旧名组里的标签若域名仍命中
+    // 新规则会被 groupExistingTabs 迁走,这里只负责没被迁走的部分)
+    const oldGroupNames = new Set(Object.keys(oldRules));
+
+    const tabs = await chrome.tabs.query({});
+    let moved = 0;
+    for (const tab of tabs) {
+      if (!tab.url || tab.url.startsWith('chrome')) continue;
+      if (tab.groupId === -1 || !tab.groupId) continue; // 散标签没有遗留
+      let host;
+      try { host = new URL(tab.url).host; } catch { continue; }
+      if (!removedHosts.has(host)) continue;
+      // 当前组名须是被编辑过的规则组(手动组不动)
+      const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
+      if (!current || !oldGroupNames.has(current.title)) continue;
+      await moveTabFromRemovedRule(tab, current.title);
+      moved += 1;
+    }
+    if (moved > 0) console.log(`[TGS] 规则删除清理: ${moved} 个标签迁入 Others`);
+  } catch (e) {
+    console.error('规则删除清理失败:', e);
+  }
+}
+
+// 规则删除后标签去向: Others 兜底开 → 迁入所在窗口的 Others 组(没有则新建);
+// 关 → 解散成散标签。旧组搬空后由 tidyGroups 收尸
+async function moveTabFromRemovedRule(tab, fromTitle) {
+  try {
+    if (!othersEnabled) {
+      await chrome.tabs.ungroup(tab.id);
+      return;
+    }
+    const existing = await chrome.tabGroups.query({ title: 'Others', windowId: tab.windowId });
+    if (existing.length) {
+      await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
+    } else {
+      const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
+      await chrome.tabGroups.update(newGroupId, { title: 'Others', color: colorForGroup('Others') });
+    }
+  } catch (e) {
+    console.error(`规则删除后迁移失败(${fromTitle}):`, e);
+  }
+}
+
+// 解散所有窗口的 Others 兜底组(兜底开关关闭时): 组内标签退回未分组,
+// 组随最后一个标签移出自动删除。"Others"是扩展保留组名(不支持自定义),
+// 解散不会碰用户手动建的规则组
+async function ungroupAllOthersGroups() {
+  try {
+    const groups = await chrome.tabGroups.query({ title: 'Others' });
+    if (!groups.length) return;
+    const groupIds = new Set(groups.map(g => g.id));
+    const tabs = await chrome.tabs.query({});
+    const memberIds = tabs.filter(t => groupIds.has(t.groupId)).map(t => t.id);
+    if (memberIds.length) {
+      await chrome.tabs.ungroup(memberIds);
+      console.log(`[TGS] Others 兜底关闭: 解散 ${memberIds.length} 个标签`);
+    }
+    refreshSnapshot();
+  } catch (e) {
+    console.error('解散 Others 组失败:', e);
+  }
+}
 
 // 快捷键命令: 返回上一个标签(A/B 互跳)
 chrome.commands.onCommand.addListener((command) => {

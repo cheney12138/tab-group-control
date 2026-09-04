@@ -190,7 +190,6 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--ring);
     }
-    .search-fade { display: none; } /* 旧方案残留,已废弃 */
     .search-wrap input { flex: 1; }
     /* 数据源按钮: 搜索框左缘的书签/历史入口,点击激活对应命令(等价 /b /h) */
     .src-btn {
@@ -959,6 +958,18 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0); }
     }
+    /* 尊重系统级"减少动效"偏好: 关掉所有入场/脉动/推送动画。
+     * !important 用于覆盖 stagger 行的内联 animation-delay(JS 用
+     * el.style.animationDelay 设的内联值优先级高于样式表,不加 !important
+     * 逐行 stagger 仍会跑)。过渡也一并归零,hover/聚焦无渐变但功能不受影响 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-delay: 0s !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1016,6 +1027,17 @@
     </label>
     <label>
       <input type="checkbox" id="optAutoGroup"> 自动分组(新标签按规则域名归组)
+    </label>
+    <label>
+      <input type="checkbox" id="optOthersGroup"> 未分组标签归入 Others(未命中规则的域名)
+    </label>
+    <label style="margin-top:6px">
+      删除标签的按键
+      <select id="optDeleteKey" style="margin-left:auto;font-size:11px;font-family:inherit;padding:2px 4px;border:1px solid var(--hairline);border-radius:5px;background:var(--surface);color:var(--text)">
+        <option value="cmd-bs">⌘ + 退格</option>
+        <option value="bs">退格(光标在起点时)</option>
+        <option value="dbl-bs">双击退格</option>
+      </select>
     </label>
     <button id="cleanBtn" class="clean-btn">
       <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>

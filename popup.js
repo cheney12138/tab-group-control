@@ -21,10 +21,18 @@ const DEBUG = localStorage.getItem('tgs-debug') === '1';
 const settings = {
   fuzzy: localStorage.getItem('tgs-fuzzy') !== '0',      // 模糊匹配,默认开
   showUrl: localStorage.getItem('tgs-showurl') !== '0',  // 始终显示 URL 行,默认开
+  // 删除标签的快捷键。历史上默认 ⌘⌫,但 macOS 部分输入法/键盘工具会给
+  // 裸退格误置 metaKey,"没按 ⌘ 也删标签"的 bug 反复出现的根源。
+  // 判定已改用 e.code(物理键位,不受输入法影响),但仍提供配置:
+  //   cmd-bs / ⌘⌫   — 默认,最不容易误触
+  //   bs / 裸退格    — 光标在输入框起点时删除选中行(顺手但有误删风险)
+  //   dbl-bs / 双击退格 — QuicKey 风格,500ms 内两次裸退格=删除
+  deleteKey: localStorage.getItem('tgs-deletekey') || 'cmd-bs',
 };
 function saveSettings() {
   localStorage.setItem('tgs-fuzzy', settings.fuzzy ? '1' : '0');
   localStorage.setItem('tgs-showurl', settings.showUrl ? '1' : '0');
+  localStorage.setItem('tgs-deletekey', settings.deleteKey);
 }
 
 const input = document.getElementById('search');
@@ -184,33 +192,45 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 function probeMediaTabs() {
-  // 只注入 http(s) 且未被 Chrome discard 的页面(注入 discarded 页会
+  // 只探测 http(s) 且未被 Chrome discard 的页面(注入 discarded 页会
   // 把它唤醒重载,不可接受);chrome:// 等不可注入页本来就没有媒体
   const ids = allTabs.map(x => x.tab).filter(t =>
     t.id > 0 && !t.discarded &&
     (t.url?.startsWith('http://') || t.url?.startsWith('https://'))
   ).map(t => t.id);
   if (!ids.length) return;
-  // 注: executeScript 的 target 不支持 tabIds 数组(只有单 tabId),
-  // 逐个注入;injectionResults 全失败也静默,audible 兜底
+  // 优先走 manifest content_scripts 已注入的 content.js——sendMessage
+  // 成本远低于 executeScript(无新注入开销、不占注入配额)。失败
+  // (扩展装/重载前就开着的页面没有 content script)再 executeScript 兜底
   for (const id of ids) {
-    chrome.scripting.executeScript({
-      target: { tabId: id },
-      func: () => {
-        // 判定与 macOS 控制中心同源: 只认 MediaSession——播放器页面才会
-        // 注册 metadata(暂停后依然保留),首页预览小视频/广告位不注册,
-        // 避免信息流页面误报。兜底: 正在播放且未静音的元素(个别站点
-        // 不注册 MediaSession,但播放中本就该可控)
-        if (navigator.mediaSession?.metadata) {
-          chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
-          return;
-        }
-        const playing = [...document.querySelectorAll('video, audio')].some(m =>
-          !m.paused && !m.ended && !m.muted && (m.src || m.currentSrc));
-        if (playing) chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
-      },
-    }).catch(() => {}); // 个别页面注入失败(受保护页面等),跳过即可
+    chrome.tabs.sendMessage(id, { type: 'probe-media' }, () => {
+      if (chrome.runtime.lastError) probeMediaViaScripting(id);
+    });
   }
+}
+
+// 兜底:content.js 不在的页面(扩展安装/重载前就开着的)动态注入探测。
+// API 守卫: chrome.scripting 只在 manifest 声明 scripting 权限且
+// Chrome >= 88 时存在;旧版/老 Chrome 上整个对象是 undefined,
+// 直接调用会在 .catch 挂上之前同步抛 TypeError——守卫后安静降级
+function probeMediaViaScripting(id) {
+  if (!chrome.scripting?.executeScript) return;
+  chrome.scripting.executeScript({
+    target: { tabId: id },
+    func: () => {
+      // 判定与 macOS 控制中心同源: 只认 MediaSession——播放器页面才会
+      // 注册 metadata(暂停后依然保留),首页预览小视频/广告位不注册,
+      // 避免信息流页面误报。兜底: 正在播放且未静音的元素(个别站点
+      // 不注册 MediaSession,但播放中本就该可控)
+      if (navigator.mediaSession?.metadata) {
+        chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
+        return;
+      }
+      const playing = [...document.querySelectorAll('video, audio')].some(m =>
+        !m.paused && !m.ended && !m.muted && (m.src || m.currentSrc));
+      if (playing) chrome.runtime.sendMessage({ type: 'media-report' }).catch(() => {});
+    },
+  }).catch(() => {}); // 个别页面注入失败(受保护页面等),跳过即可
 }
 function patchMediaBtn(tabId) {
   const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
@@ -241,8 +261,10 @@ function buildMediaBtn(t) {
       resp = await toggle();
     } catch {
       // 页面还没注入 content script(扩展刷新前开着的页面不会自动注入):
-      // 动态注入后重试一次
+      // 动态注入后重试一次。API 守卫: scripting 不存在(旧 manifest/
+      // 老 Chrome)时直接提示,不抛 TypeError
       try {
+        if (!chrome.scripting?.executeScript) throw new Error('此浏览器不支持动态注入');
         await chrome.scripting.executeScript({
           target: { tabId: t.id },
           files: ['content.js'],
@@ -366,7 +388,7 @@ async function loadTabs() {
     ]);
   }
   currentWindowId = (await currentWinPromise)?.id ?? null;
-  console.log(`[TGS] loadTabs 耗时: ${(performance.now() - t0).toFixed(1)}ms, 标签数: ${tabs.length}${fromSnapshot ? '(快照)' : '(直查)'}`);
+  if (DEBUG) console.log(`[TGS] loadTabs 耗时: ${(performance.now() - t0).toFixed(1)}ms, 标签数: ${tabs.length}${fromSnapshot ? '(快照)' : '(直查)'}`);
   const groupById = new Map(groups.map(g => [g.id, g]));
   // 收集窗口序号映射(过滤发生在收集之后,保证编号连续且与实际窗口一致)
   windowIds = [...new Set(tabs.map(t => t.windowId))].sort((a, b) => a - b);
@@ -929,9 +951,20 @@ let undoStack = []; // 最近关闭的标签快照,支持连续撤销
 
 function showUndo(snapshot) {
   undoStack.push(snapshot);
+  renderUndoBanner();
+}
+
+// 渲染撤销通知条 + 启动 6s 倒计时。undoStack 由调用方维护:
+// 单关路径 showUndo 已 push;批量清理(cleanStaleTabs)在循环里已 push
+// 全部快照,直接调用本函数即可——之前 cleanStaleTabs 误调
+// showUndo(targets[last].tab)(传了裸 Tab 而非快照对象),既重复 push
+// 又因 snapshot.tab 为 undefined 抛 TypeError,导致清理后不刷新/不提示/
+// 不能撤销。拆出本函数后批量路径只渲染不重复入栈
+function renderUndoBanner() {
   const count = undoStack.length;
-  const tab = snapshot.tab;
-  const title = (tab.title || tab.url).slice(0, 30);
+  if (!count) return;
+  const tab = undoStack[count - 1]?.tab;
+  const title = (tab?.title || tab?.url || '').toString().slice(0, 30);
   pushBanner((banner) => {
     const msg = document.createElement('span');
     msg.className = 'push-msg';
@@ -975,7 +1008,8 @@ async function doUndo() {
   }
   const restoredTabIds = [];
   for (const snap of undoStack) {
-    const t = snap.tab;
+    const t = snap?.tab;
+    if (!t) continue; // 防御:跳过任何脏/残缺快照,避免一条坏数据打断整批撤销
     // 关闭时间最新的排在最前;按 URL 匹配(标题可能被页面动态改掉,不作首选条件)
     const match = recent.find(s => s.tab && s.tab.url === t.url)
       || recent.find(s => s.tab && s.tab.title === t.title && s.tab.url === t.url);
@@ -1129,7 +1163,9 @@ async function cleanStaleTabs() {
   // 同步本地数据并刷新
   const closedIds = new Set(targets.map(x => x.tab.id));
   allTabs = allTabs.filter(x => !closedIds.has(x.tab.id));
-  showUndo(targets[targets.length - 1].tab);
+  // 循环里已把每个目标快照 push 进 undoStack,这里只渲染撤销条,
+  // 不再调 showUndo(它会重复 push 且需要快照对象——之前传裸 Tab 导致崩溃)
+  renderUndoBanner();
   await loadTabs();
   search(searchValue());
   render();
@@ -1482,6 +1518,7 @@ settingsBtn.addEventListener('click', (e) => {
   if (settingsPanel.classList.contains('open')) {
     loadRulesForEdit();
     loadAutoGroupSwitch();
+    loadOthersGroupSwitch();
   }
 });
 // 覆盖层的关闭按钮
@@ -1519,6 +1556,32 @@ optAutoGroup.addEventListener('change', async () => {
     showToast('自动分组已关闭');
   }
 });
+// Others 兜底开关: 未命中规则的散标签是否归入 Others 组。
+// 关闭时"未分组保持散着"——规则只管命中的域名,清空规则 + 关兜底
+// 即完全不做任何归组。存量迁移(开→收散标签 / 关→解散 Others 组)
+// 由 background 的 storage.onChanged 驱动(浏览器投递必达),这里只写状态
+const optOthersGroup = document.getElementById('optOthersGroup');
+async function loadOthersGroupSwitch() {
+  try {
+    const stored = await chrome.storage.local.get('othersGroupEnabled');
+    // 默认开启(undefined = 未设置过),保持旧行为
+    optOthersGroup.checked = stored?.othersGroupEnabled !== false;
+  } catch (e) {
+    optOthersGroup.checked = true;
+  }
+}
+optOthersGroup.addEventListener('change', async () => {
+  await chrome.storage.local.set({ othersGroupEnabled: optOthersGroup.checked });
+  showToast(optOthersGroup.checked
+    ? '未分组标签将归入 Others'
+    : 'Others 组已解散,未分组标签保持散着');
+  // 存量迁移在后台异步跑,稍后刷新列表显示新分组状态
+  setTimeout(async () => {
+    await loadTabs();
+    search(searchValue());
+    render();
+  }, 1500);
+});
 // 快捷键速查已改为 hover 气泡(纯 CSS),无需 JS
 optFuzzy.checked = settings.fuzzy;
 optShowUrl.checked = settings.showUrl;
@@ -1533,6 +1596,14 @@ optShowUrl.addEventListener('change', () => {
   settings.showUrl = optShowUrl.checked;
   saveSettings();
   render();
+});
+// 删除键位配置(见 settings.deleteKey 注释)
+const optDeleteKey = document.getElementById('optDeleteKey');
+optDeleteKey.value = settings.deleteKey;
+optDeleteKey.addEventListener('change', () => {
+  settings.deleteKey = optDeleteKey.value;
+  saveSettings();
+  showToast('删除键已切换为: ' + optDeleteKey.selectedOptions[0].textContent);
 });
 // chrome:// 链接在扩展弹窗里不能直接打开,交由后台页处理
 document.getElementById('shortcutLink').addEventListener('click', (e) => {
@@ -1689,7 +1760,13 @@ document.getElementById('saveRulesBtn').addEventListener('click', async () => {
     }
   });
   if (!Object.keys(rules).length) {
-    showToast('规则为空,未保存');
+    // 空集是合法状态(用户删光了所有规则)——存 {},让 storage.onChanged
+    // 走清理路径解散旧组。background 靠 groupRulesInit 标记区分
+    // "从没设置过"和"刻意为空",不会回填默认规则
+    await chrome.storage.local.set({ groupRules: {} });
+    clearRulesDirty();
+    showToast('已清空全部规则');
+    chrome.runtime.sendMessage({ type: 'group-existing' }).catch(() => {});
     return;
   }
   try {
@@ -1709,7 +1786,8 @@ document.getElementById('saveRulesBtn').addEventListener('click', async () => {
 // 仅当焦点在其他真实输入控件(设置面板的 checkbox 等)时放行原生行为
 document.addEventListener('keydown', (e) => {
   // 诊断: 所有退格按键的真实修饰键状态(排查"没按 cmd 却触发关闭"的键位映射问题)
-  if (e.key === 'Backspace') {
+  // 仅 DEBUG 下输出——生产里这是每次退格都打的高频日志
+  if (DEBUG && e.key === 'Backspace') {
     console.log('[TGS] Backspace 按下:', {
       meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey,
       key: e.key, code: e.code,
@@ -1732,8 +1810,9 @@ document.addEventListener('click', (e) => {
   input.focus();
 });
 
+// 双击退格删除模式的上次按下时间(顶层: 跨按键持久,函数内声明会每次清零)
+let lastBsTime = 0;
 function handleShortcuts(e) {
-  // Esc 分层退出: 设置面板开 → 关面板;有关键词/胶囊 → 清空;最后才关弹窗
   if (e.key === 'Escape') {
     e.preventDefault();
     if (settingsPanel.classList.contains('open')) {
@@ -1842,15 +1921,37 @@ function handleShortcuts(e) {
     if (isUndoAvailable()) {
       doUndo();
     }
-  } else if (e.key === 'Backspace'
-    && (e.metaKey || e.ctrlKey)
-    && !e.altKey && !e.shiftKey) {
-    // ⌘⌫ / Ctrl+Backspace 删除当前选中行:
+  } else if (e.code === 'Backspace') {
+    // 删除当前选中行,键位由设置决定(见 settings.deleteKey 注释)。
+    // 判定用 e.code(物理键位)+ 修饰键,不受输入法给 e.key/metaKey
+    // 塞脏值影响——"裸退格误删"反复出现的根因
     // 有重复副本 → 只删一份副本(逐个清理,代表永不动,按一次少一份);
     // 无副本 → 删除标签本身。
-    // 修饰键显式要求: 裸退格(删字)和其他组合不进这里
-    e.preventDefault();
-    if (focusedUnit.classList.contains('tab-item')) {
+    const inDeleteTarget = focusedUnit && focusedUnit.classList.contains('tab-item');
+    const withCmd = e.metaKey || e.ctrlKey;
+    let shouldDelete = false;
+    if (settings.deleteKey === 'cmd-bs') {
+      // ⌘⌫ / Ctrl+Backspace: 显式修饰键才删(alt/shift 排除,防组合冲突)
+      shouldDelete = withCmd && !e.altKey && !e.shiftKey;
+    } else if (settings.deleteKey === 'bs') {
+      // 裸退格: 仅当光标在输入框起点(或输入框空)时删——否则是删字
+      shouldDelete = !withCmd && !e.altKey && !e.shiftKey
+        && (input.value === '' || (input.selectionStart === 0 && input.selectionEnd === 0));
+    } else if (settings.deleteKey === 'dbl-bs') {
+      // 双击裸退格(500ms 内两次): 第一次不动作,第二次删
+      shouldDelete = !withCmd && !e.altKey && !e.shiftKey;
+      if (shouldDelete) {
+        const now = Date.now();
+        if (now - lastBsTime > 500) {
+          lastBsTime = now;
+          shouldDelete = false; // 第一次,只记时间
+        } else {
+          lastBsTime = 0;
+        }
+      }
+    }
+    if (shouldDelete && inDeleteTarget) {
+      e.preventDefault();
       const target = filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
       if (target && target.duplicates && target.duplicates.length) {
         closeOneDuplicate(target);
