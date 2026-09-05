@@ -5,26 +5,9 @@
 // 4. 分组整理: 同名合并 + 空组清理(唤起时触发)
 
 // ---- 自动分组: 规则 ----
-// 格式(从 Tabbiy 迁移): { 组名: [域名...], ... },域名精确匹配 host。
-// 存储 chrome.storage.local,支持 popup 侧编辑(后续加设置面板)
-const DEFAULT_RULES = {
-  "octo": ["octo.mws.sankuai.com", "octo.mws-test.sankuai.com"],
-  "raptor": ["raptor.mws.sankuai.com", "raptor-st.mws.sankuai.com", "raptor.mws-test.sankuai.com"],
-  "学城": ["km.sankuai.com"],
-  "测试": ["qahome.sankuai.com", "appmock.sankuai.com", "qa.train.st.sankuai.com", "mock.train.test.meituan.com"],
-  "LLM": ["bailian.console.aliyun.com", "gemini.google.com", "aigc.sankuai.com", "lingguang.com", "qianwen.com", "claude.ai", "kimi.com", "chatgpt.com", "chat.deepseek.com"],
-  "ones": ["ones.sankuai.com"],
-  "lion": ["lion.mws.sankuai.com", "lion.mws-test.sankuai.com"],
-  "codedev": ["dev.sankuai.com"],
-  "雷达": ["radar.mws.sankuai.com"],
-  "BCP": ["bcp.sankuai.com", "bcp.inf.test.sankuai.com", "mole.vip.sankuai.com"],
-  "RDS": ["rds.mws.sankuai.com", "rds.mws-test.sankuai.com", "dms.mws.sankuai.com"],
-  "arena": ["arena.sankuai.com", "arena.giant.test.sankuai.com", "arena.adp.st.sankuai.com"],
-  "tbms": ["tbms-train.sankuai.com"],
-  "fedo": ["fedo.sankuai.com"],
-  "xproduct": ["awp.vip.meituan.com"],
-  "tbms-test": ["train.tbms.inf.test.sankuai.com", "tbms.inf.train.st.meituan.com"],
-};
+// 格式: { 组名: [域名...], ... },域名精确匹配 host。
+// 存储 chrome.storage.local,由 popup 侧设置面板维护,默认空规则
+const DEFAULT_RULES = {};
 
 // host → 组名 的倒排索引(规则加载时构建,匹配 O(1))
 let hostIndex = new Map();
@@ -214,15 +197,24 @@ async function groupExistingTabs() {
 // ---- worker 保活 + 快照(原有) ----
 let tabSnapshot = null;
 
+// 快照刷新防抖: onCreated/onUpdated/onActivated/onRemoved 高频触发,
+// 每次都是 tabs+tabGroups 两次全量跨进程 query——页面加载风暴期
+// (一个标签连发 loading/title/favicon 多次 onUpdated)会放大成几十次。
+// 100ms 窗口合并突发,快照最多旧 100ms,远小于 popup 的 2s 新鲜度窗口
+let snapTimer = null;
 function refreshSnapshot() {
-  chrome.tabs.query({}, (tabs) => {
-    if (chrome.runtime.lastError) return;
-    tabSnapshot = { tabs, ts: Date.now() };
-    chrome.tabGroups.query({}, (groups) => {
+  if (snapTimer) return; // 已有排队中的刷新,合并
+  snapTimer = setTimeout(() => {
+    snapTimer = null;
+    chrome.tabs.query({}, (tabs) => {
       if (chrome.runtime.lastError) return;
-      tabSnapshot.groups = groups;
+      tabSnapshot = { tabs, ts: Date.now() };
+      chrome.tabGroups.query({}, (groups) => {
+        if (chrome.runtime.lastError) return;
+        tabSnapshot.groups = groups;
+      });
     });
-  });
+  }, 100);
 }
 
 chrome.tabs.onActivated.addListener((activeInfo) => {
@@ -338,7 +330,9 @@ chrome.tabs.onCreated.addListener((tab) => {
   autoGroupTab(tab); // 新建时 url 可能还未就绪,onUpdated 的 url 变化会兜底
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.title || changeInfo.url) refreshSnapshot();
+  if (changeInfo.title || changeInfo.url || changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined) {
+    refreshSnapshot();
+  }
   if (changeInfo.url) autoGroupTab(tab); // 导航到新域名时归组
 });
 
@@ -484,6 +478,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const fresh = tabSnapshot && (Date.now() - tabSnapshot.ts < 2000)
       ? tabSnapshot : null;
     sendResponse({ snapshot: fresh });
+    return;
+  }
+  if (msg?.type === 'set-tab-audible' && msg.tabId > 0) {
+    if (tabSnapshot?.tabs) {
+      const target = tabSnapshot.tabs.find(t => t.id === msg.tabId);
+      if (target) target.audible = !!msg.audible;
+    }
+    sendResponse({ ok: true });
     return;
   }
   if (msg?.type === 'tidy-groups') {
