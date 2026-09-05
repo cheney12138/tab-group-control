@@ -19,7 +19,7 @@ const DEBUG = localStorage.getItem('tgs-debug') === '1';
 
 // ---- 设置 ----
 const settings = {
-  showUrl: localStorage.getItem('tgs-showurl') !== '0',  // 始终显示 URL 行,默认开
+  showUrl: localStorage.getItem('tgs-showurl') === '1',  // 显示 URL 行,默认关(需要自己打开)
   // 删除标签的快捷键。历史上默认 ⌘⌫,但 macOS 部分输入法/键盘工具会给
   // 裸退格误置 metaKey,"没按 ⌘ 也删标签"的 bug 反复出现的根源。
   // 判定已改用 e.code(物理键位,不受输入法影响),但仍提供配置:
@@ -38,7 +38,7 @@ const input = document.getElementById('search');
 document.querySelectorAll('.k-c, .k-cmd').forEach(el => el.textContent = MOD);
 // Windows 下 ⌫/⇧ 等 mac 符号换成文字
 if (!IS_MAC) {
-  document.querySelectorAll('.help-popover td:first-child').forEach(td => {
+  document.querySelectorAll('.shortcut-table td:first-child').forEach(td => {
     td.innerHTML = td.innerHTML
       .replace('⌫', 'Backspace')
       .replace('⇧', 'Shift+');
@@ -186,6 +186,31 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     patchMediaBtn(sender.tab.id);
   }
 });
+// 实时刷新音浪/媒体按钮: 标签声音状态变化(播放/暂停)时同步对应行。
+// t.audible 是弹窗打开时的快照,后开/暂停会过期——靠这里保持动画与按钮同步。
+// 曾播放过的 tab 记入 mediaTabIds,暂停后(audible 变 false)仍保留媒体控件。
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.audible === undefined || tabId <= 0) return;
+  if (changeInfo.audible) mediaTabIds.add(tabId);
+  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+  if (!row) return;
+  const wave = row.querySelector('.wave-icon');
+  if (wave) {
+    wave.classList.toggle('is-playing', !!changeInfo.audible);
+    wave.classList.toggle('is-paused', !changeInfo.audible);
+  }
+  // 暂停后仍保留媒体控件(有恢复入口): 补 has-media
+  if (mediaTabIds.has(tabId) && !row.classList.contains('has-media')) {
+    row.classList.add('has-media');
+  }
+  // 同步播放/暂停按钮图标与提示
+  const playBtn = row.querySelector('.media-btn[title="暂停"], .media-btn[title="恢复播放"]');
+  if (playBtn) {
+    const playing = !!changeInfo.audible;
+    playBtn.innerHTML = playing ? SVG_PAUSE : SVG_PLAY;
+    playBtn.title = playing ? '暂停' : '恢复播放';
+  }
+});
 function probeMediaTabs() {
   // 只探测 http(s) 且未被 Chrome discard 的页面(注入 discarded 页会
   // 把它唤醒重载,不可接受);chrome:// 等不可注入页本来就没有媒体
@@ -233,56 +258,82 @@ function patchMediaBtn(tabId) {
   const t = allTabs.find(x => x.tab.id === tabId)?.tab;
   if (!t) return;
   row.classList.add('has-media');
-  const mediaBtn = buildMediaBtn(t);
+  const mediaBtn = buildMediaControls(t);
   mediaBtn.className = 'media-overlay';
   row.appendChild(mediaBtn);
 }
 const SVG_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>';
 const SVG_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+const SVG_MUTE = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
+const SVG_UNMUTE = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z" fill="currentColor"/><path d="M16 8a5 5 0 0 1 0 8M18.5 5.5a9 9 0 0 1 0 13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
+const SVG_PIP = '<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M5 4h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm7 6h6a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 18 18h-6a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 12 10z"/></svg>';
 
-// 媒体控制圆钮(hover 媒体行时浮现的中央按钮)。
-// 定义在顶层: buildTabRow(首帧渲染)和 patchMediaBtn(探测消息异步
-// 回来补按钮)两个作用域都要调用,原先嵌在 buildTabRow 里的局部声明
-// 在 patchMediaBtn 里够不着——ReferenceError 的根因
-function buildMediaBtn(t) {
-  const mediaBtn = document.createElement('button');
-  mediaBtn.title = t.audible ? '暂停' : '恢复播放';
-  mediaBtn.innerHTML = t.audible ? SVG_PAUSE : SVG_PLAY;
-  mediaBtn.addEventListener('click', async (e) => {
+// 媒体控制组(hover 媒体行时浮现的一排小圆钮): 播放/暂停 + 静音 + 小窗播放。
+// 判定与 macOS 控制中心同源(见 content.js probe-media),只对可控媒体标签展示。
+// 定义在顶层: buildTabRow(首帧渲染)和 patchMediaBtn(探测消息异步回来补按钮)共用。
+function buildMediaControls(t) {
+  const wrap = document.createElement('div');
+  wrap.className = 'media-overlay';
+  const mk = (act, icon, title) => {
+    const b = document.createElement('button');
+    b.className = 'media-btn';
+    b.title = title;
+    b.innerHTML = icon;
+    wrap.appendChild(b);
+    return b;
+  };
+  const initiallyMuted = !!t.mutedInfo?.muted;
+  const muteBtn = mk('mute', initiallyMuted ? SVG_UNMUTE : SVG_MUTE, initiallyMuted ? '取消静音' : '静音');
+  muteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      const live = await chrome.tabs.get(t.id);
+      const wasMuted = live.mutedInfo?.muted;
+      await chrome.tabs.update(t.id, { muted: !wasMuted });
+      const nowMuted = !wasMuted; // 用切换后的状态设置图标/文案,避免取反错位
+      muteBtn.innerHTML = nowMuted ? SVG_UNMUTE : SVG_MUTE;
+      muteBtn.title = nowMuted ? '取消静音' : '静音';
+      showToast(nowMuted ? '已静音' : '已取消静音');
+    } catch (err2) { showToast('操作失败'); }
+  });
+  const playBtn = mk('toggle', t.audible ? SVG_PAUSE : SVG_PLAY, t.audible ? '暂停' : '恢复播放');
+  playBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const toggle = async () => chrome.tabs.sendMessage(t.id, { type: 'toggle-media' });
     let resp = null;
     try {
       resp = await toggle();
     } catch {
-      // 页面还没注入 content script(扩展刷新前开着的页面不会自动注入):
-      // 动态注入后重试一次。API 守卫: scripting 不存在(旧 manifest/
-      // 老 Chrome)时直接提示,不抛 TypeError
       try {
         if (!chrome.scripting?.executeScript) throw new Error('此浏览器不支持动态注入');
-        await chrome.scripting.executeScript({
-          target: { tabId: t.id },
-          files: ['content.js'],
-        });
+        await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] });
         resp = await toggle();
       } catch (err2) {
         showToast('控制失败: ' + (err2.message || String(err2)).slice(0, 60));
         return;
       }
     }
-    if (resp?.action === 'paused') {
-      mediaBtn.innerHTML = SVG_PLAY;
-      mediaBtn.title = '恢复播放';
-      showToast('已暂停');
-    } else if (resp?.action === 'playing') {
-      mediaBtn.innerHTML = SVG_PAUSE;
-      mediaBtn.title = '暂停';
-      showToast('已恢复播放');
-    } else {
-      showToast('该页面没有可控的媒体');
-    }
+    if (resp?.action === 'paused') { playBtn.innerHTML = SVG_PLAY; playBtn.title = '恢复播放'; showToast('已暂停'); }
+    else if (resp?.action === 'playing') { playBtn.innerHTML = SVG_PAUSE; playBtn.title = '暂停'; showToast('已恢复播放'); }
+    else showToast('该页面没有可控的媒体');
   });
-  return mediaBtn;
+  const pipBtn = mk('pip', SVG_PIP, '小窗播放');
+  pipBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const pip = async () => chrome.tabs.sendMessage(t.id, { type: 'pip' });
+    let resp = null;
+    try { resp = await pip(); }
+    catch {
+      try {
+        if (!chrome.scripting?.executeScript) throw new Error('不支持');
+        await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] });
+        resp = await pip();
+      } catch (err2) { showToast('小窗失败'); return; }
+    }
+    if (resp?.ok) showToast(resp.action === 'entered' ? '已开启小窗' : '已退出小窗');
+    else showToast('小窗失败: ' + (resp?.reason || ''));
+  });
+  return wrap;
 }
 
 // ---- 命令模式数据源: /b 书签 /h 历史 ----
@@ -618,7 +669,11 @@ function render() {
         render();
       }, maxCount));
       if (!isCollapsed) {
-        for (const item of items) resultsEl.appendChild(buildTabRow(item));
+        for (const item of items) {
+          const row = buildTabRow(item);
+          row.classList.add('nested'); // 树状: 子项缩进在分组头下
+          resultsEl.appendChild(row);
+        }
       }
     }
     restoreFocus(prevKey, prevTabId);
@@ -642,6 +697,17 @@ function render() {
 
   // 分区只包含 filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
+  // 标题去重: 本次展示的标签里标题完全相同 => 记为重复,供 URL 展示策略用
+  const titleCount = new Map();
+  for (const s of sections) for (const it of s.items) {
+    const key = (it.tab.title || '').trim().toLowerCase();
+    titleCount.set(key, (titleCount.get(key) || 0) + 1);
+  }
+  for (const s of sections) for (const it of s.items) {
+    const key = (it.tab.title || '').trim().toLowerCase();
+    it.titleDup = (titleCount.get(key) || 0) > 1;
+  }
+
   const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
   sections.forEach(section => {
     const key = groupKey(section.group);
@@ -655,7 +721,9 @@ function render() {
 
     if (!isCollapsed) {
       section.items.forEach(item => {
-        resultsEl.appendChild(buildTabRow(item));
+        const row = buildTabRow(item);
+        row.classList.add('nested'); // 树状: 子项缩进在分组头下
+        resultsEl.appendChild(row);
       });
     }
   });
@@ -700,7 +768,7 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
   header.dataset.groupKey = groupKey(group);
   const caret = document.createElement('span');
   caret.className = 'caret';
-  caret.innerHTML = '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>';
+  caret.innerHTML = '<svg viewBox="0 0 12 12"><path d="M1 3.5l5 5 5-5"/></svg>';
   header.appendChild(caret);
   if (group) {
     const dot = document.createElement('span');
@@ -803,7 +871,11 @@ function buildTabRow(item) {
   if (settings.showUrl || item.urlHits || isOtherWindow) {
     const url = document.createElement('div');
     url.className = 'url';
-    const shownUrl = displayUrl(t.url);
+    // 只显示域名,除非: ① 搜索命中了 URL(需展示完整地址便于看清命中处),
+    // 或 ② 标题是占位/错误 且 标题完全重复(此时给完整 URL 才能区分)。
+    // item.titleDup 在 render() 里按本次展示的标签预先算好。
+    const showFull = item.urlHits || (isBadTitle(t.title, t.url) && item.titleDup);
+    const shownUrl = showFull ? displayUrl(t.url) : hostOf(t.url);
     // URL 兜底匹配发生在完整 URL 上,但展示的是 host+path,需在展示文本上重算高亮
     const urlHits = item.urlHits
       ? (fuzzyMatch(input.value.trim(), shownUrl) || item.urlHits)
@@ -816,12 +888,22 @@ function buildTabRow(item) {
 
   // 蒙层式媒体控制: audible 管第一帧(探测未返回前即时可用),
   // 探测结果(mediaTabIds)管暂停中的——有 MediaSession 即有恢复入口。
-  // buildMediaBtn 是顶层函数,探测消息回调(patchMediaBtn)也要用
+  // buildMediaControls 是顶层函数,探测消息回调(patchMediaBtn)也要用
+  if (t.audible && t.id > 0) mediaTabIds.add(t.id); // 曾播放即记入,暂停/重渲染后仍保留媒体控件
   if ((t.audible || mediaTabIds.has(t.id)) && t.id > 0) {
     row.classList.add('has-media');
-    const mediaBtn = buildMediaBtn(t);
+    const mediaBtn = buildMediaControls(t);
     mediaBtn.className = 'media-overlay';
     row.appendChild(mediaBtn);
+  }
+
+  // 音浪状态指示(正在播放): 时间戳左侧;悬停淡出让位给媒体控制按钮。
+  // 纯 CSS @keyframes(transform: scaleY,GPU 加速)无性能负担;audible=播放,否则暂停态
+  if ((t.audible || mediaTabIds.has(t.id)) && t.id > 0) {
+    const wave = document.createElement('div');
+    wave.className = 'wave-icon' + (t.audible ? ' is-playing' : ' is-paused');
+    wave.innerHTML = '<span></span><span></span><span></span>';
+    row.appendChild(wave);
   }
 
   // 最近使用时间 tag 五档: 当前 > 热门(10分钟,绿) > 今日(蓝) / 近期(灰) > 僵尸(橙/红)
@@ -1245,6 +1327,18 @@ function hostOf(url) {
   try { return new URL(url).host; } catch { return ''; }
 }
 
+// 标题是否为“占位/错误”(无标题、标题=URL、标题本身是 URL、New Tab 等)。
+// 这类标题没有辨识度,配合“标题完全重复”才值得展示完整 URL;否则只给域名。
+function isBadTitle(title, url) {
+  const t = (title || '').trim();
+  if (!t) return true;
+  if (t === url) return true;
+  if (/^https?:\/\//i.test(t)) return true;
+  if (/^about:/i.test(t) || /^chrome:\/\//i.test(t)) return true;
+  if (/^New Tab$/i.test(t) || / - Google Chrome$/.test(t)) return true;
+  return false;
+}
+
 // 根据 tabId 找到其所在分组的对象及组内第一个可见标签的 id(展开后定位用)
 function findGroupOfTab(tabId) {
   const item = filtered.find(f => f.tab.id === tabId);
@@ -1273,7 +1367,7 @@ async function switchTo(tab) {
 function scrollPastSticky(el) {
   el.scrollIntoView({ block: 'nearest' });
   const container = resultsEl;
-  const stickyH = 28; // 分组头: 9px+5px padding + 10.5px 行高 + 1px 阴影线
+  const stickyH = 30; // 分组头: 8px+6px padding + 16px 内容行高
   // scrollIntoView 后二次校正: 若行顶落在吸顶组头底下,补滚 stickyH
   const above = (el.offsetTop - container.offsetTop) - container.scrollTop;
   if (above < stickyH) {
@@ -1304,6 +1398,42 @@ function focusCurrentTab() {
   });
   setActive(currentRow ? rows.indexOf(currentRow) : 0);
 }
+
+// 定位当前标签: 清空搜索回到全量视图,展开其所在分组,平滑滚到该行并闪烁高亮
+let locateTimer = null;
+function locateCurrentTab() {
+  // 搜索/命令态会过滤掉当前标签,先复位到全量分组视图
+  if (searching || input.value.trim()) {
+    input.value = '';
+    activeCmd = null;
+    cmdChip.style.display = 'none';
+    searching = false;
+    search('');
+  }
+  const cur = filtered.find(f => f.tab.active
+    && (currentWindowId == null || f.tab.windowId === currentWindowId));
+  if (!cur) { showToast('当前标签不在视图中'); return; }
+
+  // 所在分组折叠则展开
+  const gk = cur.group ? groupKey(cur.group) : '__ungrouped__';
+  if (cur.group && collapsed.has(gk)) {
+    collapsed.delete(gk);
+    saveCollapsed();
+    render();
+  }
+  // render 后 DOM 重建,重新找行
+  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${cur.tab.id}"]`);
+  if (!row) { showToast('找不到该标签行'); return; }
+
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  row.classList.remove('locating');
+  void row.offsetWidth; // 强制 reflow,重启动画
+  row.classList.add('locating');
+  clearTimeout(locateTimer);
+  locateTimer = setTimeout(() => row.classList.remove('locating'), 1400);
+}
+
+document.getElementById('locateBtn').addEventListener('click', locateCurrentTab);
 
 // 可聚焦单元 = 分组头 + 标签行,统一编址,←→/↑↓/Enter 都基于它工作
 function navUnits() {
@@ -1520,6 +1650,47 @@ document.getElementById('settingsCloseBtn').addEventListener('click', () => {
   settingsPanel.classList.remove('open');
 });
 
+// 设置面板两个选择 Tab: 分组(规则编辑) / 功能(偏好+快捷键+清理)。
+// 跟主界面的“分组/最近/当前”同款分段控件。
+try {
+  const groupPane = document.getElementById('pane-group');
+  const funcPane = document.getElementById('pane-func');
+  const settingsActions = document.querySelector('.settings-actions');
+  document.querySelectorAll('.settings-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b === btn));
+      const isGroup = btn.dataset.pane === 'group';
+      groupPane.classList.toggle('active', isGroup);
+      funcPane.classList.toggle('active', !isGroup);
+      settingsActions.style.display = isGroup ? 'flex' : 'none';
+    });
+  });
+} catch (e) { console.error('设置 Tab 初始化失败', e); }
+
+// 突出色: 一键换高亮色(不整主题)。点色板设 <html data-accent>,覆盖 --accent;
+// tint/ring 用 color-mix 跟随。存 localStorage 记住。
+function markActiveSwatch(el) {
+  document.querySelectorAll('.accent-swatch').forEach(x => x.classList.toggle('active', x === el));
+}
+try {
+  document.querySelectorAll('.accent-swatch').forEach(b => {
+    b.addEventListener('click', () => {
+      document.documentElement.dataset.accent = b.dataset.accent;
+      markActiveSwatch(b);
+      try { localStorage.setItem('tgs-accent', b.dataset.accent); } catch (e) {}
+    });
+  });
+} catch (e) { console.error('突出色初始化失败', e); }
+try {
+  const saved = localStorage.getItem('tgs-accent');
+  if (saved) {
+    const sw = [...document.querySelectorAll('.accent-swatch')].find(x => x.dataset.accent === saved);
+    if (sw) { document.documentElement.dataset.accent = saved; markActiveSwatch(sw); }
+  } else {
+    markActiveSwatch(document.querySelector('.accent-swatch[data-accent="blue"]'));
+  }
+} catch (e) {}
+
 // 自动分组总开关: 存 chrome.storage.local(background 读同一 key 判定是否归组)。
 // Tabbiy 的痛点之一是自动分组"用着用着就关了"——我们显式开关 + 显式状态,
 // 行为可预测
@@ -1675,7 +1846,7 @@ function buildRuleGroup(name, hosts) {
   nameInput.className = 'rule-name-input';
   const delBtn = document.createElement('button');
   delBtn.className = 'rule-del-btn';
-  delBtn.textContent = '×';
+  delBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
   delBtn.title = '删除该组规则';
   delBtn.addEventListener('click', () => groupDiv.remove());
   nameRow.appendChild(nameInput);
@@ -1702,7 +1873,7 @@ function buildRuleGroup(name, hosts) {
   // 内联追加输入: 回车/失焦确认(逗号分隔可批量)
   const addInput = document.createElement('input');
   addInput.className = 'host-add-input';
-  addInput.placeholder = '+ 域名,回车确认';
+  addInput.placeholder = '添加域名…';
   const commit = () => {
     const parts = addInput.value.split(/[,，\n]/)
       .map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -1731,6 +1902,87 @@ document.getElementById('addRuleBtn').addEventListener('click', () => {
   const groups = rulesListEl.querySelectorAll('.rule-group');
   groups[groups.length - 1]?.querySelector('.rule-name-input')?.focus();
 });
+
+// ---- 把当前标签页域名添加到分组(弹层: 新建 或 选已有) ----
+const currentHostBtn = document.getElementById('addCurrentHostBtn');
+let groupPop = null;
+function closeGroupPop() { if (groupPop) { groupPop.remove(); groupPop = null; } }
+async function addHostToRuleGroup(host, groupName) {
+  const { groupRules } = await chrome.storage.local.get('groupRules');
+  const rules = groupRules || {};
+  const arr = rules[groupName] || (rules[groupName] = []);
+  if (!arr.includes(host)) arr.push(host);
+  await chrome.storage.local.set({ groupRules: rules });
+  closeGroupPop();
+  showToast(`已将 ${host} 加入「${groupName}」`);
+  loadRulesForEdit();
+}
+try {
+currentHostBtn.addEventListener('click', async () => {
+  closeGroupPop();
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => [null]);
+  const host = active ? hostOf(active.url) : '';
+  if (!host) { showToast('未获取到当前标签域名'); return; }
+  const { groupRules } = await chrome.storage.local.get('groupRules');
+  const groups = Object.keys(groupRules || {});
+  const pop = document.createElement('div');
+  pop.className = 'group-pop';
+  const rect = currentHostBtn.getBoundingClientRect();
+  const left = Math.max(8, Math.min(rect.right - 240, document.body.clientWidth - 250));
+  pop.style.left = `${left}px`;
+  pop.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 240)}px`;
+  const head = document.createElement('div');
+  head.className = 'group-pop-head';
+  const tt = document.createElement('div');
+  tt.className = 'group-pop-title';
+  tt.textContent = `添加 ${host}`;
+  const x = document.createElement('button');
+  x.className = 'group-pop-close';
+  x.textContent = '✕';
+  head.appendChild(tt);
+  head.appendChild(x);
+  pop.appendChild(head);
+  const list = document.createElement('div');
+  list.className = 'group-pop-list';
+  if (groups.length) {
+    groups.forEach(g => {
+      const b = document.createElement('button');
+      b.className = 'group-pop-item';
+      b.textContent = g;
+      b.addEventListener('click', () => addHostToRuleGroup(host, g));
+      list.appendChild(b);
+    });
+  } else {
+    const empty = document.createElement('div');
+    empty.className = 'group-pop-empty';
+    empty.textContent = '还没有分组规则';
+    list.appendChild(empty);
+  }
+  pop.appendChild(list);
+  const newRow = document.createElement('div');
+  newRow.className = 'group-pop-new';
+  const inp = document.createElement('input');
+  inp.placeholder = '新建分组名';
+  inp.value = host;
+  const add = document.createElement('button');
+  add.className = 'group-pop-add';
+  add.textContent = '添加';
+  add.addEventListener('click', () => { const name = inp.value.trim(); if (name) addHostToRuleGroup(host, name); });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const n = inp.value.trim(); if (n) addHostToRuleGroup(host, n); } });
+  newRow.appendChild(inp);
+  newRow.appendChild(add);
+  pop.appendChild(newRow);
+  document.body.appendChild(pop);
+  groupPop = pop;
+  inp.focus();
+  const remove = () => { closeGroupPop(); document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onEsc); };
+  const onDoc = (e) => { if (!pop.contains(e.target)) remove(); };
+  const onEsc = (e) => { if (e.key === 'Escape') remove(); };
+  x.addEventListener('click', (e) => { e.stopPropagation(); remove(); });
+  document.addEventListener('mousedown', onDoc);
+  document.addEventListener('keydown', onEsc);
+});
+} catch (e) { console.error('添加域名弹层初始化失败', e); }
 
 // ---- 规则 JSON 导入/导出 ----
 // 从当前编辑器 DOM 收集规则(与保存共用同一收集逻辑,导入合并以此为基底)
@@ -1911,6 +2163,24 @@ document.addEventListener('keydown', (e) => {
       focusIn: document.activeElement === input,
     });
   }
+  // ⌘C 复制 URL: 提到 isOtherInput 之前,保证在设置面板(焦点在控件上)也能用。
+  // 若输入框里有选中文本则放行原生复制。
+  if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey)) {
+    const sel = window.getSelection();
+    if (!(sel && sel.toString())) {
+      let target = null;
+      // focusedUnit 是 handleShortcuts 内部变量,这里用 navUnits() 找 active 行
+      const anyActiveUnit = navUnits().find(u => u.classList.contains('active'));
+      if (anyActiveUnit && anyActiveUnit.classList.contains('tab-item')) {
+        target = filtered.find(f => f.tab.id === Number(anyActiveUnit.dataset.tabId));
+      }
+      if (!target) {
+        target = filtered.find(f => f.tab.active
+          && (currentWindowId == null || f.tab.windowId === currentWindowId));
+      }
+      if (target) { e.preventDefault(); copyTabUrl(target.tab); }
+    }
+  }
   const activeEl = document.activeElement;
   const isOtherInput = activeEl && activeEl !== input
     && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT'
@@ -2079,17 +2349,8 @@ function handleShortcuts(e) {
         closeTab(Number(focusedUnit.dataset.tabId));
       }
     }
-  } else if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey)) {
-    // ⌘C: 光标在标签行上时复制该 tab 的 URL(不切换过去)。
-    // 若输入框里有选中文本,放行原生复制
-    const sel = window.getSelection();
-    if (sel && sel.toString()) return;
-    if (focusedUnit.classList.contains('tab-item')) {
-      e.preventDefault();
-      const target = filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
-      if (target) copyTabUrl(target.tab);
-    }
   }
+  // ⌘C 复制 URL 已在顶层 keydown 处理(设置面板内也可用)
 }
 
 // 复制 tab 的 URL 到剪贴板,轻提示确认(不关弹窗,可连续复制多个)
