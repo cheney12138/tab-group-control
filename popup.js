@@ -186,29 +186,82 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     patchMediaBtn(sender.tab.id);
   }
 });
-// 实时刷新音浪/媒体按钮: 标签声音状态变化(播放/暂停)时同步对应行。
-// t.audible 是弹窗打开时的快照,后开/暂停会过期——靠这里保持动画与按钮同步。
-// 曾播放过的 tab 记入 mediaTabIds,暂停后(audible 变 false)仍保留媒体控件。
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.audible === undefined || tabId <= 0) return;
-  if (changeInfo.audible) mediaTabIds.add(tabId);
+// 音浪指示器辅助: 确保 row 内有 .wave-icon
+function ensureWaveIcon(row) {
+  let wave = row.querySelector('.wave-icon');
+  if (!wave) {
+    wave = document.createElement('div');
+    wave.innerHTML = '<span></span><span></span><span></span>';
+    const ref = row.querySelector('.last-used, .close-btn');
+    if (ref) row.insertBefore(wave, ref);
+    else row.appendChild(wave);
+  }
+  return wave;
+}
+
+// 音浪/媒体按钮的行内状态同步(播放↔暂停)。两条路径共用:
+//   1. 本弹窗内的媒体按钮点击(乐观更新): resp.action 返回即调用——
+//      chrome 上报 audible 有 ~1s 节流,等 onUpdated 会让音浪迟钝一拍
+//   2. chrome.tabs.onUpdated 兜底: 用户在页面里直接暂停/播完等外部变化
+function applyMediaRowState(tabId, playing) {
+  if (tabId <= 0) return;
+  if (playing) mediaTabIds.add(tabId);
+  const tabItem = allTabs.find(x => x.tab.id === tabId);
+  if (tabItem) {
+    tabItem.tab.audible = !!playing;
+  }
   const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
   if (!row) return;
-  const wave = row.querySelector('.wave-icon');
-  if (wave) {
-    wave.classList.toggle('is-playing', !!changeInfo.audible);
-    wave.classList.toggle('is-paused', !changeInfo.audible);
-  }
-  // 暂停后仍保留媒体控件(有恢复入口): 补 has-media
+
+  // 暂停后仍保留媒体控件(有恢复入口): 补 has-media 与 media-overlay
   if (mediaTabIds.has(tabId) && !row.classList.contains('has-media')) {
     row.classList.add('has-media');
   }
+  if (tabItem && !row.querySelector('.media-overlay')) {
+    const mediaBtn = buildMediaControls(tabItem.tab);
+    mediaBtn.className = 'media-overlay';
+    row.appendChild(mediaBtn);
+  }
+
+  // 状态幂等保护: 若已处于目标状态,绝不重复赋值触发动画重置,
+  // 彻底根除 Chrome onUpdated 与多重类名切换导致的二次归位/跳动
+  const wave = ensureWaveIcon(row);
+  const isCurrentlyPlaying = wave.classList.contains('is-playing');
+  const isCurrentlyPaused = wave.classList.contains('is-paused');
+
+  if (playing) {
+    if (!isCurrentlyPlaying) {
+      wave.className = 'wave-icon is-playing';
+    }
+  } else {
+    if (!isCurrentlyPaused || isCurrentlyPlaying) {
+      wave.className = 'wave-icon is-paused';
+    }
+  }
+
   // 同步播放/暂停按钮图标与提示
-  const playBtn = row.querySelector('.media-btn[title="暂停"], .media-btn[title="恢复播放"]');
+  const playBtn = row.querySelector('.media-btn[data-action="toggle"], .media-btn[title="暂停"], .media-btn[title="恢复播放"]');
   if (playBtn) {
-    const playing = !!changeInfo.audible;
     playBtn.innerHTML = playing ? SVG_PAUSE : SVG_PLAY;
     playBtn.title = playing ? '暂停' : '恢复播放';
+  }
+}
+// 外部变化(页面内直接暂停/播完)的同步路径。注意: 本弹窗按钮点击已由
+// applyMediaRowState 乐观更新过,这里到达时状态一致,幂等无害
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.audible !== undefined && tabId > 0) {
+    applyMediaRowState(tabId, !!changeInfo.audible);
+  }
+  if (changeInfo.mutedInfo !== undefined && tabId > 0) {
+    const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+    if (row) {
+      const muteBtn = row.querySelector('.media-btn[data-action="mute"], .media-btn[title="静音"], .media-btn[title="取消静音"]');
+      if (muteBtn) {
+        const isMuted = !!changeInfo.mutedInfo.muted;
+        muteBtn.innerHTML = isMuted ? SVG_UNMUTE : SVG_MUTE;
+        muteBtn.title = isMuted ? '取消静音' : '静音';
+      }
+    }
   }
 });
 function probeMediaTabs() {
@@ -254,13 +307,22 @@ function probeMediaViaScripting(id) {
 }
 function patchMediaBtn(tabId) {
   const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
-  if (!row || row.classList.contains('has-media')) return;
+  if (!row) return;
   const t = allTabs.find(x => x.tab.id === tabId)?.tab;
   if (!t) return;
-  row.classList.add('has-media');
-  const mediaBtn = buildMediaControls(t);
-  mediaBtn.className = 'media-overlay';
-  row.appendChild(mediaBtn);
+  if (!row.classList.contains('has-media')) {
+    row.classList.add('has-media');
+  }
+  if (!row.querySelector('.media-overlay')) {
+    const mediaBtn = buildMediaControls(t);
+    mediaBtn.className = 'media-overlay';
+    row.appendChild(mediaBtn);
+  }
+  // 补齐音浪指示器(播放跳动,暂停静止低位)
+  const wave = ensureWaveIcon(row);
+  if (!wave.classList.contains('is-playing') && !wave.classList.contains('is-paused')) {
+    wave.className = 'wave-icon ' + (t.audible ? 'is-playing' : 'is-paused');
+  }
 }
 const SVG_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>';
 const SVG_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
@@ -277,6 +339,7 @@ function buildMediaControls(t) {
   const mk = (act, icon, title) => {
     const b = document.createElement('button');
     b.className = 'media-btn';
+    b.dataset.action = act;
     b.title = title;
     b.innerHTML = icon;
     wrap.appendChild(b);
@@ -313,8 +376,15 @@ function buildMediaControls(t) {
         return;
       }
     }
-    if (resp?.action === 'paused') { playBtn.innerHTML = SVG_PLAY; playBtn.title = '恢复播放'; showToast('已暂停'); }
-    else if (resp?.action === 'playing') { playBtn.innerHTML = SVG_PAUSE; playBtn.title = '暂停'; showToast('已恢复播放'); }
+    if (resp?.action === 'paused') {
+      applyMediaRowState(t.id, false);
+      chrome.runtime.sendMessage({ type: 'set-tab-audible', tabId: t.id, audible: false }).catch(() => {});
+      showToast('已暂停');
+    } else if (resp?.action === 'playing') {
+      applyMediaRowState(t.id, true);
+      chrome.runtime.sendMessage({ type: 'set-tab-audible', tabId: t.id, audible: true }).catch(() => {});
+      showToast('已恢复播放');
+    }
     else showToast('该页面没有可控的媒体');
   });
   const pipBtn = mk('pip', SVG_PIP, '小窗播放');
@@ -455,6 +525,7 @@ async function loadTabs() {
     const prev = byUrl.get(key);
     if (prev) {
       prev.duplicates.push(item.tab.id);
+      if (item.tab.audible) prev.tab.audible = true;
     } else {
       item.duplicates = []; // 初始化副本数组
       byUrl.set(key, item);
@@ -636,14 +707,18 @@ function render() {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
     return;
   }
+  // 离屏构建再一次性挂载: 逐行 append 到已挂载的容器会引发增量布局,
+  // 长列表(几百行)时白白多算多次;fragment 只触发一次挂载级布局
+  const frag = document.createDocumentFragment();
 
   // recent / current / 命令模式(/b /h): 不分组平铺。
   // 命令模式直接按数据源原序展示(历史=chrome 真实时间序,书签=书签树序),
   // 无分组头——与 chrome://history 的观感一致
   if (view === 'recent' || view === 'current' || activeCmd) {
     for (const item of filtered) {
-      resultsEl.appendChild(buildTabRow(item));
+      frag.appendChild(buildTabRow(item));
     }
+    resultsEl.appendChild(frag);
     return;
   }
 
@@ -663,7 +738,7 @@ function render() {
     for (const { group, items } of sections.values()) {
       const key = groupKey(group);
       const isCollapsed = searchCollapsed.has(key);
-      resultsEl.appendChild(buildGroupHeader(group, items.length, isCollapsed, () => {
+      frag.appendChild(buildGroupHeader(group, items.length, isCollapsed, () => {
         if (searchCollapsed.has(key)) searchCollapsed.delete(key);
         else searchCollapsed.add(key);
         render();
@@ -672,10 +747,11 @@ function render() {
         for (const item of items) {
           const row = buildTabRow(item);
           row.classList.add('nested'); // 树状: 子项缩进在分组头下
-          resultsEl.appendChild(row);
+          frag.appendChild(row);
         }
       }
     }
+    resultsEl.appendChild(frag);
     restoreFocus(prevKey, prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${filtered.length}`);
     return;
@@ -712,7 +788,7 @@ function render() {
   sections.forEach(section => {
     const key = groupKey(section.group);
     const isCollapsed = collapsed.has(key);
-    resultsEl.appendChild(buildGroupHeader(section.group, section.items.length, isCollapsed, () => {
+    frag.appendChild(buildGroupHeader(section.group, section.items.length, isCollapsed, () => {
       if (collapsed.has(key)) collapsed.delete(key);
       else collapsed.add(key);
       saveCollapsed();
@@ -723,10 +799,11 @@ function render() {
       section.items.forEach(item => {
         const row = buildTabRow(item);
         row.classList.add('nested'); // 树状: 子项缩进在分组头下
-        resultsEl.appendChild(row);
+        frag.appendChild(row);
       });
     }
   });
+  resultsEl.appendChild(frag);
   // 清理收起记忆里已不存在的分组(组被删掉/改名后,残留的 key 会让同名的组莫名收起)
   const liveKeys = new Set(sections.map(s => groupKey(s.group)));
   const staleKeys = [...collapsed].filter(k => !liveKeys.has(k) && k !== '__ungrouped__');
@@ -897,11 +974,11 @@ function buildTabRow(item) {
     row.appendChild(mediaBtn);
   }
 
-  // 音浪状态指示(正在播放): 时间戳左侧;悬停淡出让位给媒体控制按钮。
-  // 纯 CSS @keyframes(transform: scaleY,GPU 加速)无性能负担;audible=播放,否则暂停态
+  // 音浪状态指示: 时间戳左侧。
+  // 播放时错峰起伏,暂停时静止低位变淡,只对媒体 tab 展示
   if ((t.audible || mediaTabIds.has(t.id)) && t.id > 0) {
     const wave = document.createElement('div');
-    wave.className = 'wave-icon' + (t.audible ? ' is-playing' : ' is-paused');
+    wave.className = 'wave-icon ' + (t.audible ? 'is-playing' : 'is-paused');
     wave.innerHTML = '<span></span><span></span><span></span>';
     row.appendChild(wave);
   }
@@ -2381,7 +2458,7 @@ async function copyTabUrl(tab) {
   // (新开标签暂在未分组、重复未合并),1s 后静默复核,有变化才重渲染
   setTimeout(async () => {
     const sig = (list) => JSON.stringify(list.map(x =>
-      [x.tab.id, x.tab.url, x.duplicates?.length || 0, x.group?.title || '']));
+      [x.tab.id, x.tab.url, x.duplicates?.length || 0, x.group?.title || '', !!x.tab.audible]));
     const before = sig(allTabs);
     await loadTabs();
     if (sig(allTabs) !== before) {
