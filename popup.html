@@ -948,40 +948,53 @@
       font-variant-numeric: tabular-nums;
       letter-spacing: 0;
     }
-    /* 音浪状态指示(正在播放): 3 根青绿小柱错峰起伏。
-     * 纯 transform: scaleY(GPU 加速),单行几乎零性能开销。 */
+    /* 音浪状态指示: 播放时为 3 根细柱错峰起伏,暂停时直接为 3 个小圆点(无任何过渡)。
+     * 采用中性浅灰 (var(--text-3)) 降噪; margin: 0 8px 留足左右间距;
+     * 相对整行垂直绝对居中,不论是否显示 URL 均保持在整行中心轴 */
     .wave-icon {
       display: inline-flex;
-      align-items: flex-end;
-      gap: 2px;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
       height: 12px;
-      margin-right: 7px;
+      margin: 0 8px;
       flex-shrink: 0;
-      transition: opacity 0.15s;
     }
-    .wave-icon span {
-      width: 3px;
+    /* 播放态: 3 根细柱错峰起伏呼吸 */
+    .wave-icon.is-playing {
+      align-items: flex-end;
+    }
+    .wave-icon.is-playing span {
+      display: block;
+      width: 2px;
       height: 100%;
-      background: var(--accent);
+      background: var(--text-3);
       border-radius: 1px;
       transform-origin: bottom;
-      animation: wave 1s ease-in-out infinite;
+      opacity: 0.75;
+      animation: wave 1.25s ease-in-out infinite;
     }
     @keyframes wave {
       0%, 100% { transform: scaleY(0.3); }
       50% { transform: scaleY(1); }
     }
-    .wave-icon span:nth-child(1) { animation-delay: 0s; }
-    .wave-icon span:nth-child(2) { animation-delay: -0.2s; }
-    .wave-icon span:nth-child(3) { animation-delay: -0.4s; }
-    /* 暂停态: 静止低位 + 变暗 */
-    .wave-icon.is-paused span {
-      animation-play-state: paused;
-      opacity: 0.4;
-      transform: scaleY(0.3);
+    .wave-icon.is-playing span:nth-child(1) { animation-delay: 0s; }
+    .wave-icon.is-playing span:nth-child(2) { animation-delay: -0.22s; }
+    .wave-icon.is-playing span:nth-child(3) { animation-delay: -0.44s; }
+
+    /* 暂停态: 直接是 3 个小圆点,绝无任何过渡动效,居中静止呈现 */
+    .wave-icon.is-paused {
+      align-items: center;
+      gap: 2.5px;
     }
-    /* 悬停让位: 淡出,给媒体控制按钮 */
-    .has-media:hover .wave-icon { opacity: 0; }
+    .wave-icon.is-paused span {
+      display: block;
+      width: 2.5px;
+      height: 2.5px;
+      border-radius: 50%;
+      background: var(--text-3);
+      opacity: 0.45;
+    }
     /* 蒙层式媒体控制: hover 行时内容置灰淡出,中央浮起一排小圆钮
      * (播放/暂停 + 静音 + 小窗)。热区只在圆钮——行点击仍是切换标签 */
     .media-overlay {
@@ -1164,7 +1177,6 @@
       font-weight: 500;
       color: var(--text-3);
       margin-left: var(--space-2);
-      margin-top: 3px; /* 行改为顶对齐后,tag 与标题行对齐 */
       white-space: nowrap;
       transition: opacity 0.1s;
     }
@@ -1331,11 +1343,12 @@
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
       }
-      /* 音浪是“正在播放”状态信号,保留细微动画 + 错峰(否则被冻结/同步) */
-      .wave-icon span { animation-duration: 1.2s !important; }
-      .wave-icon span:nth-child(1) { animation-delay: 0s !important; }
-      .wave-icon span:nth-child(2) { animation-delay: -0.2s !important; }
-      .wave-icon span:nth-child(3) { animation-delay: -0.4s !important; }
+      /* 音浪是“正在播放”状态信号,保留细微动画 + 错峰(否则被冻结/同步);暂停态小圆点静态呈现 */
+      .wave-icon.is-playing span { animation-duration: 1.6s !important; }
+      .wave-icon.is-playing span:nth-child(1) { animation-delay: 0s !important; }
+      .wave-icon.is-playing span:nth-child(2) { animation-delay: -0.27s !important; }
+      .wave-icon.is-playing span:nth-child(3) { animation-delay: -0.54s !important; }
+      .wave-icon.is-paused span { animation: none !important; }
     }
   </style>
 </head>
