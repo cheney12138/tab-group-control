@@ -205,6 +205,50 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     patchMediaBtn(sender.tab.id);
   }
 });
+// ---- 媒体行通用辅助 ----
+// 按 tabId 找当前渲染中的行(重渲染会重建 DOM,每次都要现查,不能缓存)
+function rowByTabId(tabId) {
+  return resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+}
+// 按 tabId 找 allTabs 条目(书签/历史虚拟条目是负 id,天然查不中)
+function tabItemByTabId(tabId) {
+  return allTabs.find(x => x.tab.id === tabId);
+}
+// 行在标签行序列中的序号(键盘导航的 activeIndex 语义)
+function indexOfRow(row) {
+  return [...resultsEl.querySelectorAll('.tab-item')].indexOf(row);
+}
+// 媒体按钮图标+提示的成对同步(点击乐观更新 / onUpdated 兜底共用,
+// 两处总是同时变,拆开赋值容易漏一半)
+function setMediaBtnState(btn, icon, title) {
+  btn.innerHTML = icon;
+  btn.title = title;
+}
+// 行内事后补装媒体蒙层: has-media 管样式钩子(hover 置灰/让位),
+// media-overlay 是按钮本体。首帧渲染由 buildTabRow 直接构建,
+// 这里只服务探测/状态变化异步到达时的补装
+function ensureMediaOverlay(row, tab) {
+  if (!row.classList.contains('has-media')) {
+    row.classList.add('has-media');
+  }
+  if (!row.querySelector('.media-overlay')) {
+    const mediaBtn = buildMediaControls(tab);
+    mediaBtn.className = 'media-overlay';
+    row.appendChild(mediaBtn);
+  }
+}
+// 带 content.js 注入兜底的 tabs.sendMessage: 扩展重载前就开着的页面
+// 没有 content script(消息直接抛错),注入文件后重试一次。
+// 动态注入不可用时抛错,由调用方决定提示文案
+async function sendWithInject(tabId, msg) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg);
+  } catch {
+    if (!chrome.scripting?.executeScript) throw new Error('此浏览器不支持动态注入');
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    return await chrome.tabs.sendMessage(tabId, msg);
+  }
+}
 // 音浪指示器辅助: 确保 row 内有 .wave-icon
 function ensureWaveIcon(row) {
   let wave = row.querySelector('.wave-icon');
@@ -225,44 +269,28 @@ function ensureWaveIcon(row) {
 function applyMediaRowState(tabId, playing) {
   if (tabId <= 0) return;
   if (playing) mediaTabIds.add(tabId);
-  const tabItem = allTabs.find(x => x.tab.id === tabId);
+  const tabItem = tabItemByTabId(tabId);
   if (tabItem) {
     tabItem.tab.audible = !!playing;
   }
-  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+  const row = rowByTabId(tabId);
   if (!row) return;
 
   // 暂停后仍保留媒体控件(有恢复入口): 补 has-media 与 media-overlay
-  if (mediaTabIds.has(tabId) && !row.classList.contains('has-media')) {
-    row.classList.add('has-media');
-  }
-  if (tabItem && !row.querySelector('.media-overlay')) {
-    const mediaBtn = buildMediaControls(tabItem.tab);
-    mediaBtn.className = 'media-overlay';
-    row.appendChild(mediaBtn);
-  }
+  if (tabItem) ensureMediaOverlay(row, tabItem.tab);
 
-  // 状态幂等保护: 若已处于目标状态,绝不重复赋值触发动画重置,
-  // 彻底根除 Chrome onUpdated 与多重类名切换导致的二次归位/跳动
+  // 状态幂等保护: 已处于目标状态则不重复赋值,避免触发动画重置
+  // (Chrome onUpdated 与乐观更新双路径到达时的二次归位/跳动)
   const wave = ensureWaveIcon(row);
-  const isCurrentlyPlaying = wave.classList.contains('is-playing');
-  const isCurrentlyPaused = wave.classList.contains('is-paused');
-
-  if (playing) {
-    if (!isCurrentlyPlaying) {
-      wave.className = 'wave-icon is-playing';
-    }
-  } else {
-    if (!isCurrentlyPaused || isCurrentlyPlaying) {
-      wave.className = 'wave-icon is-paused';
-    }
-  }
+  const target = playing ? 'is-playing' : 'is-paused';
+  const current = wave.classList.contains('is-playing') ? 'is-playing'
+    : wave.classList.contains('is-paused') ? 'is-paused' : '';
+  if (current !== target) wave.className = 'wave-icon ' + target;
 
   // 同步播放/暂停按钮图标与提示
   const playBtn = row.querySelector('.media-btn[data-action="toggle"], .media-btn[title="暂停"], .media-btn[title="恢复播放"]');
   if (playBtn) {
-    playBtn.innerHTML = playing ? SVG_PAUSE : SVG_PLAY;
-    playBtn.title = playing ? '暂停' : '恢复播放';
+    setMediaBtnState(playBtn, playing ? SVG_PAUSE : SVG_PLAY, playing ? '暂停' : '恢复播放');
   }
 }
 // 外部变化(页面内直接暂停/播完)的同步路径。注意: 本弹窗按钮点击已由
@@ -272,14 +300,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     applyMediaRowState(tabId, !!changeInfo.audible);
   }
   if (changeInfo.mutedInfo !== undefined && tabId > 0) {
-    const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
-    if (row) {
-      const muteBtn = row.querySelector('.media-btn[data-action="mute"], .media-btn[title="静音"], .media-btn[title="取消静音"]');
-      if (muteBtn) {
-        const isMuted = !!changeInfo.mutedInfo.muted;
-        muteBtn.innerHTML = isMuted ? SVG_UNMUTE : SVG_MUTE;
-        muteBtn.title = isMuted ? '取消静音' : '静音';
-      }
+    const row = rowByTabId(tabId);
+    const muteBtn = row?.querySelector('.media-btn[data-action="mute"], .media-btn[title="静音"], .media-btn[title="取消静音"]');
+    if (muteBtn) {
+      const isMuted = !!changeInfo.mutedInfo.muted;
+      setMediaBtnState(muteBtn, isMuted ? SVG_UNMUTE : SVG_MUTE, isMuted ? '取消静音' : '静音');
     }
   }
 });
@@ -325,19 +350,12 @@ function probeMediaViaScripting(id) {
   }).catch(() => {}); // 个别页面注入失败(受保护页面等),跳过即可
 }
 function patchMediaBtn(tabId) {
-  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
+  const row = rowByTabId(tabId);
   if (!row) return;
-  const t = allTabs.find(x => x.tab.id === tabId)?.tab;
+  const t = tabItemByTabId(tabId)?.tab;
   if (!t) return;
-  if (!row.classList.contains('has-media')) {
-    row.classList.add('has-media');
-  }
-  if (!row.querySelector('.media-overlay')) {
-    const mediaBtn = buildMediaControls(t);
-    mediaBtn.className = 'media-overlay';
-    row.appendChild(mediaBtn);
-  }
-  // 补齐音浪指示器(播放跳动,暂停静止低位)
+  ensureMediaOverlay(row, t);
+  // 补齐音浪指示器(播放跳动,暂停静止低位);已带状态类的不动(幂等)
   const wave = ensureWaveIcon(row);
   if (!wave.classList.contains('is-playing') && !wave.classList.contains('is-paused')) {
     wave.className = 'wave-icon ' + (t.audible ? 'is-playing' : 'is-paused');
@@ -374,8 +392,7 @@ function buildMediaControls(t) {
       const wasMuted = live.mutedInfo?.muted;
       await chrome.tabs.update(t.id, { muted: !wasMuted });
       const nowMuted = !wasMuted; // 用切换后的状态设置图标/文案,避免取反错位
-      muteBtn.innerHTML = nowMuted ? SVG_UNMUTE : SVG_MUTE;
-      muteBtn.title = nowMuted ? '取消静音' : '静音';
+      setMediaBtnState(muteBtn, nowMuted ? SVG_UNMUTE : SVG_MUTE, nowMuted ? '取消静音' : '静音');
       muteBtn.classList.toggle('active', nowMuted);
       showToast(nowMuted ? '已静音' : '已取消静音');
     } catch (err2) { showToast('操作失败'); }
@@ -383,19 +400,12 @@ function buildMediaControls(t) {
   const playBtn = mk('toggle', t.audible ? SVG_PAUSE : SVG_PLAY, t.audible ? '暂停' : '恢复播放');
   playBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    const toggle = async () => chrome.tabs.sendMessage(t.id, { type: 'toggle-media' });
-    let resp = null;
+    let resp;
     try {
-      resp = await toggle();
-    } catch {
-      try {
-        if (!chrome.scripting?.executeScript) throw new Error('此浏览器不支持动态注入');
-        await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] });
-        resp = await toggle();
-      } catch (err2) {
-        showToast('控制失败: ' + (err2.message || String(err2)).slice(0, 60));
-        return;
-      }
+      resp = await sendWithInject(t.id, { type: 'toggle-media' });
+    } catch (err2) {
+      showToast('控制失败: ' + (err2.message || String(err2)).slice(0, 60));
+      return;
     }
     if (resp?.action === 'paused') {
       applyMediaRowState(t.id, false);
@@ -411,16 +421,9 @@ function buildMediaControls(t) {
   const pipBtn = mk('pip', SVG_PIP, '小窗播放');
   pipBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    const pip = async () => chrome.tabs.sendMessage(t.id, { type: 'pip' });
-    let resp = null;
-    try { resp = await pip(); }
-    catch {
-      try {
-        if (!chrome.scripting?.executeScript) throw new Error('不支持');
-        await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] });
-        resp = await pip();
-      } catch (err2) { showToast('小窗失败'); return; }
-    }
+    let resp;
+    try { resp = await sendWithInject(t.id, { type: 'pip' }); }
+    catch { showToast('小窗失败'); return; }
     if (resp?.ok) {
       const entered = resp.action === 'entered';
       pipBtn.classList.toggle('active', entered);
@@ -864,7 +867,7 @@ function restoreFocus(prevKey, prevTabId) {
   if (target) {
     target.classList.add('active');
     if (target.classList.contains('tab-item')) {
-      activeIndex = [...resultsEl.querySelectorAll('.tab-item')].indexOf(target);
+      activeIndex = indexOfRow(target);
     } else {
       activeIndex = -2;
     }
@@ -1075,7 +1078,7 @@ async function closeTab(tabId) {
   // 关的是重复合并行的代表且还有副本: 晋升一份副本为新代表,行保留。
   // 整项丢弃的话,存活的副本会从列表消失,1s 复核时又把整行"复活"
   // (带它自己的媒体按钮)——看起来像刚关的标签带着按钮回来了
-  const item = allTabs.find(x => x.tab.id === tabId);
+  const item = tabItemByTabId(tabId);
   const survivors = (item?.duplicates || []).filter(id => id !== tabId);
   if (item && survivors.length) {
     try {
@@ -1545,7 +1548,7 @@ function locateCurrentTab() {
     render();
   }
   // render 后 DOM 重建,重新找行
-  const row = resultsEl.querySelector(`.tab-item[data-tab-id="${cur.tab.id}"]`);
+  const row = rowByTabId(cur.tab.id);
   if (!row) { showToast('找不到该标签行'); return; }
 
   row.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1641,12 +1644,11 @@ async function closeOneDuplicate(target) {
     render();
     // render 的自动焦点恢复在 async 路径上不可靠(捕获时机早于 DOM 重建),
     // 显式把焦点设回代表行(行还在,代表未删),支持连续 ⌘⌫
-    const row = [...resultsEl.querySelectorAll('.tab-item')]
-      .find(r => Number(r.dataset.tabId) === target.tab.id);
+    const row = rowByTabId(target.tab.id);
     if (row) {
       clearActiveUnit();
       row.classList.add('active');
-      activeIndex = [...resultsEl.querySelectorAll('.tab-item')].indexOf(row);
+      activeIndex = indexOfRow(row);
     }
     const remaining = (src?.duplicates?.length ?? target.duplicates.length - 1) + 1;
     showToast(`已关闭一份副本,剩余 ${remaining} 份`);
@@ -1998,6 +2000,24 @@ function renderRulesEditor(rules) {
 }
 
 // 单个规则组的编辑行: 组名输入 + 域名芯片流(每枚可删) + 内联追加输入
+// 域名芯片工厂独立于 buildRuleGroup: 编辑器内追加输入(commit)和
+// "添加当前域名"弹层的草稿合并都要插芯片,同一份 DOM 结构
+function createHostChip(host, insertBefore) {
+  const chip = document.createElement('span');
+  chip.className = 'host-chip';
+  const label = document.createElement('span');
+  label.textContent = host;
+  label.title = host;
+  const chipDel = document.createElement('button');
+  chipDel.textContent = '×';
+  chipDel.title = '移除该域名';
+  chipDel.addEventListener('click', () => chip.remove());
+  chip.appendChild(label);
+  chip.appendChild(chipDel);
+  if (insertBefore?.parentElement) insertBefore.parentElement.insertBefore(chip, insertBefore);
+  return chip;
+}
+
 function buildRuleGroup(name, hosts) {
   const groupDiv = document.createElement('div');
   groupDiv.className = 'rule-group';
@@ -2021,20 +2041,7 @@ function buildRuleGroup(name, hosts) {
   // 域名芯片流
   const chipFlow = document.createElement('div');
   chipFlow.className = 'rule-hosts';
-  const addHostChip = (host) => {
-    const chip = document.createElement('span');
-    chip.className = 'host-chip';
-    const label = document.createElement('span');
-    label.textContent = host;
-    label.title = host;
-    const chipDel = document.createElement('button');
-    chipDel.textContent = '×';
-    chipDel.title = '移除该域名';
-    chipDel.addEventListener('click', () => chip.remove());
-    chip.appendChild(label);
-    chip.appendChild(chipDel);
-    chipFlow.insertBefore(chip, addInput);
-  };
+  const addHostChip = (host) => createHostChip(host, addInput);
   // 内联追加输入: 回车/失焦确认(逗号分隔可批量)
   const addInput = document.createElement('input');
   addInput.className = 'host-add-input';
@@ -2072,15 +2079,38 @@ document.getElementById('addRuleBtn').addEventListener('click', () => {
 const currentHostBtn = document.getElementById('addCurrentHostBtn');
 let groupPop = null;
 function closeGroupPop() { if (groupPop) { groupPop.remove(); groupPop = null; } }
-async function addHostToRuleGroup(host, groupName) {
-  const { groupRules } = await chrome.storage.local.get('groupRules');
-  const rules = groupRules || {};
-  const arr = rules[groupName] || (rules[groupName] = []);
-  if (!arr.includes(host)) arr.push(host);
-  await chrome.storage.local.set({ groupRules: rules });
+// 添加域名走「编辑器草稿」路径,不直写 storage:
+//   ① 直写会绕过「保存规则」按钮——用户还没保存,background 的
+//      storage.onChanged 已触发 groupExistingTabs,Chrome 标签栏的组
+//      真的被建出来了(与 JSON 导入「导入后仍需保存」的契约矛盾);
+//   ② 直写后 loadRulesForEdit 整刷编辑器,会覆盖用户正在进行的未保存
+//      编辑(改名/删域名瞬间被弹回),storage.onChanged 的清理链还会把
+//      编辑器里未保存的组当成"已删除"去迁移真标签。
+// 合并进 DOM + 标脏,让「保存规则」保持唯一落库口,与手工编辑/导入一致
+function addHostToRuleGroup(host, groupName) {
+  const groups = [...rulesListEl.querySelectorAll('.rule-group')];
+  // 按输入框当前值匹配组名(编辑器草稿即事实,不读 storage)
+  const target = groups.find(g => g.querySelector('.rule-name-input')?.value.trim() === groupName);
+  if (target) {
+    // 已有组: 域名已存在则去重提示,否则在追加输入框前插一枚芯片
+    const exists = [...target.querySelectorAll('.host-chip > span')]
+      .some(el => el.textContent.trim() === host);
+    if (exists) {
+      closeGroupPop();
+      showToast(`「${groupName}」里已有 ${host}`);
+      return;
+    }
+    createHostChip(host, target.querySelector('.host-add-input'));
+  } else {
+    // 新组: 清掉"暂无规则"占位再追加整组模板(组名+首枚域名),
+    // 行为与 JSON 导入追加新组一致
+    if (!groups.length) rulesListEl.innerHTML = '';
+    rulesListEl.appendChild(buildRuleGroup(groupName, [host]));
+    rulesListEl.scrollTop = rulesListEl.scrollHeight;
+  }
+  markRulesDirty();
   closeGroupPop();
-  showToast(`已将 ${host} 加入「${groupName}」`);
-  loadRulesForEdit();
+  showToast(`已将 ${host} 加入「${groupName}」,记得保存`);
 }
 try {
 currentHostBtn.addEventListener('click', async () => {
@@ -2088,8 +2118,11 @@ currentHostBtn.addEventListener('click', async () => {
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => [null]);
   const host = active ? hostOf(active.url) : '';
   if (!host) { showToast('未获取到当前标签域名'); return; }
-  const { groupRules } = await chrome.storage.local.get('groupRules');
-  const groups = Object.keys(groupRules || {});
+  // 列表与落点同源: 添加动作合并进编辑器草稿,列表也从编辑器现取
+  // (含未保存的新组,剔除未保存删除的组),storage 里已保存但草稿改掉的
+  // 名字以草稿为准
+  const groups = [...rulesListEl.querySelectorAll('.rule-name-input')]
+    .map(el => el.value.trim()).filter(Boolean);
   const pop = document.createElement('div');
   pop.className = 'group-pop';
   const rect = currentHostBtn.getBoundingClientRect();
@@ -2429,7 +2462,7 @@ function handleShortcuts(e) {
     el.classList.add('active');
     scrollPastSticky(el);
     if (el.classList.contains('tab-item')) {
-      activeIndex = [...resultsEl.querySelectorAll('.tab-item')].indexOf(el);
+      activeIndex = indexOfRow(el);
     } else {
       activeIndex = -2; // 焦点在分组头
     }
