@@ -7,11 +7,30 @@
 const IS_MAC = navigator.userAgent.includes('Mac');
 const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 
-// Chrome 组色名 → 苹果系统色(与弹窗整体配色统一)
+// Chrome 组色名 → Chrome 原生分组渲染色号(精准提取自附图 Chrome 标签组调色板)
 const GROUP_COLORS = {
-  grey: '#8e8e93', blue: '#0071e3', red: '#ff3b30',
-  yellow: '#ffcc00', green: '#34c759', pink: '#ff2d55',
-  purple: '#af52de', cyan: '#32ade6', orange: '#ff9500',
+  grey:   '#BDC1C6', // 浅冷灰
+  blue:   '#8AB4F8', // Chrome 蓝
+  red:    '#F28B82', // Chrome 珊瑚红 (附图第1项)
+  yellow: '#FDD663', // Chrome 暖黄 (附图第5项)
+  green:  '#81C995', // Chrome 草绿 (附图第3项)
+  pink:   '#FF8BCB', // Chrome 洋红粉 (附图第6项)
+  purple: '#C58AF9', // Chrome 浅紫 (附图第8项)
+  cyan:   '#78D9EC', // Chrome 天青蓝 (附图第2项)
+  orange: '#FCAD70', // Chrome 暖橙 (附图第9项)
+};
+
+// Chrome 组色名 → 中国水墨矿物色(用于 ink 主题,温润内敛)
+const INK_GROUP_COLORS = {
+  grey: '#A79E92',   // 淡墨
+  blue: '#3F5164',   // 藏青
+  red: '#B0503C',    // 绯红
+  yellow: '#C08A4E', // 赭石
+  green: '#5C7A5E',  // 松绿
+  pink: '#93697A',   // 藕荷
+  purple: '#84697E', // 黛紫
+  cyan: '#7A9E9F',   // 天青
+  orange: '#C08A4E', // 赭石
 };
 
 // 调试开关: 在弹窗 DevTools Console 里执行 localStorage.setItem('tgs-debug','1') 开启
@@ -347,6 +366,7 @@ function buildMediaControls(t) {
   };
   const initiallyMuted = !!t.mutedInfo?.muted;
   const muteBtn = mk('mute', initiallyMuted ? SVG_UNMUTE : SVG_MUTE, initiallyMuted ? '取消静音' : '静音');
+  if (initiallyMuted) muteBtn.classList.add('active');
   muteBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     try {
@@ -356,6 +376,7 @@ function buildMediaControls(t) {
       const nowMuted = !wasMuted; // 用切换后的状态设置图标/文案,避免取反错位
       muteBtn.innerHTML = nowMuted ? SVG_UNMUTE : SVG_MUTE;
       muteBtn.title = nowMuted ? '取消静音' : '静音';
+      muteBtn.classList.toggle('active', nowMuted);
       showToast(nowMuted ? '已静音' : '已取消静音');
     } catch (err2) { showToast('操作失败'); }
   });
@@ -400,7 +421,11 @@ function buildMediaControls(t) {
         resp = await pip();
       } catch (err2) { showToast('小窗失败'); return; }
     }
-    if (resp?.ok) showToast(resp.action === 'entered' ? '已开启小窗' : '已退出小窗');
+    if (resp?.ok) {
+      const entered = resp.action === 'entered';
+      pipBtn.classList.toggle('active', entered);
+      showToast(entered ? '已开启小窗' : '已退出小窗');
+    }
     else showToast('小窗失败: ' + (resp?.reason || ''));
   });
   return wrap;
@@ -695,6 +720,15 @@ function emptyMessage() {
   return '没有打开的标签页';
 }
 
+function cleanTitle(str) {
+  if (!str) return '';
+  return str
+    .replace(/^[\s\u200B-\u200D\uFEFF\u{1F4A4}💤zZ\[\]\-—·]+/u, '')
+    .replace(/[\s\u200B-\u200D\uFEFF\u{1F4A4}💤zZ\[\]\-—·]+$/u, '')
+    .trim()
+    .toLowerCase();
+}
+
 function render() {
   const t0 = performance.now();
   // 记住重渲染前的焦点,重建后尽量恢复
@@ -706,6 +740,18 @@ function render() {
   if (!filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
     return;
+  }
+
+  // 标题去重统计: 在渲染任何视图/搜索前全局统一计算,供 URL 展示策略使用。
+  // 过滤休眠标记(💤、zzz、零宽空格等),确保休眠 tab 与正常 tab 能准确匹配出标题重复
+  const titleCount = new Map();
+  for (const it of filtered) {
+    const k = cleanTitle(it.tab.title || it.tab.url);
+    if (k) titleCount.set(k, (titleCount.get(k) || 0) + 1);
+  }
+  for (const it of filtered) {
+    const k = cleanTitle(it.tab.title || it.tab.url);
+    it.titleDup = (titleCount.get(k) || 0) > 1;
   }
   // 离屏构建再一次性挂载: 逐行 append 到已挂载的容器会引发增量布局,
   // 长列表(几百行)时白白多算多次;fragment 只触发一次挂载级布局
@@ -773,17 +819,6 @@ function render() {
 
   // 分区只包含 filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
-  // 标题去重: 本次展示的标签里标题完全相同 => 记为重复,供 URL 展示策略用
-  const titleCount = new Map();
-  for (const s of sections) for (const it of s.items) {
-    const key = (it.tab.title || '').trim().toLowerCase();
-    titleCount.set(key, (titleCount.get(key) || 0) + 1);
-  }
-  for (const s of sections) for (const it of s.items) {
-    const key = (it.tab.title || '').trim().toLowerCase();
-    it.titleDup = (titleCount.get(key) || 0) > 1;
-  }
-
   const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
   sections.forEach(section => {
     const key = groupKey(section.group);
@@ -843,27 +878,38 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
   header.style.animationDelay = staggerDelay();
   header.dataset.groupKey = groupKey(group);
+  const isInk = document.documentElement.dataset.theme === 'ink';
+  const colorMap = isInk ? INK_GROUP_COLORS : GROUP_COLORS;
+  const groupColor = group
+    ? (colorMap[group.color] || (isInk ? '#A79E92' : '#BDC1C6'))
+    : (isInk ? '#A79E92' : '#BDC1C6');
+  header.style.setProperty('--group-c', groupColor);
+
+  // 1. 分组竖线: 统一挪到展开/收起箭头的前面 (两主题均生效)
+  const dot = document.createElement('span');
+  dot.className = 'group-dot';
+  dot.style.background = groupColor;
+  header.appendChild(dot);
+
+  // 2. 展开/收起箭头
   const caret = document.createElement('span');
   caret.className = 'caret';
   caret.innerHTML = '<svg viewBox="0 0 12 12"><path d="M1 3.5l5 5 5-5"/></svg>';
   header.appendChild(caret);
+
+  // 3. 分组名称
+  const name = document.createElement('span');
+  name.className = 'group-title';
   if (group) {
-    const dot = document.createElement('span');
-    dot.className = 'group-dot';
-    dot.style.background = GROUP_COLORS[group.color] || '#8e8e93';
-    header.appendChild(dot);
-    const name = document.createElement('span');
     // 搜索时分组名也参与高亮,直观看到是分组名命中的召回
     const q = input.value.trim();
     name.innerHTML = q
       ? markText(group.title || '(未命名分组)', fuzzyMatch(q, group.title || ''))
       : escapeHtml(group.title || '(未命名分组)');
-    header.appendChild(name);
   } else {
-    const name = document.createElement('span');
     name.textContent = '未分组';
-    header.appendChild(name);
   }
+  header.appendChild(name);
   if (count != null) {
     // 迷你条形图: 长度∝组内标签数/最大组,不读数字扫一眼知轻重
     if (maxCount > 1) {
@@ -943,15 +989,12 @@ function buildTabRow(item) {
   title.className = 'title';
   title.innerHTML = markText(t.title || t.url, item.titleHits);
   info.appendChild(title);
-  // 窗口提示已挪到行首(与组内序号互斥);URL 行不再嵌前缀。
-  // 其他窗口的行强制显示 URL 行(窗口提示需要上下文),不跟随 showUrl 隐藏
-  if (settings.showUrl || item.urlHits || isOtherWindow) {
+  // URL 行: 严格遵循用户设置(settings.showUrl)。未开启时绝不擅自展示,保持列表单行高度纯净整齐
+  if (settings.showUrl) {
     const url = document.createElement('div');
     url.className = 'url';
-    // 只显示域名,除非: ① 搜索命中了 URL(需展示完整地址便于看清命中处),
-    // 或 ② 标题是占位/错误 且 标题完全重复(此时给完整 URL 才能区分)。
-    // item.titleDup 在 render() 里按本次展示的标签预先算好。
-    const showFull = item.urlHits || (isBadTitle(t.title, t.url) && item.titleDup);
+    // 只显示域名,除非: ① 搜索命中了 URL, 或 ② 标题完全重复(同名 tab 需展示完整 URL 才能区分)
+    const showFull = item.urlHits || item.titleDup;
     const shownUrl = showFull ? displayUrl(t.url) : hostOf(t.url);
     // URL 兜底匹配发生在完整 URL 上,但展示的是 host+path,需在展示文本上重算高亮
     const urlHits = item.urlHits
@@ -1390,11 +1433,14 @@ function timeTier(ts) {
   return 'zombie';
 }
 
-// URL 只展示 host + path,域名不同的开发环境一眼可辨
+// URL 展示: 提取 host + path + search + hash; 内部页面(chrome://等)保留完整路径
 function displayUrl(url) {
   try {
     const u = new URL(url);
-    return u.host + (u.pathname === '/' && !u.search ? '' : u.pathname + u.search);
+    if (u.protocol === 'chrome:' || u.protocol === 'chrome-extension:' || u.protocol === 'edge:') {
+      return url;
+    }
+    return u.host + (u.pathname === '/' && !u.search && !u.hash ? '' : u.pathname + u.search + u.hash);
   } catch {
     return url;
   }
@@ -1728,45 +1774,87 @@ document.getElementById('settingsCloseBtn').addEventListener('click', () => {
 });
 
 // 设置面板两个选择 Tab: 分组(规则编辑) / 功能(偏好+快捷键+清理)。
-// 跟主界面的“分组/最近/当前”同款分段控件。
-try {
+function setSettingsPane(pane) {
   const groupPane = document.getElementById('pane-group');
   const funcPane = document.getElementById('pane-func');
   const settingsActions = document.querySelector('.settings-actions');
+  const isGroup = pane === 'group';
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b.dataset.pane === pane));
+  if (groupPane) groupPane.classList.toggle('active', isGroup);
+  if (funcPane) funcPane.classList.toggle('active', !isGroup);
+  if (settingsActions) settingsActions.style.display = isGroup ? 'flex' : 'none';
+}
+
+function toggleSettingsPane() {
+  const groupPane = document.getElementById('pane-group');
+  const isGroup = groupPane?.classList.contains('active');
+  setSettingsPane(isGroup ? 'func' : 'group');
+}
+
+try {
   document.querySelectorAll('.settings-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b === btn));
-      const isGroup = btn.dataset.pane === 'group';
-      groupPane.classList.toggle('active', isGroup);
-      funcPane.classList.toggle('active', !isGroup);
-      settingsActions.style.display = isGroup ? 'flex' : 'none';
+      setSettingsPane(btn.dataset.pane);
     });
   });
 } catch (e) { console.error('设置 Tab 初始化失败', e); }
 
-// 突出色: 一键换高亮色(不整主题)。点色板设 <html data-accent>,覆盖 --accent;
-// tint/ring 用 color-mix 跟随。存 localStorage 记住。
+// 突出色: 每个主题独立维护突出色,切换主题时两套主色互不干扰
 function markActiveSwatch(el) {
   document.querySelectorAll('.accent-swatch').forEach(x => x.classList.toggle('active', x === el));
 }
+
+function applyThemeAccent(theme) {
+  const isInk = theme === 'ink';
+  const savedAccent = localStorage.getItem(isInk ? 'tgs-accent-ink' : 'tgs-accent-linear') ||
+                      (isInk ? '' : (localStorage.getItem('tgs-accent') || 'blue'));
+  if (savedAccent) {
+    document.documentElement.dataset.accent = savedAccent;
+    const sw = [...document.querySelectorAll('.accent-swatch')].find(x => x.dataset.accent === savedAccent);
+    if (sw) markActiveSwatch(sw);
+  } else {
+    // 水墨风默认使用水墨朱砂红(--seal: #B23A2E), 不设 data-accent 避免覆盖
+    delete document.documentElement.dataset.accent;
+    markActiveSwatch(null);
+  }
+}
+
 try {
   document.querySelectorAll('.accent-swatch').forEach(b => {
     b.addEventListener('click', () => {
+      const currentTheme = document.documentElement.dataset.theme || 'linear';
       document.documentElement.dataset.accent = b.dataset.accent;
       markActiveSwatch(b);
-      try { localStorage.setItem('tgs-accent', b.dataset.accent); } catch (e) {}
+      try {
+        localStorage.setItem(currentTheme === 'ink' ? 'tgs-accent-ink' : 'tgs-accent-linear', b.dataset.accent);
+        localStorage.setItem('tgs-accent', b.dataset.accent);
+      } catch (e) {}
+      render();
     });
   });
 } catch (e) { console.error('突出色初始化失败', e); }
+
+// 多主题风格切换: 原有 Linear(极简现代) / 新增 ink(水墨古风新中式)
+const optTheme = document.getElementById('optTheme');
 try {
-  const saved = localStorage.getItem('tgs-accent');
-  if (saved) {
-    const sw = [...document.querySelectorAll('.accent-swatch')].find(x => x.dataset.accent === saved);
-    if (sw) { document.documentElement.dataset.accent = saved; markActiveSwatch(sw); }
-  } else {
-    markActiveSwatch(document.querySelector('.accent-swatch[data-accent="blue"]'));
+  const currentTheme = localStorage.getItem('tgs-theme') || document.documentElement.dataset.theme || 'linear';
+  document.documentElement.dataset.theme = currentTheme;
+  if (optTheme) {
+    optTheme.value = currentTheme;
+    optTheme.addEventListener('change', () => {
+      const selected = optTheme.value;
+      document.documentElement.dataset.theme = selected;
+      try {
+        localStorage.setItem('tgs-theme', selected);
+      } catch (e) {}
+      applyThemeAccent(selected);
+      render(); // 重新渲染列表, 使新主题分组色号与竖线样式即刻生效
+    });
   }
-} catch (e) {}
+  applyThemeAccent(currentTheme);
+} catch (e) {
+  console.error('主题切换初始化失败', e);
+}
 
 // 自动分组总开关: 存 chrome.storage.local(background 读同一 key 判定是否归组)。
 // Tabbiy 的痛点之一是自动分组"用着用着就关了"——我们显式开关 + 显式状态,
@@ -2258,6 +2346,20 @@ document.addEventListener('keydown', (e) => {
       if (target) { e.preventDefault(); copyTabUrl(target.tab); }
     }
   }
+  // 设置面板快捷键: 当设置面板打开时, 按 Tab 键绑死在「分组」与「功能」两个 Tab 之间切换 (两主题通用)
+  if (e.key === 'Tab' && settingsPanel?.classList.contains('open')) {
+    const activeEl = document.activeElement;
+    const isEditingText = activeEl && (
+      (activeEl.tagName === 'INPUT' && activeEl.type === 'text') ||
+      activeEl.tagName === 'TEXTAREA' ||
+      activeEl.isContentEditable
+    );
+    if (!isEditingText) {
+      e.preventDefault();
+      toggleSettingsPane();
+      return;
+    }
+  }
   const activeEl = document.activeElement;
   const isOtherInput = activeEl && activeEl !== input
     && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT'
@@ -2298,9 +2400,13 @@ function handleShortcuts(e) {
     }
     return;
   }
-  // Tab / Shift+Tab 在 分组 → 最近使用 → 当前窗口 三个视图间循环切换
+  // Tab / Shift+Tab: 设置面板打开时切换设置Tab, 否则在 分组 → 最近使用 → 当前窗口 三个视图间循环切换
   if (e.key === 'Tab') {
     e.preventDefault();
+    if (settingsPanel?.classList.contains('open')) {
+      toggleSettingsPane();
+      return;
+    }
     const idx = VIEWS.indexOf(view);
     const next = e.shiftKey
       ? VIEWS[(idx - 1 + VIEWS.length) % VIEWS.length]
