@@ -1616,7 +1616,15 @@ const viewTabs = [...document.querySelectorAll('.view-tab')];
 function positionTabSlider(container) {
   const slider = container?.querySelector('.tab-slider');
   const active = container?.querySelector('.view-tab.active, .settings-tab.active');
-  if (slider && active) {
+  if (!slider || !active) return;
+  const isInk = document.documentElement.dataset.theme === 'ink';
+  if (isInk && container.classList.contains('view-tabs')) {
+    // 水墨风顶部 Tab: 统一采用与「分组」完全一致的波浪线宽度与曲度粗细, 居中滑动对齐
+    const groupedTab = container.querySelector('.view-tab[data-view="grouped"]');
+    const waveWidth = groupedTab ? groupedTab.offsetWidth : 35;
+    slider.style.width = `${waveWidth}px`;
+    slider.style.left = `${active.offsetLeft + (active.offsetWidth - waveWidth) / 2}px`;
+  } else {
     slider.style.left = `${active.offsetLeft}px`;
     slider.style.width = `${active.offsetWidth}px`;
   }
