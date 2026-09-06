@@ -110,6 +110,20 @@ function autoGroupTab(tab) {
   return enqueueGroupOp(() => doAutoGroupTab(tab));
 }
 
+// 归组原子操作: 同窗口找同名组 → 并入;没有则新建并命名上色。
+// doAutoGroupTab 主路径 / "No group with id" 重试 / 规则删除迁移 三处共用
+async function attachTabToGroup(tab, groupName) {
+  const existing = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
+  if (existing.length) {
+    await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
+  } else {
+    const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
+    await chrome.tabGroups.update(newGroupId, {
+      title: groupName, color: colorForGroup(groupName),
+    });
+  }
+}
+
 async function doAutoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
   if (!autoGroupEnabled) return;
@@ -125,29 +139,14 @@ async function doAutoGroupTab(tab) {
       const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
       if (current && current.title === groupName) return;
     }
-    // 同窗口找同名组
-    const existing = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
-    if (existing.length) {
-      await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
-    } else {
-      const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
-      await chrome.tabGroups.update(newGroupId, {
-        title: groupName, color: colorForGroup(groupName),
-      });
-    }
+    await attachTabToGroup(tab, groupName);
   } catch (e) {
     // 竞态兜底: "No group with id" = 查到的组在归组调用前已被删(空组消亡
     // /同名组被 tidy 合并/窗口关闭)。重查一次,没有就重建——组只是壳,
     // 标签才是数据,重建无损。队列化后此路径已罕见,属最后防线
     if (/No group with id/i.test(String(e?.message || ''))) {
       try {
-        const again = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
-        if (again.length) {
-          await chrome.tabs.group({ tabIds: [tab.id], groupId: again[0].id });
-        } else {
-          const gid = await chrome.tabs.group({ tabIds: [tab.id] });
-          await chrome.tabGroups.update(gid, { title: groupName, color: colorForGroup(groupName) });
-        }
+        await attachTabToGroup(tab, groupName);
         return;
       } catch (e2) {
         console.error(`归组重试失败(${groupName}):`, e2);
@@ -433,13 +432,7 @@ async function moveTabFromRemovedRule(tab, fromTitle) {
       await chrome.tabs.ungroup(tab.id);
       return;
     }
-    const existing = await chrome.tabGroups.query({ title: 'Others', windowId: tab.windowId });
-    if (existing.length) {
-      await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
-    } else {
-      const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
-      await chrome.tabGroups.update(newGroupId, { title: 'Others', color: colorForGroup('Others') });
-    }
+    await attachTabToGroup(tab, 'Others');
   } catch (e) {
     console.error(`规则删除后迁移失败(${fromTitle}):`, e);
   }
