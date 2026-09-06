@@ -932,13 +932,19 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
 }
 
 // favicon: 直接用 tab 快照自带的 URL,失败隐藏图标位,保持简单
-// favicon 策略(QuicKey 同款):
-// ① tab 自带 favIconUrl 优先; ② 没有则拼 _favicon 服务 URL——它读的是
-// Chrome 浏览器自己的 favicon 数据库(标签栏图标的同一份缓存),不向网站发请求,
-// 内网坏 favicon 的站点也能出图。manifest 已声明 favicon 权限 + _favicon 资源
-const FAVICON_PREFIX = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=`;
+// Chrome 官方标准 Favicon 构造方式 (带 size=32, 且仅在 http/https 下有效)
+function getChromeFaviconUrl(url) {
+  try {
+    if (!url || typeof url !== 'string') return null;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
+    return `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(url)}&size=32`;
+  } catch {
+    return null;
+  }
+}
+
 function faviconUrlFor(t) {
-  return t.favIconUrl || (FAVICON_PREFIX + encodeURIComponent(t.url));
+  return t.favIconUrl || getChromeFaviconUrl(t.url) || '';
 }
 
 // favicon 首字母: 域名/标题首位;中文则取拼音首字母(大小写不敏感转大写)
@@ -961,13 +967,18 @@ function buildFaviconEl(t, groupColor) {
     el.style.background = groupColor || 'var(--accent)';
     return el;
   };
-  const img = document.createElement('img');
   const primary = t.favIconUrl;
-  const fb = FAVICON_PREFIX + encodeURIComponent(t.url);
+  const fb = getChromeFaviconUrl(t.url);
+  
+  if (!primary && !fb) {
+    return makeLetter();
+  }
+
+  const img = document.createElement('img');
   img.src = primary || fb;
-  // favIconUrl 偶尔指向坏图,失败先回退 _favicon,再失败换成首字母徽
   let triedFb = false;
   img.onerror = () => {
+    // favIconUrl 偶尔指向坏图或 403, 失败先尝试 _favicon 一次, 再失败(403/404)换成首字母徽
     if (primary && fb && !triedFb) {
       triedFb = true;
       img.src = fb;
