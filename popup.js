@@ -941,10 +941,40 @@ function faviconUrlFor(t) {
   return t.favIconUrl || (FAVICON_PREFIX + encodeURIComponent(t.url));
 }
 
-function buildFaviconEl(t) {
+// favicon 首字母: 域名/标题首位;中文则取拼音首字母(大小写不敏感转大写)
+function faviconLetter(t) {
+  const raw = (hostOf(t.url) || t.title || '').trim();
+  let first = raw[0] || '';
+  if (/[一-鿿]/.test(first)) {
+    const py = (typeof textToPinyin === 'function' ? textToPinyin(raw) : '').trim();
+    first = py[0] || first;
+  }
+  return (first || '?').toUpperCase();
+}
+
+function buildFaviconEl(t, groupColor) {
+  const makeLetter = () => {
+    const el = document.createElement('span');
+    el.className = 'unf-icon';
+    el.textContent = faviconLetter(t);
+    // 颜色与所在分组一致: 分组色为底、白字
+    el.style.background = groupColor || 'var(--accent)';
+    return el;
+  };
   const img = document.createElement('img');
-  img.src = faviconUrlFor(t);
-  img.onerror = () => { img.style.visibility = 'hidden'; };
+  const primary = t.favIconUrl;
+  const fb = FAVICON_PREFIX + encodeURIComponent(t.url);
+  img.src = primary || fb;
+  // favIconUrl 偶尔指向坏图,失败先回退 _favicon,再失败换成首字母徽
+  let triedFb = false;
+  img.onerror = () => {
+    if (primary && fb && !triedFb) {
+      triedFb = true;
+      img.src = fb;
+    } else {
+      img.replaceWith(makeLetter());
+    }
+  };
   return img;
 }
 
@@ -966,7 +996,9 @@ function buildTabRow(item) {
   // 11px 圆点),份数一眼可读;无副本时裸图标
   const iconWrap = document.createElement('span');
   iconWrap.className = 'icon-wrap';
-  iconWrap.appendChild(buildFaviconEl(t));
+  // 无图标时首字母徽颜色随所在分组
+  const groupColor = item.group ? (GROUP_COLORS[item.group.color] || '#8e8e93') : 'var(--accent)';
+  iconWrap.appendChild(buildFaviconEl(t, groupColor));
   if (item.duplicates && item.duplicates.length > 0) {
     const dupBadge = document.createElement('span');
     dupBadge.className = 'dup-badge';
@@ -1569,11 +1601,22 @@ function focusGroupHeader(header) {
 // ---- 视图切换 ----
 // 语义: 两个视图是对同一结果集的不同排布,搜索词跨视图保留并立即按新视图重排
 const viewTabs = [...document.querySelectorAll('.view-tab')];
+// 滑块定位: 让共享指示条平滑滑到当前激活 tab 的位置(两种 Tab 栏共用)
+function positionTabSlider(container) {
+  const slider = container?.querySelector('.tab-slider');
+  const active = container?.querySelector('.view-tab.active, .settings-tab.active');
+  if (slider && active) {
+    slider.style.left = `${active.offsetLeft}px`;
+    slider.style.width = `${active.offsetWidth}px`;
+  }
+}
+
 function setView(v) {
   if (v === view) return;
   view = v;
   localStorage.setItem('tgs-view', v);
   viewTabs.forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  positionTabSlider(document.querySelector('.view-tabs'));
   activeIndex = -1;
   search(searchValue());
   render();
@@ -1589,6 +1632,7 @@ viewTabs.forEach(b => b.addEventListener('click', () => {
 }));
 // 初始化时应用已保存的视图
 viewTabs.forEach(b => b.classList.toggle('active', b.dataset.view === view));
+positionTabSlider(document.querySelector('.view-tabs'));
 
 let debounceTimer = null;
 // 命令模式数据源异步加载完成后的补渲染(加载耗时通常 <50ms,
@@ -1764,6 +1808,7 @@ settingsBtn.addEventListener('click', (e) => {
     loadRulesForEdit();
     loadAutoGroupSwitch();
     loadOthersGroupSwitch();
+    positionTabSlider(document.querySelector('.settings-tabs')); // 面板由隐藏变可见,重算滑块
   }
 });
 // 覆盖层的关闭按钮
@@ -1781,6 +1826,7 @@ function setSettingsPane(pane) {
   if (groupPane) groupPane.classList.toggle('active', isGroup);
   if (funcPane) funcPane.classList.toggle('active', !isGroup);
   if (settingsActions) settingsActions.style.display = isGroup ? 'flex' : 'none';
+  positionTabSlider(document.querySelector('.settings-tabs'));
 }
 
 function toggleSettingsPane() {
@@ -1796,6 +1842,7 @@ try {
     });
   });
 } catch (e) { console.error('设置 Tab 初始化失败', e); }
+positionTabSlider(document.querySelector('.settings-tabs'));
 
 // 突出色: 每个主题独立维护突出色,切换主题时两套主色互不干扰
 function markActiveSwatch(el) {
@@ -1847,9 +1894,17 @@ try {
       } catch (e) {}
       applyThemeAccent(selected);
       render(); // 重新渲染列表, 使新主题分组色号与竖线样式即刻生效
+      // 切换主题改动字体/间距, 等布局稳定后重算滑块位置
+      requestAnimationFrame(() => {
+        positionTabSlider(document.querySelector('.view-tabs'));
+        positionTabSlider(document.querySelector('.settings-tabs'));
+      });
     });
   }
   applyThemeAccent(currentTheme);
+  // 初始化量取滑块用的是旧主题几何(此时 data-theme 尚为 linear),
+  // 主题真正应用后再重算一次,否则保存的 ink 主题会因字体/间距不同而错位
+  requestAnimationFrame(() => positionTabSlider(document.querySelector('.view-tabs')));
 } catch (e) {
   console.error('主题切换初始化失败', e);
 }
@@ -2383,6 +2438,20 @@ document.addEventListener('keydown', (e) => {
           && (currentWindowId == null || f.tab.windowId === currentWindowId));
       }
       if (target) { e.preventDefault(); copyTabUrl(target.tab); }
+    }
+  }
+  // ESC: 提前到 isOtherInput 之前处理, 否则焦点在设置控件(select 等)上时,
+  // 浏览器默认行为会把 popup 窗口关掉。设置打开→关设置;分组弹层打开→关弹层。
+  if (e.key === 'Escape') {
+    if (groupPop) {
+      e.preventDefault();
+      closeGroupPop();
+      return;
+    }
+    if (settingsPanel.classList.contains('open')) {
+      e.preventDefault();
+      settingsPanel.classList.remove('open');
+      return;
     }
   }
   // 设置面板快捷键: 当设置面板打开时, 按 Tab 键绑死在「分组」与「功能」两个 Tab 之间切换 (两主题通用)
