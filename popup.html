@@ -773,6 +773,13 @@
     }
     .host-chip:hover button, .host-chip button:focus-visible { opacity: 1; }
     .host-chip button:hover { color: var(--danger); background: var(--danger-bg); }
+    /* 域名已在其他规则组: 定位并用当前主题色闪烁到已存在的芯片 */
+    @keyframes dup-flash {
+      0%, 100% { background: transparent; }
+      30%, 80% { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+      55% { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+    }
+    .host-chip.dup-flash { animation: dup-flash 0.6s ease 2; }
     /* 追加域名: 浅灰胶囊,聚焦才转白底+青描边,失焦只剩文字 */
     .host-add-input {
       font-size: 10px;
@@ -990,7 +997,7 @@
       padding: 0 5px;
       border-radius: 4px;
       background: color-mix(in srgb, var(--group-c, var(--accent)) 26%, transparent);
-      box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--group-c, var(--accent)) 35%, transparent);
+      box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--group-c, var(--accent)) 35%, transparent), 0 1px 2px rgba(0, 0, 0, 0.12);
       color: var(--group-c, var(--accent));
       font-weight: 700;
       font-size: 11px;
@@ -1296,15 +1303,23 @@
      * ============================================================ */
     .push-stack {
       position: absolute;
-      bottom: 12px;
+      bottom: 12px; /* 主视图(分组窗口): 从底部弹起 */
       left: 50%;
       transform: translateX(-50%);
-      z-index: 40; /* 高于设置覆盖层(20) */
+      z-index: 40;
       width: min(440px, calc(100% - 24px));
       display: flex;
       flex-direction: column;
       gap: 8px;
       pointer-events: none; /* 栈本身透传,子条目各自接事件 */
+    }
+    /* 设置面板打开: toast 放进设置头部空白区(“设置”行中间),避免盖住 ✕/
+     * 分组-功能标签/底部按钮 */
+    body.settings-open .push-stack {
+      bottom: auto;
+      top: 10px;
+      width: fit-content;
+      max-width: min(340px, calc(100% - 48px));
     }
     .push-banner {
       display: flex;
@@ -1319,30 +1334,30 @@
       box-shadow: var(--push-shadow);
       cursor: default;
       pointer-events: auto;
-      animation: push-in 0.38s cubic-bezier(0.32, 1.6, 0.45, 1) both;
+      animation: push-in-b 0.38s cubic-bezier(0.32, 1.6, 0.45, 1) both;
     }
-    /* 让位动画: 旧条目被新条目顶走时下滑消失 */
-    .push-banner.push-away {
-      animation: push-out-top 0.22s ease-in forwards;
-    }
-    /* 自动消失: 下滑+淡出 */
-    .push-banner.push-gone {
-      animation: push-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
-    }
-    /* 底部上滑入场(通知从屏幕下缘升起) */
-    @keyframes push-in {
+    .push-banner.push-away { animation: push-out-b 0.22s ease-in forwards; }
+    .push-banner.push-gone { animation: push-out-b 0.3s cubic-bezier(0.4, 0, 1, 1) forwards; }
+    /* 底部弹起(主视图) */
+    @keyframes push-in-b {
       from { opacity: 0; transform: translateY(16px) scale(0.94); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
-    /* 下滑退场(从哪来回哪去) */
-    @keyframes push-out {
+    @keyframes push-out-b {
       from { opacity: 1; transform: translateY(0) scale(1); }
       to { opacity: 0; transform: translateY(16px) scale(0.96); }
     }
-    /* 让位: 被新条目顶走时向下滑出视野 */
-    @keyframes push-out-top {
-      from { opacity: 1; transform: translateY(0); }
-      to { opacity: 0; transform: translateY(14px); }
+    /* 设置面板打开: 从顶部空白区下滑入 */
+    body.settings-open .push-banner { animation-name: push-in-t; }
+    body.settings-open .push-banner.push-away,
+    body.settings-open .push-banner.push-gone { animation-name: push-out-t; }
+    @keyframes push-in-t {
+      from { opacity: 0; transform: translateY(-16px) scale(0.94); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes push-out-t {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(-16px) scale(0.96); }
     }
     /* 条目内文字: 主体白色(暗色模式跟随主题),副信息灰 */
     .push-msg {
@@ -1386,6 +1401,17 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0); }
     }
+    /* 去掉控件默认聚焦描边(鼠标点选/快捷键/下拉后的蓝色圆角框),
+     * 状态由各自自身视觉承担(选中项下划线/底色/内环),避免多余边框。 */
+    button:focus, select:focus, input:focus,
+    .settings-tab:focus, .view-tab:focus, .accent-swatch:focus,
+    .rules-io-link:focus, .rules-io-icon:focus, .src-btn:focus,
+    .settings-btn:focus, .rules-add-btn:focus, .rules-save-btn:focus,
+    .media-btn:focus, .rule-del-btn:focus, .host-chip button:focus,
+    .group-pop-item:focus, .group-pop-add:focus, .group-pop-close:focus,
+    .settings-close-btn:focus, .rules-io-link:focus-visible {
+      outline: none;
+    }
     /* 尊重系统级"减少动效"偏好: 关掉所有入场/脉动/推送动画。
      * !important 用于覆盖 stagger 行的内联 animation-delay(JS 用
      * el.style.animationDelay 设的内联值优先级高于样式表,不加 !important
@@ -1403,6 +1429,8 @@
       .wave-icon.is-playing span:nth-child(2) { animation-delay: -0.27s !important; }
       .wave-icon.is-playing span:nth-child(3) { animation-delay: -0.54s !important; }
       .wave-icon.is-paused span { animation: none !important; }
+      /* 重复域名定位提示: 保留闪烁(否则被冻结到不可见) */
+      .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
     }
 
     /* ============================================================
@@ -1973,7 +2001,7 @@
       <span id="cmdChipText"></span>
       <span class="cmd-chip-x" title="移除命令 (⌫)">×</span>
     </span>
-    <input id="search" type="text" placeholder="搜索标签页…" autofocus>
+    <input id="search" type="text" placeholder="搜索标签页…" autofocus autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" name="tgs-search">
     <button id="locateBtn" class="src-btn" title="定位当前标签" aria-label="定位当前标签">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
     </button>

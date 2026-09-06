@@ -642,21 +642,21 @@ function search(query) {
       filtered.push({ ...x, titleHits, urlHits, groupHits, matchedOn, exact: isExact, groupNameExact });
     }
   }
-  // 排序优先级:
+  // 排序优先级(统一"匹配度优先",grouped 与 recent/current 一致):
   // 0. 分组名全等查询词 > 一切
-  // 1. 匹配级别: 标题 > 分组名 > 域名 > 完整 URL
-  // 2. 匹配质量: 精确连续子串 > 模糊匹配;同级内首字命中的位置越靠前越优
-  // 3. 分组视图按组内排序(组是稳定容器,同组条目永远相邻,
-  //    不被其他组的强匹配打散);recent/current 视图按最近使用
+  // 1. 精确命中(查询串作为连续子串出现) > 模糊命中(散字) —— 主序
+  // 2. 命中的字段: 标题 > 拼音 > 分组名 > 域名 > 完整 URL
+  // 3. 同级内命中位置越靠前越优;仍同级按组内序号/最近使用
   const rank = { title: 0, pinyin: 1, group: 2, host: 3, url: 4 };
   const firstHit = f => f.titleHits?.[0] ?? f.urlHits?.[0] ?? 9999;
-  // 单条匹配质量分: 组名全等 0;否则 级别值(精确)/级别值+10(模糊)
+  // 单条匹配度分: 组名全等 -> -1(绝对置顶);否则 精确(0)/模糊(100) 为主序,
+  // 字段级别(标题最相关)*10 为次序,再加命中位置(越靠前越优,封顶 30)
   const matchQuality = f => {
-    if (f.groupNameExact) return 0;
-    return rank[f.matchedOn] + (f.exact ? 0 : 10);
+    if (f.groupNameExact) return -1;
+    return (f.exact ? 0 : 100) + rank[f.matchedOn] * 10 + Math.min(firstHit(f), 30);
   };
   if (view === 'grouped') {
-    // 分组视图: 先分桶,桶内按质量排,桶间按桶内最佳排
+    // 分组视图: 先分桶,桶内按匹配度排,桶间按桶内最佳排
     const buckets = new Map(); // groupKey -> { best, items }
     for (const f of filtered) {
       const key = groupKey(f.group);
@@ -667,12 +667,7 @@ function search(query) {
       b.items.push({ ...f, _q: q });
     }
     for (const b of buckets.values()) {
-      b.items.sort((x, y) => {
-        if (x._q !== y._q) return x._q - y._q;
-        const h = firstHit(x) - firstHit(y);
-        if (h !== 0) return h;
-        return (x.tab.index || 0) - (y.tab.index || 0);
-      });
+      b.items.sort((x, y) => (x._q - y._q) || (x.tab.index || 0) - (y.tab.index || 0));
     }
     filtered = [...buckets.values()]
       .sort((a, b) => a.best - b.best)
@@ -680,12 +675,8 @@ function search(query) {
       .map(({ _q, ...f }) => f); // 剥掉临时排序字段
   } else {
     filtered.sort((a, b) => {
-      if (a.groupNameExact !== b.groupNameExact) return a.groupNameExact ? -1 : 1;
-      const r = rank[a.matchedOn] - rank[b.matchedOn];
-      if (r !== 0) return r;
-      if (a.exact !== b.exact) return a.exact ? -1 : 1;
-      const h = firstHit(a) - firstHit(b);
-      if (h !== 0) return h;
+      const q = matchQuality(a) - matchQuality(b);
+      if (q !== 0) return q;
       return (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
     });
   }
@@ -1758,6 +1749,11 @@ input.addEventListener('keydown', (e) => {
 // ---- 设置面板 ----
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
+// 同步 body.settings-open: 设置面板打开时把 toast 定位到设置空白区(顶部),
+// 主视图(分组窗口)保持从底部弹起。
+new MutationObserver(() => {
+  document.body.classList.toggle('settings-open', settingsPanel.classList.contains('open'));
+}).observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
 const optShowUrl = document.getElementById('optShowUrl');
 
 settingsBtn.addEventListener('click', (e) => {
@@ -2087,19 +2083,26 @@ function closeGroupPop() { if (groupPop) { groupPop.remove(); groupPop = null; }
 //      编辑(改名/删域名瞬间被弹回),storage.onChanged 的清理链还会把
 //      编辑器里未保存的组当成"已删除"去迁移真标签。
 // 合并进 DOM + 标脏,让「保存规则」保持唯一落库口,与手工编辑/导入一致
-function addHostToRuleGroup(host, groupName) {
+async function addHostToRuleGroup(host, groupName) {
   const groups = [...rulesListEl.querySelectorAll('.rule-group')];
+  // 域名只能绑定一个分组规则: 已在任何一组存在则拦截(跨分组去重)
+  const dupGroup = groups.find(g =>
+    [...g.querySelectorAll('.host-chip > span')].some(el => el.textContent.trim() === host));
+  if (dupGroup) {
+    closeGroupPop();
+    // 定位到已存在的那个域名芯片,微黄闪烁示意“它已经在这里”,不做置灰
+    const dupChip = [...dupGroup.querySelectorAll('.host-chip')]
+      .find(c => c.querySelector('span')?.textContent.trim() === host) || dupGroup;
+    dupChip.scrollIntoView({ block: 'center' });
+    dupChip.classList.add('dup-flash');
+    setTimeout(() => dupChip.classList.remove('dup-flash'), 1300);
+    const dupName = dupGroup.querySelector('.rule-name-input')?.value.trim() || '某组';
+    showToast(`该域名已在「${dupName}」中,一个域名只能归属一个分组`);
+    return;
+  }
   // 按输入框当前值匹配组名(编辑器草稿即事实,不读 storage)
   const target = groups.find(g => g.querySelector('.rule-name-input')?.value.trim() === groupName);
   if (target) {
-    // 已有组: 域名已存在则去重提示,否则在追加输入框前插一枚芯片
-    const exists = [...target.querySelectorAll('.host-chip > span')]
-      .some(el => el.textContent.trim() === host);
-    if (exists) {
-      closeGroupPop();
-      showToast(`「${groupName}」里已有 ${host}`);
-      return;
-    }
     createHostChip(host, target.querySelector('.host-add-input'));
   } else {
     // 新组: 清掉"暂无规则"占位再追加整组模板(组名+首枚域名),
@@ -2110,7 +2113,9 @@ function addHostToRuleGroup(host, groupName) {
   }
   markRulesDirty();
   closeGroupPop();
-  showToast(`已将 ${host} 加入「${groupName}」,记得保存`);
+  // 添加即保存,省去再点"保存规则"
+  await saveRules({ silent: true });
+  showToast(`已将 ${host} 加入「${groupName}」并保存`);
 }
 try {
 currentHostBtn.addEventListener('click', async () => {
@@ -2323,7 +2328,7 @@ document.getElementById('exportRulesBtn').addEventListener('click', () => {
   URL.revokeObjectURL(a.href);
 });
 
-document.getElementById('saveRulesBtn').addEventListener('click', async () => {
+async function saveRules(opts = {}) {
   const rules = collectRulesFromEditor();
   const invalid = rulesListEl.querySelectorAll('.rule-group').length - Object.keys(rules).length;
   if (!Object.keys(rules).length) {
@@ -2332,19 +2337,20 @@ document.getElementById('saveRulesBtn').addEventListener('click', async () => {
     // "从没设置过"和"刻意为空",不会回填默认规则
     await chrome.storage.local.set({ groupRules: {} });
     clearRulesDirty();
-    showToast('已清空全部规则');
+    if (!opts.silent) showToast('已清空全部规则');
     chrome.runtime.sendMessage({ type: 'group-existing' }).catch(() => {});
     return;
   }
   try {
     await chrome.storage.local.set({ groupRules: rules });
     clearRulesDirty();
-    showToast(`规则已保存(${Object.keys(rules).length} 组)${invalid ? `,${invalid} 个无效组被忽略` : ''}`);
+    if (!opts.silent) showToast(`规则已保存(${Object.keys(rules).length} 组)${invalid ? `,${invalid} 个无效组被忽略` : ''}`);
     chrome.runtime.sendMessage({ type: 'group-existing' }).catch(() => {});
   } catch (e) {
     showToast('保存失败:' + e.message);
   }
-});
+}
+document.getElementById('saveRulesBtn').addEventListener('click', () => saveRules());
 
 // (规则加载已合并进上方 settingsBtn 主监听器——展开即刷新,
 // 独立监听器的时序判断曾与主监听器的 toggle 竞态导致永远不加载)
@@ -2409,6 +2415,8 @@ document.addEventListener('click', (e) => {
   // 导入 JSON 弹层同理(textarea 要能正常点击定位/输入,
   // 弹层挂在 body 下不在 #settingsPanel 内,须单独豁免)
   if (e.target.closest('.rules-import-layer')) return;
+  // 添加域名弹层: 新建分组输入框需要保持焦点,否则点击就丢焦点无法输入
+  if (e.target.closest('.group-pop')) return;
   input.focus();
 });
 
