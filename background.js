@@ -5,20 +5,19 @@
 // 4. 分组整理: 同名合并 + 空组清理(唤起时触发)
 
 // ---- 自动分组: 规则 ----
-// 格式: { 组名: [域名...], ... },域名精确匹配 host。
-// 存储 chrome.storage.local,由 popup 侧设置面板维护,默认空规则
+// 匹配逻辑与 popup 侧共用 rules-match.js(classic worker,importScripts 同步可得)
+importScripts('rules-match.js');
+
+// 格式: { 组名: [域名...], ... },域名按后缀匹配——规则 bilibili.com 覆盖
+// 它和它的所有子域(www/search/live/…),最长的一条优先。存储里只放裸主机名,
+// 编辑器里的 "*." 只是"含所有子域"的显示。详见 rules-match.js
 const DEFAULT_RULES = {};
 
-// host → 组名 的倒排索引(规则加载时构建,匹配 O(1))
-let hostIndex = new Map();
+// 规则集 → 匹配器(规则加载时构建,匹配沿标签链查表 O(标签数))
+let ruleMatcher = createRuleMatcher(DEFAULT_RULES);
 
 function rebuildHostIndex(rules) {
-  hostIndex = new Map();
-  for (const [groupName, hosts] of Object.entries(rules || {})) {
-    for (const h of hosts) {
-      hostIndex.set(h.replace(/\/+$/, ''), groupName);
-    }
-  }
+  ruleMatcher = createRuleMatcher(rules);
 }
 
 async function loadRules() {
@@ -44,12 +43,9 @@ async function loadRules() {
 }
 
 function matchGroup(url) {
-  try {
-    const host = new URL(url).host;
-    return hostIndex.get(host) || null;
-  } catch (e) {
-    return null; // about:blank 等非标准 URL
-  }
+  // ruleHostOfUrl: 只认 http(s)、去掉端口(chrome:// / about: 一律不命中)
+  const host = ruleHostOfUrl(url);
+  return host ? ruleMatcher.match(host) : null;
 }
 
 // Chrome 9 色轮转,新组按组名 hash 选色保证同名组颜色稳定
@@ -385,19 +381,11 @@ async function cleanupRemovedRules(oldRules, newRules) {
   await switchReady;
   if (!autoGroupEnabled) return;
   try {
-    // 差集: old 里有、new 里没有/已移出的 host → 所属标签应离开旧组
-    const removedHosts = new Map(); // host → 旧组名
-    for (const [name, hosts] of Object.entries(oldRules)) {
-      for (const h of hosts) {
-        removedHosts.set(String(h).replace(/\/+$/, ''), name);
-      }
-    }
-    for (const [name, hosts] of Object.entries(newRules)) {
-      for (const h of hosts) {
-        removedHosts.delete(String(h).replace(/\/+$/, ''));
-      }
-    }
-    if (!removedHosts.size) return;
+    // 差集算在"覆盖"上而不是"规则字符串"上: 规则通配后删掉 bilibili.com,
+    // 遗留在组里的标签主机名是 www.bilibili.com,拿字符串比对永远差不出来
+    const oldMatcher = createRuleMatcher(oldRules);
+    const newMatcher = createRuleMatcher(newRules);
+    if (!oldMatcher.index.size) return;
     // 旧规则组名集合(重命名也算"删旧组":旧名组里的标签若域名仍命中
     // 新规则会被 groupExistingTabs 迁走,这里只负责没被迁走的部分)
     const oldGroupNames = new Set(Object.keys(oldRules));
@@ -408,8 +396,10 @@ async function cleanupRemovedRules(oldRules, newRules) {
       if (!tab.url || tab.url.startsWith('chrome')) continue;
       if (tab.groupId === -1 || !tab.groupId) continue; // 散标签没有遗留
       let host;
-      try { host = new URL(tab.url).host; } catch { continue; }
-      if (!removedHosts.has(host)) continue;
+      try { host = new URL(tab.url).hostname; } catch { continue; }
+      // 老规则覆盖、新规则不再覆盖 = 这条规则的归属被删掉了
+      if (oldMatcher.match(host) == null) continue;
+      if (newMatcher.match(host) != null) continue;
       // 当前组名须是被编辑过的规则组(手动组不动)
       const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
       if (!current || !oldGroupNames.has(current.title)) continue;
