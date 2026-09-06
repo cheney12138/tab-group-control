@@ -1619,11 +1619,20 @@ function positionTabSlider(container) {
   if (!slider || !active) return;
   const isInk = document.documentElement.dataset.theme === 'ink';
   if (isInk && container.classList.contains('view-tabs')) {
-    // 水墨风顶部 Tab: 统一采用与「分组」完全一致的波浪线宽度与曲度粗细, 居中滑动对齐
-    const groupedTab = container.querySelector('.view-tab[data-view="grouped"]');
-    const waveWidth = groupedTab ? groupedTab.offsetWidth : 35;
-    slider.style.width = `${waveWidth}px`;
-    slider.style.left = `${active.offsetLeft + (active.offsetWidth - waveWidth) / 2}px`;
+    // 水墨风顶部 Tab: 随字数自适应长度, 左右各比文字微挑出 3px(两端留白舒展)
+    const waveExtra = 6;
+    const w = Math.round(active.offsetWidth + waveExtra);
+    slider.style.width = `${w}px`;
+    slider.style.left = `${active.offsetLeft - (waveExtra / 2)}px`;
+
+    // 针对目标宽度精确计算同比例控制点, 线条粗细调至清拔秀丽的 1.85px, 绝不因文字变长而被拉粗拉变形
+    const qx = +(w * 0.25).toFixed(1);
+    const mx = +(w * 0.50).toFixed(1);
+    const ex = +(w - 1.2).toFixed(1);
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='5.5' viewBox='0 0 ${w} 5.5'><path d='M 1.2 2.75 Q ${qx} 0.5, ${mx} 2.75 T ${ex} 2.75' stroke='black' stroke-width='1.85' fill='none' stroke-linecap='round'/></svg>`;
+    const maskUrl = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+    slider.style.webkitMaskImage = maskUrl;
+    slider.style.maskImage = maskUrl;
   } else {
     slider.style.left = `${active.offsetLeft}px`;
     slider.style.width = `${active.offsetWidth}px`;
