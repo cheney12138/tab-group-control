@@ -8,9 +8,8 @@
 // 匹配逻辑与 popup 侧共用 rules-match.js(classic worker,importScripts 同步可得)
 importScripts('rules-match.js');
 
-// 格式: { 组名: [域名...], ... },域名按后缀匹配——规则 bilibili.com 覆盖
-// 它和它的所有子域(www/search/live/…),最长的一条优先。存储里只放裸主机名,
-// 编辑器里的 "*." 只是"含所有子域"的显示。详见 rules-match.js
+// 格式: { 组名: [域名...], ... }。默认精确匹配该主机;写 "*.域名"
+// 才连同所有子域一起归组,最长的一条优先。通配由用户显式声明或开关指定。
 const DEFAULT_RULES = {};
 
 // 规则集 → 匹配器(规则加载时构建,匹配沿标签链查表 O(标签数))

@@ -1,11 +1,13 @@
-// 分组规则的域名归一化 + 通配匹配 —— popup(规则编辑器)与 background(自动归组)
+// 分组规则的域名归一化 + 匹配 —— popup(规则编辑器)与 background(自动归组)
 // 共用的唯一实现。加载方式两边不同: background 是 classic service worker 用
-// importScripts,popup 用 <script src>。逻辑只能有一份——编辑器里显示的
-// "*.bilibili.com" 和 background 实际命中的规则不一致,比不做通配更糟。
+// importScripts,popup 用 <script src>。逻辑只能有一份。
+//
+// 通配语义: 显式声明,不做自动推断。
+//   - 用户写 "bilibili.com"(开关关): 只精确匹配该主机(含 www 别名)
+//   - 用户写 "*.bilibili.com"(开关开): 连同其所有子域(search/live/space/...)一起归组
 
 // 多租户/公共后缀: 这些域名下面的每个子域属于不同主体,整站通配会误伤别人的站点
-// (oymel.github.io 不是我的 github.io)。只列"两标签"的坑——单标签(com / net / io)
-// 由下面的标签数下限自动降级成精确匹配,不必进名单。
+// (oymel.github.io 不是我的 github.io)。单标签(localhost、com)和 IP 也在此列。
 const SHARED_RULE_SUFFIXES = new Set([
   // ccTLD 二级域: 子域分给不同注册者
   'co.uk', 'org.uk', 'me.uk', 'ac.uk', 'gov.uk', 'nhs.uk', 'police.uk', 'mod.uk',
@@ -31,40 +33,81 @@ const SHARED_RULE_SUFFIXES = new Set([
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const IP_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+// 主机名"形状"校验: 每个标签要么字母开头(可含数字/连字符),要么是
+// 数字片段(IP 的组成部分)。但整串只有一个纯数字标签的(1234 / 123.456)
+// 不是任何真实主机——浏览器会把它当搜索词,规则永远匹配不上,当场拒收。
+// 数字子域(2.baidu.com)合法,点分四段 IPv4 合法
+const HOST_LABEL_RE = /^(?:[a-z][a-z0-9-]*|\d+)$/;
+function looksLikeHost(host) {
+  const h = String(host || '');
+  if (!h) return false;
+  if (h.startsWith('[')) return h.includes(']'); // IPv6 字面量
+  const labels = h.split('.');
+  if (!labels.every(label => HOST_LABEL_RE.test(label) && label.length <= 63)) return false;
+  // 全数字标签串 = 只能是 IPv4: 恰好四段(过宽的 123.456 也拒——它既不是
+  // IP 也不是域名,匹配不上任何真实站点)
+  if (labels.every(l => /^\d+$/.test(l))) return labels.length === 4;
+  return true;
+}
 
-// 规则里的"域名"写法很杂: www.bilibili.com、https://bilibili.com/、*.bilibili.com、
-// 127.0.0.1:8080。统一收成裸主机名(小写、去协议/路径/查询/端口/尾点、认 "*." 前缀),
-// 顺带把 www 归一: 规则里的 www. 从来不是用户的本意("加了 www.bilibili.com 结果
-// 主页不归组"是这类规则最典型的坑),且归一后正好落进整站通配。
-// 注意去端口: 主机名带端口(:host)匹配不上 chrome 的 URL.host,老规则里
-// 127.0.0.1:8080 永远不命中就是这么来的。
-function normalizeRuleHost(input) {
+// 判断域名是否允许通配(IP/单标签/公共平台后缀即使写 *. 也不展开)
+function wildcardAllowed(host) {
+  const h = String(host || '');
+  if (!h.includes('.')) return false;
+  if (h.startsWith('[')) return false; // IPv6
+  if (IP_RE.test(h)) return false;
+  if (SHARED_RULE_SUFFIXES.has(h)) return false;
+  const tld = h.slice(h.lastIndexOf('.') + 1);
+  return /^[a-z-]{2,}$/.test(tld);
+}
+
+// 规则条目解析: 统一收成 { host: 裸主机名, zone: 是否通配 }
+//   "bilibili.com"    → { host: 'bilibili.com', zone: false }  只匹配这一台主机
+//   "*.bilibili.com"  → { host: 'bilibili.com', zone: true }   连同所有子域
+// www.bilibili.com 收成 bilibili.com 精确匹配(www 只是主站别名)
+function parseRuleEntry(input) {
+  if (input && typeof input === 'object' && input.host) {
+    return {
+      host: input.host,
+      zone: !!input.zone && wildcardAllowed(input.host),
+    };
+  }
   let s = String(input == null ? '' : input).trim().toLowerCase();
-  if (!s) return '';
-  if (s === '*' || s === '*.') return '';
-  if (s.startsWith('*.')) s = s.slice(2);
+  if (!s) return null;
   s = s.replace(SCHEME_RE, '');
   if (s.startsWith('//')) s = s.slice(2);
   s = s.split('/')[0].split('?')[0].split('#')[0];
-  const at = s.lastIndexOf('@'); // userinfo 不是主机名
+  const at = s.lastIndexOf('@');
   if (at >= 0) s = s.slice(at + 1);
+
+  let zone = false;
+  if (s === '*' || s === '*.') return null;
+  if (s.startsWith('*.')) {
+    zone = true;
+    s = s.slice(2);
+  }
   if (s.startsWith('[')) {
-    const close = s.indexOf(']'); // IPv6: [::1]:8080
+    const close = s.indexOf(']');
     s = close < 0 ? s : s.slice(0, close + 1);
   } else {
     s = s.split(':')[0];
   }
   s = s.replace(/\.+$/, '');
-  if (!s || /\s/.test(s)) return '';
+  if (!s || /\s/.test(s) || !looksLikeHost(s)) return null;
   if (s.startsWith('www.')) {
     const rest = s.slice(4);
-    if (rest.includes('.')) s = rest; // 裸 www 主机不动
+    if (rest.includes('.')) s = rest;
   }
-  return s;
+  return { host: s, zone: zone && wildcardAllowed(s) };
 }
 
-// URL → 规则主机名。非 http(s)(chrome:// / file:// / about:)没有"域名"可归组,
-// 一律空串: normalizeRuleHost 直接吃 URL 会把 chrome://new-tab-page/ 认成主机名。
+// 只取裸主机名(URL 归一 / 去重 key 用)
+function normalizeRuleHost(input) {
+  const entry = parseRuleEntry(input);
+  return entry ? entry.host : '';
+}
+
+// URL → 裸主机名。非 http(s)(chrome:// / file:// / about:)没有"域名"可归组, 一律空串
 function ruleHostOfUrl(url) {
   try {
     const u = new URL(url);
@@ -75,63 +118,44 @@ function ruleHostOfUrl(url) {
   }
 }
 
-// 规则作用域: 'zone' = 连同所有子域一起匹配; 'exact' = 只匹配这一个主机名。
-// 单标签(localhost、com)、IP、公共后缀都只能精确——否则规则 "com" 会把全网
-// 每个 .com 站点吸进分组,精确降级比直接拒收友好: 用户仍然可以照写,只是不展开。
-function ruleScopeOf(host) {
-  const h = String(host || '');
-  if (!h.includes('.')) return 'exact';
-  if (h.startsWith('[')) return 'exact'; // IPv6
-  if (IP_RE.test(h)) return 'exact';
-  if (SHARED_RULE_SUFFIXES.has(h)) return 'exact';
-  const tld = h.slice(h.lastIndexOf('.') + 1);
-  if (!/^[a-z-]{2,}$/.test(tld)) return 'exact'; // 末段是数字 → 不是可通配的域
-  return 'zone';
-}
-
-// 当前站点根: 把 search.bilibili.com / room.live.bilibili.com 收成 bilibili.com。
-// "＋ 添加域名"从任何子页都能一次收整站——用户加的是"这个网站",不是这一台主机。
-// 收成两标签的前提是这两标签本身可通配: co.uk / github.io / IP 这类降级的
-// 就停手,再往上一步会踩到别人的站点,宁可规则窄一点。
+// 当前站点根: 把 search.bilibili.com 收成 bilibili.com(供整站通配开关使用)
 function siteRootOf(host) {
   const h = normalizeRuleHost(host);
   const labels = h.split('.');
   if (labels.length <= 2) return h;
   const two = labels.slice(-2).join('.');
-  if (ruleScopeOf(two) === 'zone') return two;
-  return h;
+  return wildcardAllowed(two) ? two : h;
 }
 
-// 芯片/导出里怎么展示一条规则: 通配的加 "*." 前缀,精确的原样。
-// 存储里永远只放裸主机名,"*." 只是这层显示(见 popup.js 的 dataset.host)。
-function ruleChipLabel(host) {
-  const h = normalizeRuleHost(host);
-  if (!h) return '';
-  return ruleScopeOf(h) === 'zone' ? `*.${h}` : h;
+// 芯片/导出展示文本: 显式通配加 "*." 前缀,精确的原样
+function ruleChipLabel(entry) {
+  if (typeof entry === 'string') entry = parseRuleEntry(entry);
+  return entry && entry.host ? (entry.zone ? `*.${entry.host}` : entry.host) : '';
 }
 
-// { 组名: [域名...] } → 匹配器。
-// 匹配 = 沿标签链向上做后缀匹配(www.bilibili.com → bilibili.com),天然最长优先:
-// 同时有 *.bilibili.com 和 live.bilibili.com 两条规则时,直播页走更具体的那条。
-// 只有第一跳(完整主机名)允许命中精确规则,往上的每一跳必须是 zone 规则——
-// 这一条就是"通配不误伤"的开关。
+// { 组名: [域名字符串...] } → 匹配器
+// 域名字符串 "*.host" = 整站通配, "host" = 精确单机匹配。
+// 匹配: 沿标签链向上做后缀匹配,天然最长优先:
+//   - 第一跳(完整主机名)允许命中精确或通配规则;
+//   - 往上的每一跳必须是 zone 通配规则.
 function createRuleMatcher(rules) {
   const index = new Map(); // host → { group, zone }
   for (const [group, list] of Object.entries(rules || {})) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
-      const host = normalizeRuleHost(item);
-      if (!host) continue;
-      // 一个域名只能归属一个分组: 首见为准,规则顺序变化不会让同一站点换组
-      if (!index.has(host)) index.set(host, { group, zone: ruleScopeOf(host) === 'zone' });
+      const entry = parseRuleEntry(item);
+      if (!entry) continue;
+      // 一个域名只能归属一个分组: 首见为准
+      if (!index.has(entry.host)) index.set(entry.host, { group, zone: entry.zone });
     }
   }
   return {
     index,
-    // 入参可以是裸主机名也可以是完整 URL(normalizeRuleHost 两种都吃)
+    // 入参可以是裸主机名也可以是完整 URL
     match(input) {
-      let p = normalizeRuleHost(input);
-      if (!p) return null;
+      const first = parseRuleEntry(input);
+      if (!first) return null;
+      let p = first.host;
       let full = true;
       for (;;) {
         const hit = index.get(p);

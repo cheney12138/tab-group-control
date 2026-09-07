@@ -2062,7 +2062,8 @@ function clearRulesDirty() {
 // click 覆盖 chip × 删除和组删除按钮——这些不触发 input)
 rulesListEl.addEventListener('input', markRulesDirty);
 rulesListEl.addEventListener('click', (e) => {
-  // 只有点删除类按钮才算编辑(点 chip 文本等不算)
+  // 删除类按钮(chip ×、组删除)走这里标脏;chip 文本的通配切换在
+  // createHostChip 的监听里自行标脏,不经过这个委托
   if (e.target.closest('.rule-del-btn') || e.target.closest('.host-chip button')) {
     markRulesDirty();
   }
@@ -2074,9 +2075,9 @@ async function loadRulesForEdit() {
     const saved = (stored?.groupRules && typeof stored.groupRules === 'object') ? stored.groupRules : {};
     if (Object.keys(saved).length) {
       renderRulesEditor(saved);
-      // 通配升级会收拢存量芯片(www.bilibili.com → *.bilibili.com,同组子域并入
-      // 整站)。编辑器和 storage 因此不再一致——标脏让"保存规则"提示出来,
-      // 而不是下一次保存时悄悄改写掉用户没看过的规则
+      // 渲染可能改写规则(www.bilibili.com 归一成 bilibili.com、同组子域被
+      // 显式通配规则收拢)。编辑器和 storage 因此不再一致——标脏让"保存规则"
+      // 提示出来,而不是下一次保存时悄悄改写掉用户没看过的规则
       if (JSON.stringify(collectRulesFromEditor()) === JSON.stringify(saved)) clearRulesDirty();
       else markRulesDirty();
       return;
@@ -2103,41 +2104,80 @@ function renderRulesEditor(rules) {
 }
 
 // 单个规则组的编辑行: 组名输入 + 域名芯片流(每枚可删) + 内联追加输入
-// 域名芯片工厂独立于 buildRuleGroup: 编辑器内追加输入(commit)和
-// "添加当前域名"弹层的草稿合并都要插芯片,同一份 DOM 结构
-// 芯片落库/去重/查找一律以 dataset.host(归一化裸主机名)为准,显示文字里
-// 的 "*." 只是作用域提示: zone 规则含所有子域,精确规则(localhost、IP、
-// github.io 这类多租户公共后缀)不加前缀,免得看着像通配。
-function createHostChip(host, insertBefore) {
-  const canonical = normalizeRuleHost(host);
-  if (!canonical) return null;
-  // 同组重复芯片到此为止:去重看落点的兄弟芯片,任何插入路径都覆盖
+// 芯片落库/去重/查找一律以 dataset.host(归一化裸主机名)为准;
+// dataset.zone 记显式通配标志——"*." 是规则语义(存储里带前缀):
+// 默认精确匹配单机(bilibili.com),写 *. 或开开关才含所有子域(*.bilibili.com)
+function createHostChip(hostOrEntry, insertBefore) {
+  const entry = (hostOrEntry && typeof hostOrEntry === 'object')
+    ? hostOrEntry : parseRuleEntry(hostOrEntry);
+  if (!entry) return null;
+  const canonical = entry.host;
+  // 同主机名芯片已存在时: 通配覆盖精确 → 升级(去掉旧芯片接着插入);
+  // 其余(相同写法 / 旧已是通配)视为重复,任何插入路径都覆盖
   const flow = insertBefore?.parentElement;
-  if (flow && chipHosts(flow).includes(canonical)) return null;
-  const zone = ruleScopeOf(canonical) === 'zone';
+  if (flow) {
+    const dup = [...flow.querySelectorAll('.host-chip')]
+      .find(c => (c.dataset.host || '') === canonical);
+    if (dup && !(entry.zone && dup.dataset.zone !== '1')) return null;
+    if (dup) dup.remove();
+  }
   const chip = document.createElement('span');
   chip.className = 'host-chip';
   chip.dataset.host = canonical;
+  chip.dataset.zone = entry.zone ? '1' : '';
+
   const label = document.createElement('span');
-  label.textContent = zone ? `*.${canonical}` : canonical;
-  label.title = zone
-    ? `${canonical} 及它的所有子域(live.${canonical} 等)都归这组`
-    : `仅 ${canonical} 本身(不展开子域)`;
+  // 不可通配的芯片(IP / localhost / github.io 这类多租户平台域)不给
+  // "点击切换"的引导——点击本来就无效(见下方监听),提示了做不到的事
+  // 用户会以为功能坏了
+  const canToggle = wildcardAllowed(canonical);
+  const updateLabel = (isZone) => {
+    label.textContent = isZone ? `*.${canonical}` : canonical;
+    label.title = isZone
+      ? `${canonical} 及所有子域都归这组 (点击切换为仅当前主机)`
+      : canToggle
+        ? `仅 ${canonical} 这台主机 (点击切换为整站通配)`
+        : `仅 ${canonical} 这台主机`;
+  };
+  updateLabel(entry.zone);
+  label.style.cursor = 'pointer';
+  // 点击芯片文字可便捷切换 精确/整站通配 状态
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!wildcardAllowed(canonical)) return;
+    const nowZone = chip.dataset.zone === '1';
+    const nextZone = !nowZone;
+    chip.dataset.zone = nextZone ? '1' : '';
+    updateLabel(nextZone);
+    markRulesDirty();
+  });
+
   const chipDel = document.createElement('button');
   chipDel.textContent = '×';
   chipDel.title = '移除该域名';
-  chipDel.addEventListener('click', () => chip.remove());
+  chipDel.addEventListener('click', (e) => {
+    e.stopPropagation();
+    chip.remove();
+    markRulesDirty();
+  });
   chip.appendChild(label);
   chip.appendChild(chipDel);
   if (insertBefore?.parentElement) insertBefore.parentElement.insertBefore(chip, insertBefore);
   return chip;
 }
 
-// 编辑器里现有的芯片主机名(供去重;dataset.host 是唯一事实)
+// 编辑器里现有的芯片规则(host + 通配标志;dataset 是唯一事实,文本是兜底)
+function chipEntries(groupEl) {
+  return [...groupEl.querySelectorAll('.host-chip')]
+    .map(c => (c.dataset.host
+      ? { host: c.dataset.host, zone: c.dataset.zone === '1' }
+      : parseRuleEntry(c.querySelector('span')?.textContent)))
+    .filter(Boolean);
+}
+
+// 编辑器里现有的芯片主机名(供去重;同主机名只算一条)
 function chipHosts(groupEl) {
-  return [...new Set([...groupEl.querySelectorAll('.host-chip')]
-    .map(c => c.dataset.host || normalizeRuleHost(c.querySelector('span')?.textContent))
-    .filter(Boolean))];
+  return [...new Set(chipEntries(groupEl).map(e => e.host))];
 }
 
 function buildRuleGroup(name, hosts) {
@@ -2155,7 +2195,10 @@ function buildRuleGroup(name, hosts) {
   delBtn.className = 'rule-del-btn';
   delBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
   delBtn.title = '删除该组规则';
-  delBtn.addEventListener('click', () => groupDiv.remove());
+  delBtn.addEventListener('click', () => {
+    groupDiv.remove();
+    markRulesDirty();
+  });
   nameRow.appendChild(nameInput);
   nameRow.appendChild(delBtn);
   groupDiv.appendChild(nameRow);
@@ -2168,22 +2211,61 @@ function buildRuleGroup(name, hosts) {
   const addInput = document.createElement('input');
   addInput.className = 'host-add-input';
   addInput.placeholder = '添加域名…';
-  addInput.title = '填主域名即可,它的所有子域(search./live./m.…)一起归组;\n粘贴完整网址、带端口或写成 *.bilibili.com 都能识别';
-  const commit = () => {
-    // 与 background 同一套归一化(去协议/路径/端口/www/*.):两边各写一份
-    // 迟早分叉,分叉的代价是"编辑器里的规则永远匹配不上"
-    const known = new Set(chipHosts(groupDiv));
-    const parts = [...new Set(addInput.value.split(/[,，\n]/)
-      .map(normalizeRuleHost).filter(Boolean))];
-    let added = 0;
-    for (const h of parts) {
-      if (known.has(h)) continue;
-      addHostChip(h);
-      known.add(h);
-      added += 1;
+  addInput.title = '默认精确匹配单机;要含所有子域请写 *.bilibili.com;\n粘贴完整网址、带端口都能识别';
+  // 无效闪烁动画播完自摘类(reduced-motion 下动画被压成 1ms,animationend
+  // 不可靠,setTimeout 兜底): 类挂着 animation 就持续存在,不摘的话下一次
+  // 触发无法重启,正常输入看起来也"在闪"
+  let invalidAnimTimer = null;
+  addInput.addEventListener('animationend', (e) => {
+    if (e.animationName === 'invalid-flash') {
+      clearTimeout(invalidAnimTimer);
+      addInput.classList.remove('invalid-flash');
     }
-    if (parts.length && !added) showToast('这些域名已经在这组里了');
-    addInput.value = '';
+  });
+  const commit = () => {
+    // 逐片段解析: 无效的留在输入框(toast 提示),有效的进芯片。
+    // 之前无效输入静默清空——用户以为加上了,保存后目标站点不归组,
+    // 全程零反馈无法自查。
+    // 每次提交先清上一次的无效闪烁: 重新提交 = 无效状态翻篇
+    clearTimeout(invalidAnimTimer);
+    addInput.classList.remove('invalid-flash');
+    const raw = addInput.value.split(/[,，\n]/).map(s => s.trim()).filter(Boolean);
+    const parts = [];
+    const invalid = [];
+    for (const piece of raw) {
+      const entry = parseRuleEntry(piece);
+      if (entry) parts.push(entry);
+      else invalid.push(piece);
+    }
+    let added = 0;
+    let blocked = null;
+    for (const e of parts) {
+      const owner = [...rulesListEl.querySelectorAll('.rule-group')]
+        .find(g => g !== groupDiv && chipHosts(g).includes(e.host));
+      if (owner) {
+        const ownerName = owner.querySelector('.rule-name-input')?.value.trim() || '某组';
+        blocked = { host: e.host, ownerName };
+        continue;
+      }
+      if (addHostChip(e)) added += 1;
+    }
+    if (invalid.length) showToast(`没识别到有效域名: ${invalid.join('、')}`);
+    else if (blocked) showToast(`${blocked.host} 已在「${blocked.ownerName}」中,一个域名只能归属一个分组`);
+    else if (parts.length && !added) showToast('这些域名已经在这组里了');
+    if (added > 0) markRulesDirty();
+    // 无效片段保留待改;全部处理完才清空。
+    // 输入框红边脉动 = 内容没被收下(无效片段挡在这),与 chip 的 dup-flash
+    // 同一视觉语言: 闪烁 = "这里出了点问题,看一眼"
+    if (invalid.length) {
+      clearTimeout(invalidAnimTimer);
+      addInput.classList.remove('invalid-flash');
+      void addInput.offsetWidth; // 重启动画
+      addInput.classList.add('invalid-flash');
+      clearTimeout(invalidAnimTimer);
+      invalidAnimTimer = setTimeout(() => addInput.classList.remove('invalid-flash'), 1400);
+      addInput.focus(); // 内容被拦下了,焦点留在框里等修改
+    }
+    addInput.value = invalid.length ? invalid.join(', ') : '';
   };
   addInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -2193,11 +2275,12 @@ function buildRuleGroup(name, hosts) {
   addInput.addEventListener('blur', commit);
   chipFlow.appendChild(addInput);
 
-  // 存量规则里同组的子域芯片可能被同组的整站规则覆盖(升级前只能一台主机
-  // 一枚芯片留下的痕迹)。同组内被覆盖 = 匹配结果完全一样,渲染时收拢;
-  // 跨组覆盖不能省(那两条规则本来就在决定同一页面的归属),所以只看本组
-  const own = [...new Set((Array.isArray(hosts) ? hosts : []).map(normalizeRuleHost).filter(Boolean))];
-  const coveredBy = (h) => own.find(x => x !== h && ruleScopeOf(x) === 'zone' && h.endsWith(`.${x}`));
+  // 存量规则里同组的子域芯片可能被同组的显式通配规则覆盖(*.bilibili.com 在,
+  // live.bilibili.com 冗余)。同组内被覆盖 = 匹配结果完全一样,渲染时收拢
+  const own = [...new Map((Array.isArray(hosts) ? hosts : [])
+    .map(h => ((h && typeof h === 'object') ? h : parseRuleEntry(h)))
+    .filter(Boolean).map(e => [e.host, e])).values()];
+  const coveredBy = (h) => own.find(x => x.zone && x.host !== h.host && h.host.endsWith(`.${x.host}`));
   own.filter(h => !coveredBy(h)).forEach(addHostChip);
   groupDiv.appendChild(chipFlow);
   return groupDiv;
@@ -2225,51 +2308,59 @@ function closeGroupPop() { if (groupPop) { groupPop.remove(); groupPop = null; }
 //      编辑(改名/删域名瞬间被弹回),storage.onChanged 的清理链还会把
 //      编辑器里未保存的组当成"已删除"去迁移真标签。
 // 合并进 DOM + 标脏,让「保存规则」保持唯一落库口,与手工编辑/导入一致
-async function addHostToRuleGroup(rawHost, groupName) {
-  const host = normalizeRuleHost(rawHost);
+async function addHostToRuleGroup(hostOrEntry, groupName) {
+  const entry = (hostOrEntry && typeof hostOrEntry === 'object')
+    ? hostOrEntry : parseRuleEntry(hostOrEntry);
+  if (!entry) { showToast('未识别到有效域名'); return; }
+  const host = entry.host;
   const groups = [...rulesListEl.querySelectorAll('.rule-group')];
-  if (!host) { showToast('未识别到有效域名'); return; }
-  // 域名只能绑定一个分组规则: 已在任何一组存在则拦截(跨分组去重)
-  const dupGroup = groups.find(g => chipHosts(g).includes(host));
-  if (dupGroup) {
-    closeGroupPop();
-    // 定位到已存在的那个域名芯片,微黄闪烁示意“它已经在这里”,不做置灰
-    const dupChip = [...dupGroup.querySelectorAll('.host-chip')]
-      .find(c => (c.dataset.host || '') === host) || dupGroup;
-    dupChip.scrollIntoView({ block: 'center' });
-    dupChip.classList.add('dup-flash');
-    setTimeout(() => dupChip.classList.remove('dup-flash'), 1300);
-    const dupName = dupGroup.querySelector('.rule-name-input')?.value.trim() || '某组';
-    showToast(`该域名已在「${dupName}」中,一个域名只能归属一个分组`);
-    return;
-  }
   // 按输入框当前值匹配组名(编辑器草稿即事实,不读 storage)
   const target = groups.find(g => g.querySelector('.rule-name-input')?.value.trim() === groupName);
+  // 域名只能绑定一个分组规则: 已在任何一组存在则拦截(跨分组去重)。
+  // 例外: 目标组里已有同主机名的精确芯片、这次开的是通配 → 原地升级
+  const dupGroup = groups.find(g => chipHosts(g).includes(host));
+  if (dupGroup) {
+    const dupChip = [...dupGroup.querySelectorAll('.host-chip')]
+      .find(c => (c.dataset.host || '') === host);
+    const upgradable = target && dupGroup === target && entry.zone
+      && dupChip && dupChip.dataset.zone !== '1';
+    if (upgradable) {
+      dupChip.remove();
+    } else {
+      closeGroupPop();
+      // 定位到已存在的那个域名芯片,微黄闪烁示意“它已经在这里”,不做置灰
+      const flash = dupChip || dupGroup;
+      flash.scrollIntoView({ block: 'center' });
+      flash.classList.add('dup-flash');
+      setTimeout(() => flash.classList.remove('dup-flash'), 1300);
+      const dupName = dupGroup.querySelector('.rule-name-input')?.value.trim() || '某组';
+      showToast(`该域名已在「${dupName}」中,一个域名只能归属一个分组`);
+      return;
+    }
+  }
   if (target) {
-    createHostChip(host, target.querySelector('.host-add-input'));
+    createHostChip(entry, target.querySelector('.host-add-input'));
   } else {
     // 新组: 清掉"暂无规则"占位再追加整组模板(组名+首枚域名),
     // 行为与 JSON 导入追加新组一致
     if (!groups.length) rulesListEl.innerHTML = '';
-    rulesListEl.appendChild(buildRuleGroup(groupName, [host]));
+    rulesListEl.appendChild(buildRuleGroup(groupName, [entry]));
     rulesListEl.scrollTop = rulesListEl.scrollHeight;
   }
   markRulesDirty();
   closeGroupPop();
   // 添加即保存,省去再点"保存规则"
   await saveRules({ silent: true });
-  showToast(`已将 ${ruleChipLabel(host)} 加入「${groupName}」并保存`);
+  showToast(`已将 ${ruleChipLabel(entry)} 加入「${groupName}」并保存`);
 }
 try {
 currentHostBtn.addEventListener('click', async () => {
   closeGroupPop();
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => [null]);
-  // 站点根: 人在 search.bilibili.com 上,想收的显然是整个 B 站
-  const host = active ? siteRootOf(ruleHostOfUrl(active.url)) : '';
-  if (!host) { showToast('未获取到当前标签域名'); return; }
+  // 当前页完整主机(去 www): 默认只精确匹配这一台,通配交给开关显式声明
+  const rawHost = active ? ruleHostOfUrl(active.url) : '';
+  if (!rawHost) { showToast('未获取到当前标签域名'); return; }
   // 列表与落点同源: 添加动作合并进编辑器草稿,列表也从编辑器现取
-  // (含未保存的新组,剔除未保存删除的组),storage 里已保存但草稿改掉的
-  // 名字以草稿为准
   const groups = [...rulesListEl.querySelectorAll('.rule-name-input')]
     .map(el => el.value.trim()).filter(Boolean);
   const pop = document.createElement('div');
@@ -2277,20 +2368,53 @@ currentHostBtn.addEventListener('click', async () => {
   const rect = currentHostBtn.getBoundingClientRect();
   const left = Math.max(8, Math.min(rect.right - 240, document.body.clientWidth - 250));
   pop.style.left = `${left}px`;
-  pop.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 240)}px`;
+  pop.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 275)}px`;
   const head = document.createElement('div');
   head.className = 'group-pop-head';
   const tt = document.createElement('div');
   tt.className = 'group-pop-title';
-  // 与芯片同一显示形式: 通配规则写成 *.host,免得确认后看到前缀多出来一头问号
-  tt.textContent = `添加 ${ruleChipLabel(host)}`;
-  tt.title = ruleScopeOf(host) === 'zone' ? '该域名及其所有子域都会归入这组' : '只匹配这一台主机';
   const x = document.createElement('button');
   x.className = 'group-pop-close';
   x.textContent = '✕';
   head.appendChild(tt);
   head.appendChild(x);
   pop.appendChild(head);
+
+  // 通配开关(默认关): 关 = 只加当前主机(精确匹配);
+  // 开 = *.站点根(整站及所有子域一起归组)
+  const zoneRow = document.createElement('label');
+  zoneRow.className = 'group-pop-zone';
+  zoneRow.title = '关闭只添加当前主机(精确匹配);打开按 *.站点根 添加,整站及所有子域一起归组';
+  const zoneText = document.createElement('span');
+  zoneText.className = 'group-pop-zone-text';
+  zoneText.textContent = '整站通配(含所有子域)';
+  const zoneSwitch = document.createElement('span');
+  zoneSwitch.className = 'zone-switch';
+  const chk = document.createElement('input');
+  chk.type = 'checkbox';
+  const knob = document.createElement('span');
+  knob.className = 'zone-switch-knob';
+  zoneSwitch.appendChild(chk);
+  zoneSwitch.appendChild(knob);
+  zoneRow.appendChild(zoneText);
+  zoneRow.appendChild(zoneSwitch);
+  pop.appendChild(zoneRow);
+
+  // 开关状态 → 将添加的规则; 标题实时同步显示实际形式
+  const entryOf = () => {
+    const host = chk.checked ? siteRootOf(rawHost) : rawHost;
+    return { host, zone: chk.checked && wildcardAllowed(host) };
+  };
+  const syncTitle = () => {
+    const entry = entryOf();
+    tt.textContent = `添加 ${ruleChipLabel(entry)}`;
+    tt.title = entry.zone
+      ? `${entry.host} 及它的所有子域都归这组`
+      : '只匹配这一台主机;开"整站通配"可含所有子域';
+  };
+  chk.addEventListener('change', syncTitle);
+  syncTitle();
+
   const list = document.createElement('div');
   list.className = 'group-pop-list';
   if (groups.length) {
@@ -2298,7 +2422,7 @@ currentHostBtn.addEventListener('click', async () => {
       const b = document.createElement('button');
       b.className = 'group-pop-item';
       b.textContent = g;
-      b.addEventListener('click', () => addHostToRuleGroup(host, g));
+      b.addEventListener('click', () => addHostToRuleGroup(entryOf(), g));
       list.appendChild(b);
     });
   } else {
@@ -2312,12 +2436,12 @@ currentHostBtn.addEventListener('click', async () => {
   newRow.className = 'group-pop-new';
   const inp = document.createElement('input');
   inp.placeholder = '新建分组名';
-  inp.value = host;
+  inp.value = siteRootOf(rawHost); // 组名默认用站点根,比完整主机干净
   const add = document.createElement('button');
   add.className = 'group-pop-add';
   add.textContent = '添加';
-  add.addEventListener('click', () => { const name = inp.value.trim(); if (name) addHostToRuleGroup(host, name); });
-  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const n = inp.value.trim(); if (n) addHostToRuleGroup(host, n); } });
+  add.addEventListener('click', () => { const name = inp.value.trim(); if (name) addHostToRuleGroup(entryOf(), name); });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const n = inp.value.trim(); if (n) addHostToRuleGroup(entryOf(), n); } });
   newRow.appendChild(inp);
   newRow.appendChild(add);
   pop.appendChild(newRow);
@@ -2339,7 +2463,8 @@ function collectRulesFromEditor() {
   const rules = {};
   rulesListEl.querySelectorAll('.rule-group').forEach(g => {
     const name = g.querySelector('.rule-name-input')?.value.trim();
-    const hosts = chipHosts(g); // 存裸主机名,显示用的 "*." 前缀不落库
+    // 通配规则落库为 "*.host",精确规则存裸主机名——与导入/导出同一格式
+    const hosts = chipEntries(g).map(e => (e.zone ? `*.${e.host}` : e.host));
     if (name && hosts.length) rules[name] = hosts;
   });
   return rules;
@@ -2347,9 +2472,9 @@ function collectRulesFromEditor() {
 
 // 解析导入 JSON → { 组名: [域名] }。容忍两类格式:
 // 1. 本插件/Tabbiy 导出的扁平格式 { "组名": ["域名", ...] }
-// 2. [{ name/group, domains/hosts: [...] }] 数组格式(手写常见)
-// 域名归一化走 rules-match.js 的 normalizeRuleHost(与芯片输入同一套:
-// 去协议/路径/端口/www,认 "*.x" 写法),同组重复项丢弃
+// 2. [{ name/group, domains/hosts/urls: [...] }] 数组格式(手写常见)
+// 域名解析与芯片输入同一套(parseRuleEntry): "*." 通配跟着导入文本走,
+// 同主机名 "*.x" 与 "x" 只留先出现的
 function parseRulesJson(text) {
   const data = JSON.parse(text);
   const raw = {};
@@ -2361,7 +2486,6 @@ function parseRulesJson(text) {
       if (name && Array.isArray(list)) raw[name] = list;
     }
   } else if (data && typeof data === 'object' && !Array.isArray(data)) {
-    // 包一层 key 的导出({ rules: {...} })也解包
     const obj = (data.rules && typeof data.rules === 'object' && !Array.isArray(data.rules))
       ? data.rules : data;
     for (const [k, v] of Object.entries(obj)) {
@@ -2374,7 +2498,15 @@ function parseRulesJson(text) {
   let hosts = 0;
   for (const [name, list] of Object.entries(raw)) {
     if (!name) continue;
-    const cleaned = [...new Set(list.map(x => (typeof x === 'string' ? normalizeRuleHost(x) : '')).filter(Boolean))];
+    const seen = new Set();
+    const cleaned = [];
+    for (const x of list) {
+      if (typeof x !== 'string') continue;
+      const e = parseRuleEntry(x);
+      if (!e || seen.has(e.host)) continue;
+      seen.add(e.host);
+      cleaned.push(e.zone ? `*.${e.host}` : e.host);
+    }
     if (cleaned.length) { rules[name] = cleaned; hosts += cleaned.length; }
   }
   return { rules, hosts };
@@ -2394,7 +2526,7 @@ document.getElementById('importRulesBtn').addEventListener('click', () => {
     <div style="font-weight:600;margin-bottom:6px">导入规则 JSON</div>
     <div style="color:var(--text-3);margin-bottom:8px;line-height:1.5">
       粘贴 <code>{ "组名": ["域名", …] }</code> 格式(Tabbiy 导出兼容),
-      域名写 <code>bilibili.com</code> 即含所有子域,写 <code>*.bilibili.com</code> 或完整网址也认。
+      域名写 <code>bilibili.com</code> 精确匹配该主机, 写 <code>*.bilibili.com</code> 含所有子域, 完整网址也认。
       与当前编辑器内容<b>同名组合并域名、新组追加</b>,导入后仍需点「保存规则」。
     </div>
     <textarea class="import-json-area" style="width:100%;height:180px;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--hairline);border-radius:8px;background:var(--bg);color:var(--text);resize:vertical;outline:none"></textarea>
@@ -2469,6 +2601,12 @@ document.getElementById('exportRulesBtn').addEventListener('click', () => {
 });
 
 async function saveRules(opts = {}) {
+  // 保护: 若用户输入完域名未按回车直接点击保存, 主动触发输入框失焦以完成 commit
+  rulesListEl.querySelectorAll('.host-add-input').forEach(inp => {
+    if (inp.value && inp.value.trim()) {
+      inp.dispatchEvent(new Event('blur'));
+    }
+  });
   const rules = collectRulesFromEditor();
   const invalid = rulesListEl.querySelectorAll('.rule-group').length - Object.keys(rules).length;
   if (!Object.keys(rules).length) {
