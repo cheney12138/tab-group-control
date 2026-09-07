@@ -2268,6 +2268,8 @@ function buildRuleGroup(name, hosts) {
     addInput.value = invalid.length ? invalid.join(', ') : '';
   };
   addInput.addEventListener('keydown', (e) => {
+    // 组合输入(拼音未上屏)时回车让位给输入法,不提交
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
     if (e.key === 'Escape') addInput.blur();
     e.stopPropagation(); // 不触发全局快捷键
@@ -2441,7 +2443,11 @@ currentHostBtn.addEventListener('click', async () => {
   add.className = 'group-pop-add';
   add.textContent = '添加';
   add.addEventListener('click', () => { const name = inp.value.trim(); if (name) addHostToRuleGroup(entryOf(), name); });
-  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const n = inp.value.trim(); if (n) addHostToRuleGroup(entryOf(), n); } });
+  // 组合输入(拼音未上屏)时回车让位给输入法,不提交
+  inp.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { const n = inp.value.trim(); if (n) addHostToRuleGroup(entryOf(), n); }
+  });
   newRow.appendChild(inp);
   newRow.appendChild(add);
   pop.appendChild(newRow);
@@ -2636,6 +2642,12 @@ document.getElementById('saveRulesBtn').addEventListener('click', () => saveRule
 // 全局键盘路由: 监听 document 而非 input,任何元素拿走焦点后快捷键依然有效。
 // 仅当焦点在其他真实输入控件(设置面板的 checkbox 等)时放行原生行为
 document.addEventListener('keydown', (e) => {
+  // 中文输入法组合输入(拼音未上屏)期间,按键全部让位给输入法:
+  // composing 中按回车是"确认拼音串上屏",不是"选中结果"——不拦的话
+  // 拼音打一半回车,标签瞬间被切走,输入内容全丢。上下键同理(选候选词),
+  // 退格是删拼音字母。e.isComposing 是标准属性;keyCode 229 是 Safari
+  // 及部分输入法 composition 期间 keydown 的通用标记,双保险
+  if (e.isComposing || e.keyCode === 229) return;
   // 诊断: 所有退格按键的真实修饰键状态(排查"没按 cmd 却触发关闭"的键位映射问题)
   // 仅 DEBUG 下输出——生产里这是每次退格都打的高频日志
   if (DEBUG && e.key === 'Backspace') {
