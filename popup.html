@@ -666,6 +666,30 @@
     .group-pop-item:hover { background: var(--hover); }
     .group-pop-empty { color: var(--text-3); font-size: 11px; padding: 6px 8px; }
     .group-pop-new { display: flex; gap: 6px; margin-top: 8px; border-top: 1px solid var(--hairline); padding-top: 8px; }
+    /* 整站通配开关: 视觉规格与设置页 .srow toggle 同一套(34×20/白knob),类名独立 */
+    .group-pop-zone {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      cursor: pointer; user-select: none;
+      padding: 5px 8px; margin: 0 -8px 4px;
+      border-radius: 6px;
+    }
+    .group-pop-zone:hover { background: var(--hover); }
+    .group-pop-zone-text { font-size: 11px; color: var(--text-2); }
+    .zone-switch { position: relative; flex: none; display: block; }
+    .zone-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .zone-switch-knob {
+      display: block; width: 34px; height: 20px; border-radius: 99px;
+      background: var(--fill-2); border: 1px solid var(--hairline);
+      position: relative; transition: background .18s;
+    }
+    .zone-switch-knob::after {
+      content: ''; position: absolute; top: 1px; left: 1px; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: transform .22s cubic-bezier(.25, 1, .35, 1);
+    }
+    .zone-switch input:checked + .zone-switch-knob { background: var(--accent); border-color: var(--accent); }
+    .zone-switch input:checked + .zone-switch-knob::after { transform: translateX(14px); }
+    .zone-switch input:focus-visible + .zone-switch-knob { box-shadow: 0 0 0 3px var(--ring); }
     .group-pop-new input {
       flex: 1; border: 1px solid var(--hairline); border-radius: 6px; background: var(--bg);
       color: var(--text); font-family: inherit; font-size: 12px; padding: 5px 8px; outline: none;
@@ -802,6 +826,13 @@
       55% { background: color-mix(in srgb, var(--accent) 45%, transparent); }
     }
     .host-chip.dup-flash { animation: dup-flash 0.6s ease 2; }
+    /* 输入内容无效: 输入框红边脉动(与 dup-flash 同节奏),提示内容被拦下 */
+    @keyframes invalid-flash {
+      0%, 100% { border-color: transparent; }
+      30%, 80% { border-color: color-mix(in srgb, var(--danger) 65%, transparent); }
+      55% { border-color: var(--danger); }
+    }
+    .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2; }
     /* 追加域名: 浅灰胶囊,聚焦才转白底+青描边,失焦只剩文字 */
     .host-add-input {
       font-size: 10px;
@@ -1467,6 +1498,8 @@
       .wave-icon.is-paused span { animation: none !important; }
       /* 重复域名定位提示: 保留闪烁(否则被冻结到不可见) */
       .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
+      /* 无效输入拦截提示: 同上,提示信号不能被冻结 */
+      .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       /* Tab 滑块: 保留滑动 transition(否则被冻结成瞬时跳变) */
       .view-tabs .tab-slider,
       .settings-tabs .tab-slider { transition-duration: 0.28s !important; }
@@ -2110,7 +2143,7 @@
         <div class="rules-head-row">
           <div class="rules-title-block">
             <div class="rules-title">按域名自动归类<span id="rulesDirtyDot" class="dirty-dot" title="规则有未保存的修改"></span></div>
-            <div class="rules-sub">填主域名即可,它的所有子域(search./live./m.…)一起归组,芯片显示为 *.域名</div>
+            <div class="rules-sub">默认精确匹配单机；要含所有子域请写 *.域名(如 *.bilibili.com)或开启通配开关</div>
           </div>
           <div class="rules-io-links">
             <button id="addCurrentHostBtn" class="rules-io-link" title="把当前标签页域名作为分组规则">＋ 添加域名</button>
