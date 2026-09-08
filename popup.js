@@ -644,19 +644,23 @@ function search(query) {
   }
   // 排序优先级(统一"匹配度优先",grouped 与 recent/current 一致):
   // 0. 分组名全等查询词 > 一切
-  // 1. 精确命中(查询串作为连续子串出现) > 模糊命中(散字) —— 主序
-  // 2. 命中的字段: 标题 > 拼音 > 分组名 > 域名 > 完整 URL
-  // 3. 同级内命中位置越靠前越优;仍同级按组内序号/最近使用
+  // 1. 匹配层级: 标题精确 > 拼音精确 > 分组名精确 > 域名精确 > URL精确 > 模糊匹配各级
+  // 2. 同层级内: 严格按最近使用时间倒排(相对时间显示为升序: 刚刚 -> 4小时 -> 7小时 -> 9小时)
+  // 3. 时间相同时按首字符命中位置微调, 最后按标签物理序号兜底
   const rank = { title: 0, pinyin: 1, group: 2, host: 3, url: 4 };
   const firstHit = f => f.titleHits?.[0] ?? f.urlHits?.[0] ?? 9999;
-  // 单条匹配度分: 组名全等 -> -1(绝对置顶);否则 精确(0)/模糊(100) 为主序,
-  // 字段级别(标题最相关)*10 为次序,再加命中位置(越靠前越优,封顶 30)
+  // 匹配层级: 组名全等(-1) > 精确包含(0~4) > 模糊包含(10~14)
+  const matchTier = f => {
+    if (f.groupNameExact) return -1;
+    return (f.exact ? 0 : 10) + rank[f.matchedOn];
+  };
+  // 组间最佳相关度分(供桶间排序, 结合命中位置判定哪个组最优先展开)
   const matchQuality = f => {
     if (f.groupNameExact) return -1;
     return (f.exact ? 0 : 100) + rank[f.matchedOn] * 10 + Math.min(firstHit(f), 30);
   };
   if (view === 'grouped') {
-    // 分组视图: 先分桶,桶内按匹配度排,桶间按桶内最佳排
+    // 分组视图: 先分桶,桶内按匹配层级+最近使用排,桶间按桶内最佳排
     const buckets = new Map(); // groupKey -> { best, items }
     for (const f of filtered) {
       const key = groupKey(f.group);
@@ -667,7 +671,16 @@ function search(query) {
       b.items.push({ ...f, _q: q });
     }
     for (const b of buckets.values()) {
-      b.items.sort((x, y) => (x._q - y._q) || (x.tab.index || 0) - (y.tab.index || 0));
+      b.items.sort((x, y) => {
+        const tDiff = matchTier(x) - matchTier(y);
+        if (tDiff !== 0) return tDiff;
+        // 同层级内: 最近使用的排前面(相对时间显示为升序: 4小时 -> 7小时 -> 9小时)
+        const timeDiff = (y.tab.lastAccessed || 0) - (x.tab.lastAccessed || 0);
+        if (timeDiff !== 0) return timeDiff;
+        const hDiff = firstHit(x) - firstHit(y);
+        if (hDiff !== 0) return hDiff;
+        return (x.tab.index || 0) - (y.tab.index || 0);
+      });
     }
     filtered = [...buckets.values()]
       .sort((a, b) => a.best - b.best)
@@ -675,9 +688,13 @@ function search(query) {
       .map(({ _q, ...f }) => f); // 剥掉临时排序字段
   } else {
     filtered.sort((a, b) => {
-      const q = matchQuality(a) - matchQuality(b);
-      if (q !== 0) return q;
-      return (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
+      const tDiff = matchTier(a) - matchTier(b);
+      if (tDiff !== 0) return tDiff;
+      const timeDiff = (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
+      if (timeDiff !== 0) return timeDiff;
+      const hDiff = firstHit(a) - firstHit(b);
+      if (hDiff !== 0) return hDiff;
+      return (a.tab.index || 0) - (b.tab.index || 0);
     });
   }
 
@@ -815,6 +832,8 @@ function render() {
   // 该组不会出现在 sections,分组头自然消失
   const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
   sections.forEach(section => {
+    // 组内排序: 严格按最近使用时间倒排(相对时间显示为升序: 4小时 -> 7小时 -> 9小时)
+    section.items.sort((a, b) => (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0));
     const key = groupKey(section.group);
     const isCollapsed = collapsed.has(key);
     frag.appendChild(buildGroupHeader(section.group, section.items.length, isCollapsed, () => {
@@ -1847,20 +1866,36 @@ new MutationObserver(() => {
 }).observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
 const optShowUrl = document.getElementById('optShowUrl');
 
+function openSettingsPanel() {
+  if (settingsPanel.classList.contains('open')) return;
+  settingsPanel.classList.add('open');
+  loadRulesForEdit();
+  loadAutoGroupSwitch();
+  loadOthersGroupSwitch();
+  requestAnimationFrame(() => positionTabSlider(document.querySelector('.settings-tabs')));
+}
+
+function closeSettingsPanel() {
+  if (!settingsPanel.classList.contains('open')) return;
+  settingsPanel.classList.remove('open');
+  input.focus();
+}
+
+function toggleSettingsPanel() {
+  if (settingsPanel.classList.contains('open')) {
+    closeSettingsPanel();
+  } else {
+    openSettingsPanel();
+  }
+}
+
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  settingsPanel.classList.toggle('open');
-  // 展开时加载分组规则(storage 读取 <5ms,每次展开刷新保持与 background 同步)
-  if (settingsPanel.classList.contains('open')) {
-    loadRulesForEdit();
-    loadAutoGroupSwitch();
-    loadOthersGroupSwitch();
-    positionTabSlider(document.querySelector('.settings-tabs')); // 面板由隐藏变可见,重算滑块
-  }
+  toggleSettingsPanel();
 });
 // 覆盖层的关闭按钮
 document.getElementById('settingsCloseBtn').addEventListener('click', () => {
-  settingsPanel.classList.remove('open');
+  closeSettingsPanel();
 });
 
 // 设置面板两个选择 Tab: 分组(规则编辑) / 功能(偏好+快捷键+清理)。
@@ -2683,9 +2718,9 @@ document.addEventListener('keydown', (e) => {
       closeGroupPop();
       return;
     }
-    if (settingsPanel.classList.contains('open')) {
+    if (settingsPanel.classList.contains('open') && !settingsPanel.classList.contains('closing')) {
       e.preventDefault();
-      settingsPanel.classList.remove('open');
+      closeSettingsPanel();
       return;
     }
   }
@@ -2730,7 +2765,7 @@ function handleShortcuts(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
     if (settingsPanel.classList.contains('open')) {
-      settingsPanel.classList.remove('open');
+      closeSettingsPanel();
       return;
     }
     if (input.value) {
