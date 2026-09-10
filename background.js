@@ -14,9 +14,11 @@ const DEFAULT_RULES = {};
 
 // 规则集 → 匹配器(规则加载时构建,匹配沿标签链查表 O(标签数))
 let ruleMatcher = createRuleMatcher(DEFAULT_RULES);
+let currentRuleGroupNames = new Set();
 
 function rebuildHostIndex(rules) {
   ruleMatcher = createRuleMatcher(rules);
+  currentRuleGroupNames = new Set(Object.keys(rules || {}));
 }
 
 async function loadRules() {
@@ -45,6 +47,12 @@ function matchGroup(url) {
   // ruleHostOfUrl: 只认 http(s)、去掉端口(chrome:// / about: 一律不命中)
   const host = ruleHostOfUrl(url);
   return host ? ruleMatcher.match(host) : null;
+}
+
+// 检查某个组名是否属于任何一条自定义域名规则
+function isRuleGroupName(title) {
+  if (!title) return false;
+  return currentRuleGroupNames.has(title);
 }
 
 // Chrome 9 色轮转,新组按组名 hash 选色保证同名组颜色稳定
@@ -89,6 +97,58 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// ---- 手动干预标签保护 (Manual Tab IDs) ----
+// 记录所有由用户手动移动过的标签 ID (无论是通过弹窗拖拽, 还是在 Chrome 标签栏手动拖动/归组)
+// 只要标签被手动干预过, 自动分组引擎就彻底忽略该标签, 绝不自动强拆
+let manualTabIds = new Set();
+chrome.storage.local.get('manualTabIds').then(s => {
+  if (Array.isArray(s?.manualTabIds)) {
+    manualTabIds = new Set(s.manualTabIds);
+  }
+}).catch(() => {});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && 'manualTabIds' in changes) {
+    manualTabIds = new Set(Array.isArray(changes.manualTabIds.newValue) ? changes.manualTabIds.newValue : []);
+  }
+});
+
+function markTabsManual(tabIds) {
+  const ids = Array.isArray(tabIds) ? tabIds : [tabIds];
+  let changed = false;
+  for (const id of ids) {
+    if (id && id > 0 && !manualTabIds.has(id)) {
+      manualTabIds.add(id);
+      changed = true;
+    }
+  }
+  if (changed) {
+    chrome.storage.local.set({ manualTabIds: [...manualTabIds] }).catch(() => {});
+  }
+}
+
+function unmarkTabsManual(tabIds) {
+  const ids = Array.isArray(tabIds) ? tabIds : [tabIds];
+  let changed = false;
+  for (const id of ids) {
+    if (id && manualTabIds.has(id)) {
+      manualTabIds.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) {
+    chrome.storage.local.set({ manualTabIds: [...manualTabIds] }).catch(() => {});
+  }
+}
+
+// tab 关闭时自动清理无效的记录
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (manualTabIds.has(tabId)) {
+    manualTabIds.delete(tabId);
+    chrome.storage.local.set({ manualTabIds: [...manualTabIds] }).catch(() => {});
+  }
+});
+
 // 归组串行队列: onCreated/onUpdated 触发的 autoGroupTab 是 fire-and-forget
 // 并发的,与规则保存触发的 cleanup→groupExisting→tidy 长链路交错时,
 // tabGroups.query 查到的组可能在 tabs.group 执行前被并发流程搬空
@@ -107,15 +167,21 @@ function autoGroupTab(tab) {
 
 // 归组原子操作: 同窗口找同名组 → 并入;没有则新建并命名上色。
 // doAutoGroupTab 主路径 / "No group with id" 重试 / 规则删除迁移 三处共用
+const autoGroupingTabIds = new Set();
 async function attachTabToGroup(tab, groupName) {
-  const existing = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
-  if (existing.length) {
-    await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
-  } else {
-    const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
-    await chrome.tabGroups.update(newGroupId, {
-      title: groupName, color: colorForGroup(groupName),
-    });
+  autoGroupingTabIds.add(tab.id);
+  try {
+    const existing = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
+    if (existing.length) {
+      await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
+    } else {
+      const newGroupId = await chrome.tabs.group({ tabIds: [tab.id] });
+      await chrome.tabGroups.update(newGroupId, {
+        title: groupName, color: colorForGroup(groupName),
+      });
+    }
+  } finally {
+    setTimeout(() => autoGroupingTabIds.delete(tab.id), 300);
   }
 }
 
@@ -123,6 +189,8 @@ async function doAutoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
   if (!autoGroupEnabled) return;
   if (!tab || !tab.url || tab.url.startsWith('chrome')) return;
+  // 保护 1: 手动干预移动过的标签(Chrome标签栏手动移动/弹窗拖拽/恢复)，自动规则一律忽略
+  if (manualTabIds.has(tab.id)) return;
   // 命中规则 → 规则组;未命中 → Others 兜底组(可配置: othersGroupEnabled
   // 关闭时未命中域名保持散着,规则只管命中的)
   const hit = matchGroup(tab.url);
@@ -133,6 +201,9 @@ async function doAutoGroupTab(tab) {
     if (tab.groupId && tab.groupId !== -1) {
       const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
       if (current && current.title === groupName) return;
+      // 保护 2: 若标签当前已在非规则的手动/工作区组中(组名不在任何规则内且非Others), 不被自动规则拆散
+      const isCustomManualGroup = current && current.title && current.title !== 'Others' && !isRuleGroupName(current.title);
+      if (isCustomManualGroup) return;
     }
     await attachTabToGroup(tab, groupName);
   } catch (e) {
@@ -169,6 +240,17 @@ async function groupExistingTabs() {
     let grouped = 0;
     for (const tab of tabs) {
       if (!tab.url || tab.url.startsWith('chrome')) continue;
+      // 保护 1: 手动干预移动过的标签，跳过存量自动归组
+      if (manualTabIds.has(tab.id)) {
+        continue;
+      }
+      // 保护 2: 自定义手动工作区组中的标签，跳过存量自动归组，避免被死磕强拆
+      if (tab.groupId && tab.groupId !== -1) {
+        const curGroup = await chrome.tabGroups.get(tab.groupId).catch(() => null);
+        if (curGroup && curGroup.title && curGroup.title !== 'Others' && !isRuleGroupName(curGroup.title)) {
+          continue;
+        }
+      }
       const hit = matchGroup(tab.url);
       if (hit) {
         // 命中规则: 任何状态都归入规则组(autoGroupTab 内部会跳过已在同名组的)
@@ -326,6 +408,25 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.title || changeInfo.url || changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined) {
     refreshSnapshot();
+  }
+  // 感知用户在 Chrome 原生标签栏手动移动/归组: 非插件自身自动归组触发时
+  if (changeInfo.groupId !== undefined && !autoGroupingTabIds.has(tabId)) {
+    if (changeInfo.groupId > 0) {
+      chrome.tabGroups.get(changeInfo.groupId).then((group) => {
+        if (group && isRuleGroupName(group.title)) {
+          // 移动之后在已有规则的分组下: 不计入白名单, 自动分组照常操作它(若此前在白名单中则解除保护)
+          unmarkTabsManual(tabId);
+        } else {
+          // 移动之后在非规则分组下(如自定义项目组): 计入白名单保护
+          markTabsManual(tabId);
+        }
+      }).catch(() => {
+        markTabsManual(tabId);
+      });
+    } else {
+      // 移出到散标签未分组: 计入白名单保护
+      markTabsManual(tabId);
+    }
   }
   if (changeInfo.url) autoGroupTab(tab); // 导航到新域名时归组
 });
