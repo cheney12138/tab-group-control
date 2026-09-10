@@ -391,6 +391,20 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+    }
+    /* 归档未读小圆点: 严格使用当前主题的 --accent 强调色，带微弱底色外环 */
+    .settings-btn.has-archive::after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 1.5px var(--surface, #fff);
+      pointer-events: none;
     }
     .settings-btn svg {
       stroke: currentColor;
@@ -481,6 +495,131 @@
       color: var(--accent);
       font-weight: 600;
       border-bottom-color: transparent; /* 下划线由共享滑块承担 */
+    }
+    .s-tab-pill {
+      font-size: 9.5px;
+      line-height: 1;
+      padding: 1.5px 5px;
+      border-radius: 99px;
+      background: var(--accent);
+      color: #fff;
+      margin-left: 4px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+    /* 归档卡片列表 */
+    .archived-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 4px 0 16px;
+    }
+    .archive-card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-sm);
+      overflow: hidden;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .archive-card:hover {
+      border-color: color-mix(in srgb, var(--accent) 30%, var(--hairline));
+    }
+    .archive-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .archive-card-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+    .archive-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .archive-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .archive-card-meta {
+      font-size: 11px;
+      color: var(--text-3);
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+    .archive-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .btn-restore-archive {
+      border: none;
+      background: var(--tint);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3.5px 10px;
+      border-radius: var(--r-full);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-restore-archive:hover {
+      background: var(--tint-2);
+    }
+    .btn-archive-del {
+      border: none;
+      background: none;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 3px 6px;
+      border-radius: 4px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .btn-archive-del:hover {
+      color: var(--danger);
+      background: var(--danger-bg);
+    }
+    .archive-tabs-preview {
+      display: none;
+      border-top: 1px solid var(--hairline);
+      background: var(--bg);
+      padding: 6px 12px 8px;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .archive-card.expanded .archive-tabs-preview {
+      display: flex;
+    }
+    .archive-tab-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .archive-tab-line::before {
+      content: '•';
+      color: var(--text-3);
     }
     .settings-tabs .tab-slider {
       position: absolute;
@@ -1079,6 +1218,42 @@
     }
     .group-header.collapsed .caret { transform: rotate(-90deg); }
     .group-header.active { background: var(--tint) !important; color: var(--accent) !important; }
+    /* 归档收纳箱按钮: 默认不可见, hover 分组头时优雅浮现 */
+    .btn-archive-group {
+      border: none;
+      background: transparent;
+      color: var(--text-3);
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin-left: auto;
+      margin-right: 4px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
+      flex-shrink: 0;
+    }
+    .group-header:hover .btn-archive-group {
+      opacity: 0.8;
+      pointer-events: auto;
+    }
+    .btn-archive-group:hover {
+      opacity: 1 !important;
+      background: var(--tint);
+      color: var(--accent);
+    }
+    .btn-archive-group svg {
+      width: 14px;
+      height: 14px;
+    }
+    .btn-archive-group + .group-count {
+      margin-left: 0 !important;
+    }
     /* 计数徽章: 采用与中国风一致的微圆角方形小徽章(border-radius: 4px),与圆形删除按钮彻底区隔;
      * 适度加重视觉对比度,清晰利落但克制 */
     .group-count {
@@ -1236,6 +1411,25 @@
     /* 选中态: 左侧 3px 主色细节条 + 极淡底色,克制但有存在感 */
     .tab-item::before { display: none; } /* 去掉左竖线 */
     .tab-item:hover { background: var(--hover); }
+    /* 拖拽交互样式 */
+    .tab-item[draggable="true"] {
+      cursor: grab;
+    }
+    .tab-item.dragging {
+      opacity: 0.35;
+      background: var(--hover);
+      cursor: grabbing;
+    }
+    .group-header.drop-target {
+      background: color-mix(in srgb, var(--group-c, var(--accent)) 16%, transparent) !important;
+      outline: 1.5px dashed var(--group-c, var(--accent));
+      outline-offset: -1px;
+    }
+    .tab-item.drop-target {
+      background: var(--hover);
+      outline: 1.5px dashed var(--accent);
+      outline-offset: -1px;
+    }
     /* 选中: 柔和地从左边缘淡出的主题色洗染(现代风,比中国风更淡) */
     .tab-item.active {
       background: linear-gradient(to right, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 3%, transparent) 50%, transparent 88%);
@@ -1647,8 +1841,13 @@
     html[data-theme="ink"] .sselect,
     html[data-theme="ink"] .sselect select,
     html[data-theme="ink"] .settings-panel label,
-    html[data-theme="ink"] .settings-panel span.slabel {
+    html[data-theme="ink"] .settings-panel span.slabel,
+    html[data-theme="ink"] .tab-item .title {
       font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif !important;
+    }
+    /* 水墨主题: 标签标题宋体适当加粗(基础样式为 500, 此处提升笔画粗度) */
+    html[data-theme="ink"] .tab-item .title {
+      font-weight: 700 !important;
     }
     html[data-theme="ink"] .slabel,
     html[data-theme="ink"] .settings-panel span.slabel {
@@ -1658,31 +1857,49 @@
       letter-spacing: 0.02em;
     }
 
-    /* 字体分层: 信息层(无衬线体)保证小字号清晰可读 */
-    html[data-theme="ink"] .tab-item .title,
+    /* 字体分层: 信息层(无衬线体)保证小字号清晰可读
+       标签标题用宋体衬线栈以贴合水墨主题气质(移动至上方气质层),
+       URL/相对时间/搜索框保持无衬线保证小字号可读性 */
     html[data-theme="ink"] .tab-item .url,
     html[data-theme="ink"] .last-used,
     html[data-theme="ink"] input#search {
       font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
 
-    /* 结构性符号 1: 分组数量角标 → 水墨小印章,颜色跟随分组竖线,靠右排列 */
+    /* 结构性符号 1: 水墨主题专属分组数量角标 → 还原真水墨画墨团(按分组色动态晕染,白字反差) */
     html[data-theme="ink"] .group-count {
-      min-width: 20px;
-      height: 20px;
-      padding: 0 4px;
-      border-radius: 4px;
-      background: var(--group-c, var(--seal)) !important;
-      color: var(--seal-ink) !important;
-      font-size: 11px;
-      font-weight: 700;
+      min-width: 14px;
+      height: 14px;
+      line-height: 14px;
+      padding: 0 3px;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      color: #FFFFFF !important;
+      font-weight: 800 !important;
+      font-size: 8.5px !important;
+      font-family: ui-monospace, SFMono-Regular, "Noto Serif SC", serif !important;
+      text-shadow: 0 0.5px 1.5px rgba(18, 14, 12, 0.9) !important;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 1px 0 rgba(43, 38, 34, 0.15), inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
+      position: relative;
       flex: none;
-      letter-spacing: 0;
       margin-left: auto;
+      z-index: 2;
+    }
+    html[data-theme="ink"] .group-count::before {
+      content: "";
+      position: absolute;
+      inset: -6px -7px -7px -6px;
+      background-image: var(--dot-ink-bg);
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+      background-position: center;
+      pointer-events: none;
+      z-index: -1;
+      mix-blend-mode: multiply;
+      opacity: 0.98;
     }
 
     /* 结构性符号 2: 分组左侧色块 → 一竖笔墨色竖线,末端带笔锋渐隐 */
@@ -1864,6 +2081,13 @@
     html[data-theme="ink"] .src-btn.active svg {
       color: var(--ink) !important;
       opacity: 1 !important;
+    }
+    html[data-theme="ink"] .btn-archive-group {
+      color: var(--ink-faint) !important;
+    }
+    html[data-theme="ink"] .btn-archive-group:hover {
+      color: var(--ink) !important;
+      background: rgba(43, 38, 34, 0.08) !important;
     }
 
     /* 水墨音浪材质 (参考媒体播放.html):
@@ -2061,10 +2285,37 @@
       -webkit-mask-size: 100% 100%;
     }
     html[data-theme="ink"] .sbox,
-    html[data-theme="ink"] .rule-group {
+    html[data-theme="ink"] .rule-group,
+    html[data-theme="ink"] .archive-card {
       background: var(--paper-card);
       border: 1px solid var(--line);
       border-radius: 12px;
+    }
+    html[data-theme="ink"] .archive-tabs-preview {
+      background: var(--paper);
+      border-top: 1px solid var(--line);
+    }
+    /* 水墨中国风下: 归档卡片左侧点 → 100%照搬重复 tab 墨点晕染设计,按分组自身色彩渲染 */
+    html[data-theme="ink"] .archive-dot {
+      width: 14px !important;
+      height: 14px !important;
+      background: transparent !important;
+      position: relative !important;
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    html[data-theme="ink"] .archive-dot::before {
+      content: "";
+      position: absolute;
+      inset: -6px -7px -7px -6px;
+      background-image: var(--dot-ink-bg);
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+      background-position: center;
+      pointer-events: none;
+      z-index: 1;
+      mix-blend-mode: multiply;
+      opacity: 0.98;
     }
     html[data-theme="ink"] .toggle-track {
       background: var(--paper-deep) !important;
@@ -2195,6 +2446,7 @@
     <div class="settings-tabs">
       <span class="tab-slider"></span>
       <button class="settings-tab active" data-pane="group">分组</button>
+      <button class="settings-tab" data-pane="archive">已归档<span id="archivePill" class="s-tab-pill" style="display:none">0</span></button>
       <button class="settings-tab" data-pane="func">功能</button>
     </div>
     <div class="settings-body">
@@ -2215,6 +2467,9 @@
           </div>
         </div>
         <div id="rulesList" class="rules-list"></div>
+      </div>
+      <div class="settings-pane" id="pane-archive">
+        <div id="archivedList" class="archived-list"></div>
       </div>
       <div class="settings-pane" id="pane-func">
         <div class="sbox">
