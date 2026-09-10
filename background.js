@@ -557,6 +557,12 @@ chrome.commands.onCommand.addListener((command) => {
 
 // popup 消息: 快照 / 整理触发
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // content script 心跳: 消息到达本身已重置休眠计时器,显式应答让
+  // sendMessage 正常收尾(不应答会让 content 侧 promise 悬挂到超时)
+  if (msg?.type === 'keepalive') {
+    sendResponse({ ok: true });
+    return;
+  }
   if (msg?.type === 'get-snapshot') {
     const fresh = tabSnapshot && (Date.now() - tabSnapshot.ts < 2000)
       ? tabSnapshot : null;
@@ -580,6 +586,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // 完成后顺带跑一次整理(合并可能产生的同名组)
     groupExistingTabs().then(() => tidyGroups());
     sendResponse({ ok: true });
+  }
+  // 恢复归档建组: 与自动归组同一串行队列。popup 直调 Chrome API 时,
+  // query→group 两步间隙 autoGroupTab 可能也在为同名组建组——
+  // 双 query 双 miss 各建一个(Chrome 无删组 API,重复组只能靠 tidy 兜底),
+  // 建组动作收拢到这条队列后,双方对同名组的检查互斥
+  if (msg?.type === 'restore-group') {
+    const { title, color, tabIds, windowId } = msg || {};
+    if (!title || !Array.isArray(tabIds) || !tabIds.length) {
+      sendResponse({ ok: false, error: '参数无效' });
+      return;
+    }
+    enqueueGroupOp(async () => {
+      const q = { title };
+      if (windowId) q.windowId = windowId;
+      const dup = await chrome.tabGroups.query(q).catch(() => []);
+      if (dup.length) {
+        // 同窗口已有同名组: 并入(已有多个重复组时取第一个,其余交 tidy);
+        // 保留现有组颜色,不打扰用户正在用的组
+        await chrome.tabs.group({ tabIds, groupId: dup[0].id });
+        return { merged: true };
+      }
+      const groupId = await chrome.tabs.group({
+        tabIds,
+        ...(windowId ? { createProperties: { windowId } } : {}),
+      });
+      const safeColor = GROUP_COLORS.includes(color) ? color : 'grey';
+      await chrome.tabGroups.update(groupId, { title, color: safeColor });
+      return { merged: false };
+    }).then(
+      (result) => sendResponse({ ok: true, ...result }),
+      (err) => sendResponse({ ok: false, error: String(err?.message || err) }),
+    );
+    return true; // 队列异步完成后再 sendResponse,保持消息通道开放
   }
 });
 
