@@ -1851,13 +1851,8 @@
     html[data-theme="ink"] .sselect,
     html[data-theme="ink"] .sselect select,
     html[data-theme="ink"] .settings-panel label,
-    html[data-theme="ink"] .settings-panel span.slabel,
-    html[data-theme="ink"] .tab-item .title {
+    html[data-theme="ink"] .settings-panel span.slabel {
       font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif !important;
-    }
-    /* 水墨主题: 标签标题宋体适当加粗(基础样式为 500, 此处提升笔画粗度) */
-    html[data-theme="ink"] .tab-item .title {
-      font-weight: 700 !important;
     }
     html[data-theme="ink"] .slabel,
     html[data-theme="ink"] .settings-panel span.slabel {
@@ -1868,8 +1863,9 @@
     }
 
     /* 字体分层: 信息层(无衬线体)保证小字号清晰可读
-       标签标题用宋体衬线栈以贴合水墨主题气质(移动至上方气质层),
-       URL/相对时间/搜索框保持无衬线保证小字号可读性 */
+       标签标题是高频扫读区(尤其英文长串),留在无衬线信息层;
+       宋体气质由分组头/视图 Tab/设置面板承担 */
+    html[data-theme="ink"] .tab-item .title,
     html[data-theme="ink"] .tab-item .url,
     html[data-theme="ink"] .last-used,
     html[data-theme="ink"] input#search {
