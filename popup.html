@@ -1012,6 +1012,15 @@
       55% { border-color: var(--danger); }
     }
     .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2; }
+    /* 组名重名拦截: 同名闪烁(与无效输入同一视觉语言)。
+       组名框常态 border:none,闪烁时补 transparent border 让动画可见,
+       padding 同步减 1px 补偿占位,防布局抖动 */
+    .rule-group-name input.invalid-flash {
+      border: 1px solid transparent;
+      padding: 0 1px;
+      border-radius: 4px;
+      animation: invalid-flash 0.6s ease 2;
+    }
     /* 追加域名: 浅灰胶囊,聚焦才转白底+青描边,失焦只剩文字 */
     .host-add-input {
       font-size: 10px;
@@ -1734,6 +1743,7 @@
       .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
       /* 无效输入拦截提示: 同上,提示信号不能被冻结 */
       .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       /* Tab 滑块与设置面板抽屉: 保留动画 */
       .view-tabs .tab-slider,
       .settings-tabs .tab-slider { transition-duration: 0.28s !important; }
@@ -2534,5 +2544,5 @@
   <div id="pushStack" class="push-stack"></div>
   <script src="pinyin-data.js"></script>
   <script src="rules-match.js"></script>
-  <script src="popup.js"></script></body>
+  <script type="module" src="src/main.js"></script></body>
 </html>
