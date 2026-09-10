@@ -1,6 +1,26 @@
 // media 控制 content script: 响应 popup 的 播放/暂停 请求。
 // 页面里可能有多个 media 元素(主视频+预览视频等),只动"正在播放"的那个;
 // 都没在播时动第一个(恢复播放场景)
+
+// ---- worker 心跳保活 ----
+// MV3 service worker 闲置 30s 被 Chrome 回收;回收后 _execute_action 快捷键
+// 要先冷启动 worker 才开弹窗(磁盘忙时数秒——"快捷键偶发延迟"的根因)。
+// 消息本身就是 activity,收到即重置休眠计时器:每 25s 一条心跳让 worker 常醒。
+// 仅页面可见时发(后台/冻结标签不发,浏览器闲置时允许 worker 正常休眠省电);
+// worker 重启间隙消息失败(promise 拒绝)静默即可,下一轮自然恢复。
+// 但扩展"重载/更新"后旧页面的扩展上下文被销毁且不可恢复: sendMessage 改为
+// 同步抛 Extension context invalidated(catch 接不住)——预检 runtime.id +
+// try-catch 兜底,命中即停跳,等页面刷新重新注入新 content script
+const keepaliveTimer = setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (!chrome.runtime?.id) { clearInterval(keepaliveTimer); return; }
+  try {
+    chrome.runtime.sendMessage({ type: 'keepalive' }).catch(() => {});
+  } catch {
+    clearInterval(keepaliveTimer);
+  }
+}, 25000);
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // media 控制: 响应 popup 的 播放/暂停 请求。
   // 页面里可能有多个 media 元素(主视频+预览视频等),只动"正在播放"的那个;
