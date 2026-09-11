@@ -131,6 +131,7 @@ async function loadTabs(opts = {}) {
         if (!t.url || t.url === 'about:blank') t.url = restored.url;
         if (!t.title || t.title === 'Loading...' || t.title === t.url) t.title = restored.title;
         if (!t.favIconUrl && restored.favIconUrl) t.favIconUrl = restored.favIconUrl;
+        if (restored.lastAccessed != null) t.lastAccessed = restored.lastAccessed;
       }
       return t;
     })
@@ -480,7 +481,7 @@ initSettings({
 // 媒体/撤销/清理组件初始化(同一组注入件,各取所需)
 const refreshData = async (opts) => { await loadTabs(opts); search(searchValue()); };
 initMedia({ getAllTabs: () => state.allTabs, getTabItem: tabItemByTabId });
-initUndo({ refreshData, render });
+initUndo({ refreshData, render, focusCurrentTab });
 initClean({
   getAllTabs: () => state.allTabs,
   dropTabs: (ids) => { state.allTabs = state.allTabs.filter(x => !ids.has(x.tab.id)); },
