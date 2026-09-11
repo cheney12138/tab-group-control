@@ -1,69 +1,86 @@
 # Tab Group Search
 
-A Chrome extension for managing large numbers of tabs in multi-environment development workflows: **search & switch + automatic tab grouping**, in one place.
+一个为多环境开发场景设计的 Chrome 扩展:**搜索切换 + 自动分组 + 归档收纳**,一个弹窗管好几百个标签页。
 
-## Overview
+## 功能一览
 
-### 🔍 Search & Switch
+### 🔍 搜索与切换
 
-- **Tiered matching**: title > pinyin > group name > domain > full URL. Exact substring matches rank above fuzzy ones, with matched characters highlighted
-- **Full pinyin matching**: `dingdan` → 「订单管理」, `djtx` (initials) also hits. Powered by a built-in Unicode codepoint-indexed table covering 20,924 CJK characters — no runtime encoding conversion, zero dependencies
-- **Exact group name boost**: when the query exactly equals a group name, that group is pinned to the top
-- **Command modes**: `/b` searches bookmarks, `/h` searches history (Chrome's native time ordering, same-URL collapsed). Or click the 🔗 / 🕐 buttons inside the search box
-- **Duplicate merging**: multiple tabs with the same URL collapse into one row with a count badge on the favicon; `⌘⌫` removes duplicates one at a time
-- **Three views** (cycle with `Tab`): Grouped (collapsible sections) / Recently Used / Current Window
+- **分层匹配**:标题 > 拼音 > 组名 > 域名 > 完整 URL,精确子串优先于模糊匹配,命中字符高亮
+- **全量拼音**:输 `dingdan` 命中「订单管理」,首字母 `djtx` 也行。内置 Unicode 码点索引表覆盖 20,924 个汉字,零依赖
+- **组名精确置顶**:搜索词与组名完全相同时该组固定排第一
+- **命令模式**:`/b` 搜书签、`/h` 搜历史(Chrome 原生时间序,同 URL 折叠),也可点搜索框内的 🔖 / 🕐 图标
+- **重复合并**:同 URL 的多个标签折叠成一行,favicon 角标显示份数,删除时逐份去除
+- **三个视图**(按 `Tab` 循环):分组(可折叠)/ 最近使用 / 当前窗口
+- **休眠页降权**:被系统休眠的标签标题里的 💤 前缀收拢成小徽标,信息保留但不扰视线
+- **输入法安全**:中文输入法组合输入期间,回车交给输入法选字,不会误触发切换
 
-### 🗂 Automatic Tab Grouping
+### 🗂 自动分组(内置规则引擎,可完全替代 Tabbiy)
 
-- **Domain rule engine**: each group is bound to a list of domains; new tabs and in-page navigations are grouped automatically
-- **Same-name group reuse**: before creating a group, existing same-name groups are looked up first — no duplicate group accumulation
-- **Others fallback**: tabs matching no rule go into an `Others` group, so the tab bar stays organized
-- **Rule editor**: chip-style editing in the settings panel (group name + domain chips), saved rules take effect immediately, with unsaved-change indication
-- **Master switch**: enable/disable at will; enabling triggers an immediate re-grouping of existing tabs. Predictable behavior, no silent failures
-- **Auto-collapse groups**: switching tabs collapses all other groups in the window — only the active group stays expanded
+- **域名规则归组**:每个分组绑定一组域名,新标签和页内跳转都自动归入;建组前先复用同名组,不积累重复组
+- **通配显式声明**:默认只精确匹配所写主机(含 www 别名);要写 `*.bilibili.com` 或打开通配开关才含子域,最长规则优先。`github.io` 等公共后缀、`localhost`、IP 永远只精确匹配,不误伤同后缀下别人的站点
+- **Others 兜底**:不命中任何规则的标签进 `Others` 组,标签栏始终整齐
+- **规则编辑器**:设置面板内 chip 式编辑,未保存有脏点提示,保存即生效;支持导入/导出 JSON、一键把当前标签页域名加成规则
+- **自动折叠**:切换标签时其他分组自动收起,只留活跃组展开
 
-### ⌨️ More
+### 🗃 归档收纳
 
-- **Go to previous tab** (`⌥E`): MRU-stack based A↔B toggling, falls back to earlier entries when the target has been closed
-- **Time tier tags**: current / 10 min (green) / 24 h (blue) / 7 d (grey) / 30 d (amber) / older (red)
-- **Stale tab cleanup** (`⌘⇧K`): close all tabs unused for 7+ days in one shot, undoable
-- **Undo**: closed tabs can be restored with `⌘Z` within 6 seconds — back to their original groups, with browsing history intact
-- **Performance**: event-driven worker keep-alive + tab snapshot (popup renders instantly), favicons served from Chrome's built-in cache
-- **Dark mode**: follows the system
+- 暂时不用的分组可整组**归档**:标签关闭、分组收进设置面板的「已归档」页签
+- 随时一键**恢复到标签栏**(标签连同分组结构原样回来),或彻底删除
 
-## Keyboard Shortcuts
+### 🎵 媒体控制
 
-| Shortcut | Action |
+- 在播/暂停的媒体页行内浮现控制钮:**播放/暂停、静音、画中画**,不用切过去就能操作
+- 打开弹窗时对页面批量探测一次:页面里存在带源的 `<video>/<audio>` 即算媒体页(暂停中也保留恢复入口),在播行有音浪动效标识
+
+### 🎨 双主题
+
+- **极简现代(Linear)**:冷灰底、发丝线、单强调色,明暗跟随系统
+- **水墨古风(新中式)**:宣纸肌理 + 墨色 + 朱印,宋体气质层只上标题区;分组色条是笔锋渐隐的墨线,计数角标是按组色动态晕染的墨团,搜索框下压一笔毛笔长横
+- 两套主题共用同一套 token 体系,互不影响;突出色蓝/青/绿/橙/玫红五色可换,各自有双主题适配值
+
+### ⌨️ 更多
+
+- **返回上一个标签**(`⌥Q`):MRU 栈 A↔B 互跳,目标已关则顺栈前移
+- **撤销关闭**(`⌘Z`):标签在后台静默恢复到原窗口原位置、原分组,不抢焦点不跳走
+- **清理陈旧标签**(`⌘⇧K`):一键关掉 7 天未用的标签,可撤销
+- **时间标签语义色**:刚刚 / 小时内 / 今天 / 昨天以绿→蓝→灰→赭四级色编码,扫读即分桶
+- **关闭标签后光标留在本组**:组内还有标签时焦点顺位到同组后继/前驱,整组清空才让位下一组
+- **性能**:content script 心跳保活 worker + 标签快照,弹窗即点即开;favicon 走 Chrome 内置缓存
+
+## 快捷键
+
+| 按键 | 作用 |
 |---|---|
-| `⌘E` | Open the popup (global, customizable via Chrome's shortcuts page) |
-| `⌥E` | Go to previous tab (A/B toggle) |
-| `↑ ↓` | Navigate (across groups, including group headers) |
-| `→ / ←` | Collapse / expand group |
-| `Tab` | Cycle views: Grouped / Recent / Current Window |
-| `Enter` | Switch to the selected tab |
-| `⌘C` | Copy the selected tab's URL |
-| `⌘⌫` | Delete selection (removes duplicates one at a time when present, otherwise closes the tab) |
-| `⌘Z` | Undo last close |
-| `⌘⇧K` | Clean up tabs unused for 7+ days |
-| `Esc` | Layered exit: close settings → clear query → close popup |
+| `⌘E` | 打开弹窗(全局,可在 chrome://extensions/shortcuts 改) |
+| `⌥Q` | 返回上一个标签(A/B 互跳) |
+| `↑ ↓` | 上下选择(跨分组,含分组头) |
+| `← →` | 收起 / 展开分组 |
+| `Tab` | 切换视图:分组 / 最近使用 / 当前窗口 |
+| `Enter` | 切换到选中标签 |
+| `⌘C` | 复制选中标签的 URL |
+| `⌘⌫` | 删除选中项(有重复时先逐份删副本;可在设置改为退格或双击退格) |
+| `⌘Z` | 撤销刚才的关闭 |
+| `⌘⇧K` | 清理 7 天未用的标签 |
+| `Esc` | 分层退出:关设置 → 清空搜索词 → 关闭弹窗 |
 
-On Windows, `⌘` maps to `Ctrl`.
+Windows 下 `⌘` 对应 `Ctrl`,`⌥` 对应 `Alt`。
 
-## Installation (Developer Mode)
+## 安装(开发者模式)
 
-1. Download this repository
-2. Open `chrome://extensions/` and enable **Developer mode** (top right)
-3. Click **Load unpacked** and select the project directory
-4. Open `chrome://extensions/shortcuts` to confirm key bindings (`⌘E` for popup, `⌥E` for previous tab)
+1. 下载本仓库
+2. 打开 `chrome://extensions/`,右上角开启**开发者模式**
+3. 点**加载已解压的扩展程序**,选择项目目录
+4. 打开 `chrome://extensions/shortcuts` 确认快捷键(`⌘E` 弹窗,`⌥Q` 上一个标签)
 
-## Known Limitations
+## 已知限制
 
-- **Saved tab groups cannot be managed by extensions**: saved-but-not-open groups shown on the bookmarks bar are outside every extension API (`tabGroups` only covers open groups; they don't exist in the `bookmarks` tree either). They must be removed manually
-- **Polyphonic characters use the common reading**: 「重」 → zhong (chong as in Chongqing won't match); initial-letter and raw-text matching serve as fallbacks
-- **Auto-collapse is fully managed**: manually expanded groups get collapsed again when you switch tabs (think of it as peek-then-auto-close)
-- **MV3 worker idle**: the first invocation after a long idle may have slight latency (event-driven keep-alive covers most cases); a second press recovers instantly
+- **书签栏的"已保存标签组"管不了**:那是所有扩展 API 的盲区(`tabGroups` 只覆盖开着的组,`bookmarks` 树里也没有),只能手动删
+- **多音字取常用音**:「重」按 zhong 收录(chong 重庆打不中);首字母匹配和原文匹配作为兜底
+- **自动折叠是全托管的**:手动展开的组在切换标签后会被再次收起(理解为"临时展一眼")
 
-## Tech
+## 技术
 
-Plain JavaScript + DOM, no frameworks, no dependencies. Manifest V3.
-Permissions: `tabs` / `tabGroups` / `sessions` / `favicon` / `bookmarks` / `history` / `storage`.
+原生 JavaScript + DOM,无框架无依赖,Manifest V3。
+代码按 `src/core`(基础设施)/ `src/features`(功能组件)分层,后台自动分组与弹窗规则编辑器共用同一份 `rules-match.js`。
+权限:`tabs` / `tabGroups` / `sessions` / `favicon` / `bookmarks` / `history` / `storage` / `activeTab` / `scripting`。
