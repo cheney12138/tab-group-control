@@ -50,8 +50,8 @@
       }
     }
     /* ============================================================
-     * 主题: Linear(可回退) — 需 <html data-theme="linear"> 生效;
-     * 不加 data-theme 则走上面 :root 默认(slate+蓝),互不影响。
+     * 主题: Linear(默认主题) — <html data-theme="linear"> 生效;
+     * data-theme 缺省/未知值按本主题渲染(ADR-0003,:root 只存度量基座)。
      * 暖黑/冷亮 + 发丝线 + 单一紫强调 + 圆角 6/12/16
      * ============================================================ */
     :root[data-theme="linear"] {
@@ -2525,7 +2525,7 @@
         </div>
         <div class="rules-head-row">
           <div class="rules-title-block">
-            <div class="rules-title">按域名自动归类<span id="rulesDirtyDot" class="dirty-dot" title="规则有未保存的修改"></span><span class="hint-icon" tabindex="0" role="note" aria-label="默认精确匹配单机；要含所有子域请写 *.域名(如 *.bilibili.com)或开启通配开关"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.4" r="0.4" fill="currentColor" stroke="none"/></svg><span class="hint-tip">默认<span class="hint-tip-strong">精确匹配单机</span>；要含所有子域请写 <span class="hint-tip-strong">*.域名</span>（如 *.bilibili.com）或开启通配开关</span></span></div>
+            <div class="rules-title">按域名自动归类<span id="rulesDirtyDot" class="dirty-dot" title="规则有未保存的修改"></span><span class="hint-icon" tabindex="0" role="note" aria-label="默认精确匹配单机；要含所有子域请写 *.域名(如 *.bilibili.com)或开启通配开关"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.4" r="0.4" fill="currentColor" stroke="none"/></svg><span class="hint-tip">默认<span class="hint-tip-strong">精确匹配单机</span>；要含所有子域请写 <span class="hint-tip-strong">*.域名</span>（如 *.bilibili.com）或开启通配开关；要按板块细分写 <span class="hint-tip-strong">域名/前缀</span>（如 github.com/myid，仅精确主机可带路径）</span></span></div>
           </div>
           <div class="rules-io-links">
             <button id="addCurrentHostBtn" class="rules-io-link" title="把当前标签页域名作为分组规则">＋ 添加域名</button>
@@ -2579,7 +2579,7 @@
           <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="keycap"><span class="k-cmd"></span>⇧K</span></button>
         </div>
         <div class="help-card">
-          <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 v1.0.0</div>
+          <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 v1.2.0</div>
           <table class="shortcut-table">
             <tbody>
               <tr><td>↑ ↓</td><td>上下选择(跨分组)</td></tr>
@@ -2592,7 +2592,7 @@
               <tr><td><span class="k-c"></span>⇧K</td><td>清理 7 天未用的标签</td></tr>
               <tr><td>Esc</td><td>清空搜索词 / 关闭</td></tr>
               <tr><td><span class="k-c"></span>E</td><td>呼出本弹窗(全局)</td></tr>
-              <tr><td>/b /h</td><td>搜索 书签 / 历史(输入命令后接关键词)</td></tr>
+              <tr><td>/b /h /r</td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
             </tbody>
           </table>
           <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="k-cmd"></span>E</div>

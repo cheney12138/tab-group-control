@@ -34,6 +34,7 @@ function staggerDelay() {
 function emptyMessage() {
   if (state.activeCmd === '/b') return '书签里没有匹配项';
   if (state.activeCmd === '/h') return '历史里没找到这条记录';
+  if (state.activeCmd === '/r') return '最近关闭里没有匹配项';
   if (state.searching) return '没有匹配的标签页,试试拼音首字母?';
   return '没有打开的标签页';
 }

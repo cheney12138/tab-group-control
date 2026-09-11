@@ -81,14 +81,14 @@ export function applyRulesFilter() {
     let chipHit = false;
     for (const chip of groupEl.querySelectorAll('.host-chip')) {
       const host = chip.dataset.host || '';
-      const hit = !!q && host.toLowerCase().includes(q);
+      const hit = !!q && (host + (chip.dataset.path || '')).toLowerCase().includes(q);
       if (hit) chipHit = true;
       // 命中分组名时整组都算数, 不再压暗任何芯片
       chip.classList.toggle('chip-dim', !!q && !hit && !nameHit);
       // 高亮按“芯片显示文本”算(通配芯片显示为 *.host)
       const label = chip.querySelector('span');
       if (label) {
-        const display = (chip.dataset.zone === '1' ? '*.' : '') + host;
+        const display = (chip.dataset.zone === '1' ? '*.' : '') + host + (chip.dataset.path || '');
         const html = markText(display, hit ? rulesFindHits(display, q) : []);
         if (label.innerHTML !== html) label.innerHTML = html;
       }
@@ -171,39 +171,45 @@ function createHostChip(hostOrEntry, insertBefore) {
     ? hostOrEntry : parseRuleEntry(hostOrEntry);
   if (!entry) return null;
   const canonical = entry.host;
-  // 同主机名芯片已存在时: 通配覆盖精确 → 升级(去掉旧芯片接着插入);
+  // 芯片身份 = 主机 + 路径(路径规则引入后,同主机不同前缀是不同规则);
+  // 同键芯片已存在时: 通配覆盖精确 → 升级(去掉旧芯片接着插入);
   // 其余(相同写法 / 旧已是通配)视为重复,任何插入路径都覆盖
   const flow = insertBefore?.parentElement;
   if (flow) {
     const dup = [...flow.querySelectorAll('.host-chip')]
-      .find(c => (c.dataset.host || '') === canonical);
+      .find(c => (c.dataset.host || '') === canonical && (c.dataset.path || '') === (entry.path || ''));
     if (dup && !(entry.zone && dup.dataset.zone !== '1')) return null;
     if (dup) dup.remove();
   }
   const chip = document.createElement('span');
   chip.className = 'host-chip';
   chip.dataset.host = canonical;
+  chip.dataset.path = entry.path || '';
   chip.dataset.zone = entry.zone ? '1' : '';
 
   const label = document.createElement('span');
-  // 不可通配的芯片(IP / localhost / github.io 这类多租户平台域)不给
-  // "点击切换"的引导——点击本来就无效(见下方监听),提示了做不到的事
-  // 用户会以为功能坏了
-  const canToggle = wildcardAllowed(canonical);
+  // 不可通配的芯片(IP / localhost / github.io 这类多租户平台域,以及一切
+  // 带路径的规则——通配不接细枝,只得精确)不给"点击切换"的引导——
+  // 点击本来就无效(见下方监听),提示了做不到的事用户会以为功能坏了
+  const hasPath = !!entry.path;
+  const canToggle = wildcardAllowed(canonical) && !hasPath;
+  const pathSuffix = entry.path || '';
   const updateLabel = (isZone) => {
-    label.textContent = isZone ? `*.${canonical}` : canonical;
-    label.title = isZone
-      ? `${canonical} 及所有子域都归这组 (点击切换为仅当前主机)`
-      : canToggle
-        ? `仅 ${canonical} 这台主机 (点击切换为整站通配)`
-        : `仅 ${canonical} 这台主机`;
+    label.textContent = (isZone ? `*.${canonical}` : canonical) + pathSuffix;
+    label.title = hasPath
+      ? `仅 ${canonical} 且路径以 ${pathSuffix} 打头`
+      : isZone
+        ? `${canonical} 及所有子域都归这组 (点击切换为仅当前主机)`
+        : canToggle
+          ? `仅 ${canonical} 这台主机 (点击切换为整站通配)`
+          : `仅 ${canonical} 这台主机`;
   };
   updateLabel(entry.zone);
   label.style.cursor = 'pointer';
-  // 点击芯片文字可便捷切换 精确/整站通配 状态
+  // 点击芯片文字可便捷切换 精确/整站通配 状态(带路径不允许,直接无视)
   label.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!wildcardAllowed(canonical)) return;
+    if (!canToggle) return;
     const nowZone = chip.dataset.zone === '1';
     const nextZone = !nowZone;
     chip.dataset.zone = nextZone ? '1' : '';
@@ -229,14 +235,18 @@ function createHostChip(hostOrEntry, insertBefore) {
 function chipEntries(groupEl) {
   return [...groupEl.querySelectorAll('.host-chip')]
     .map(c => (c.dataset.host
-      ? { host: c.dataset.host, zone: c.dataset.zone === '1' }
+      ? { host: c.dataset.host, zone: c.dataset.zone === '1', path: c.dataset.path || '' }
       : parseRuleEntry(c.querySelector('span')?.textContent)))
     .filter(Boolean);
 }
 
-// 编辑器里现有的芯片主机名(供去重;同主机名只算一条)
-function chipHosts(groupEl) {
-  return [...new Set(chipEntries(groupEl).map(e => e.host))];
+// 跨组归属裁决: 只有"完全相同的规则键"(同 host + 同 path)落在两个组才算冲突——
+// 匹配器的索引格子 {hostOnly, paths[]} 里,同键两条记录先到先得,归属不确定。
+// 裸域名与路径规则跨组共存是合法且确定的(最长优先:路径先赢,其余落裸域名);
+// 嵌套路径(/a 与 /a/b)同理放行:
+function ruleConflictsWithGroup(groupEl, entry) {
+  return chipEntries(groupEl).some(o =>
+    o.host === entry.host && (o.path || '') === (entry.path || ''));
 }
 
 function buildRuleGroup(name, hosts) {
@@ -313,20 +323,23 @@ function buildRuleGroup(name, hosts) {
       if (entry) parts.push(entry);
       else invalid.push(piece);
     }
+    // 通配挂路径是专门的错法,给专门的提示(parse 整条拒收,泛泛的"无效"说不出原因)
+    const zoneWithPath = invalid.filter(x => /^\*\..+\//.test(x));
+    if (zoneWithPath.length) showToast(`通配域名(*.)不能再带路径: ${zoneWithPath.join('、')}`);
     let added = 0;
     let blocked = null;
     for (const e of parts) {
       const owner = [...rulesListEl.querySelectorAll('.rule-group')]
-        .find(g => g !== groupDiv && chipHosts(g).includes(e.host));
+        .find(g => g !== groupDiv && ruleConflictsWithGroup(g, e));
       if (owner) {
         const ownerName = owner.querySelector('.rule-name-input')?.value.trim() || '某组';
-        blocked = { host: e.host, ownerName };
+        blocked = { host: ruleChipLabel(e), ownerName };
         continue;
       }
       if (addHostChip(e)) added += 1;
     }
     if (invalid.length) showToast(`没识别到有效域名: ${invalid.join('、')}`);
-    else if (blocked) showToast(`${blocked.host} 已在「${blocked.ownerName}」中,一个域名只能归属一个分组`);
+    else if (blocked) showToast(`${blocked.host} 已在「${blocked.ownerName}」中,同一规则只能归属一个分组`);
     else if (parts.length && !added) showToast('这些域名已经在这组里了');
     if (added > 0) markRulesDirty();
     // 无效片段保留待改;全部处理完才清空。
@@ -357,8 +370,8 @@ function buildRuleGroup(name, hosts) {
   // live.bilibili.com 冗余)。同组内被覆盖 = 匹配结果完全一样,渲染时收拢
   const own = [...new Map((Array.isArray(hosts) ? hosts : [])
     .map(h => ((h && typeof h === 'object') ? h : parseRuleEntry(h)))
-    .filter(Boolean).map(e => [e.host, e])).values()];
-  const coveredBy = (h) => own.find(x => x.zone && x.host !== h.host && h.host.endsWith(`.${x.host}`));
+    .filter(Boolean).map(e => [`${e.host}|${e.path || ''}`, e])).values()];
+  const coveredBy = (h) => !h.path && own.find(x => x.zone && x.host !== h.host && h.host.endsWith(`.${x.host}`));
   own.filter(h => !coveredBy(h)).forEach(addHostChip);
   groupDiv.appendChild(chipFlow);
   return groupDiv;
@@ -399,7 +412,7 @@ async function addHostToRuleGroup(hostOrEntry, groupName, opts = {}) {
   const target = groups.find(g => g.querySelector('.rule-name-input')?.value.trim() === groupName);
   // 域名只能绑定一个分组规则: 已在任何一组存在则拦截(跨分组去重)。
   // 例外: 目标组里已有同主机名的精确芯片、这次开的是通配 → 原地升级
-  const dupGroup = groups.find(g => chipHosts(g).includes(host));
+  const dupGroup = groups.find(g => ruleConflictsWithGroup(g, { host, zone: entry.zone, path: '' }));
   if (dupGroup) {
     const dupChip = [...dupGroup.querySelectorAll('.host-chip')]
       .find(c => (c.dataset.host || '') === host);
@@ -415,7 +428,7 @@ async function addHostToRuleGroup(hostOrEntry, groupName, opts = {}) {
       flash.classList.add('dup-flash');
       setTimeout(() => flash.classList.remove('dup-flash'), 1300);
       const dupName = dupGroup.querySelector('.rule-name-input')?.value.trim() || '某组';
-      showToast(`该域名已在「${dupName}」中,一个域名只能归属一个分组`);
+      showToast(`该域名已在「${dupName}」中,同一规则只能归属一个分组`);
       return;
     }
   }
@@ -458,13 +471,13 @@ export async function addDraggedTabHostToRule(url, groupName, opts = {}) {
   // 规则归属跟着走。旧组若因此一枚域名不剩,空组不会被落库
   // (collectRulesFromEditor 忽略无域名的组),等同那条规则被删掉
   const owner = [...rulesListEl.querySelectorAll('.rule-group')]
-    .find(g => chipHosts(g).includes(host));
+    .find(g => ruleConflictsWithGroup(g, { host, zone: false, path: '' }));
   let from = '';
   if (owner) {
     const ownerName = owner.querySelector('.rule-name-input')?.value.trim() || '';
     if (ownerName !== groupName) {
       [...owner.querySelectorAll('.host-chip')]
-        .find(c => (c.dataset.host || '') === host)?.remove();
+        .find(c => (c.dataset.host || '') === host && !c.dataset.path)?.remove();
       from = ownerName;
     }
   }
@@ -589,7 +602,7 @@ function collectRulesFromEditor() {
   rulesListEl.querySelectorAll('.rule-group').forEach(g => {
     const name = g.querySelector('.rule-name-input')?.value.trim();
     // 通配规则落库为 "*.host",精确规则存裸主机名——与导入/导出同一格式
-    const hosts = chipEntries(g).map(e => (e.zone ? `*.${e.host}` : e.host));
+    const hosts = chipEntries(g).map(e => (e.zone ? `*.${e.host}` : e.host + (e.path || '')));
     if (!name || !hosts.length) return;
     if (rules[name]) {
       // 同名组兜底(失焦闪烁提示后用户仍保存): 合并域名不覆盖,数据不丢
@@ -746,9 +759,22 @@ async function saveRules(opts = {}) {
       inp.dispatchEvent(new Event('blur'));
     }
   });
+  // 宁拦不丢: 填了域名但没起组名的行,保存即数据丢失(组名是存储的键,
+  // 落不了库)。历史行为是整行静默丢弃 + toast "1 个无效组被忽略",
+  // 用户根本联想不到丢的是自己刚加的域名。改为整体拦停、聚焦过去
+  const unnamedWithChips = [...rulesListEl.querySelectorAll('.rule-group')].filter(g => {
+    const n = g.querySelector('.rule-name-input')?.value.trim();
+    return !n && chipEntries(g).length;
+  });
+  if (unnamedWithChips.length) {
+    showToast(`有 ${unnamedWithChips.length} 个组填了域名但还没组名,规则未保存——补个组名再来`);
+    unnamedWithChips[0].querySelector('.rule-name-input')?.focus();
+    return;
+  }
   const rules = collectRulesFromEditor();
   const dupMerged = collectRulesFromEditor.lastDupMerged || 0;
-  // 无效组 = 无名或无域名(被忽略);同名组不算无效——域名已合并,没丢数据
+  // 无效组 = 无名或无域名(被忽略);走到这里无名组必然无域名,纯垃圾行。
+  // 同名组不算无效——域名已合并,没丢数据
   const invalid = [...rulesListEl.querySelectorAll('.rule-group')].filter(g => {
     const n = g.querySelector('.rule-name-input')?.value.trim();
     return !n || !chipEntries(g).length;
@@ -766,7 +792,7 @@ async function saveRules(opts = {}) {
   try {
     await chrome.storage.local.set({ groupRules: rules });
     clearRulesDirty();
-    if (!opts.silent) showToast(`规则已保存(${Object.keys(rules).length} 组)${dupMerged ? `,${dupMerged} 个同名组已合并` : ''}${invalid ? `,${invalid} 个无效组被忽略` : ''}`);
+    if (!opts.silent) showToast(`规则已保存(${Object.keys(rules).length} 组)${dupMerged ? `,${dupMerged} 个同名组已合并` : ''}${invalid ? `,${invalid} 个空白行已忽略` : ''}`);
     // 同名合并后编辑器与落库不一致(DOM 里仍是两行同名),重渲染对齐真实状态
     if (dupMerged) renderRulesEditor(rules);
     chrome.runtime.sendMessage({ type: 'group-existing' }).catch(() => {});

@@ -44,9 +44,9 @@ async function loadRules() {
 }
 
 function matchGroup(url) {
-  // ruleHostOfUrl: 只认 http(s)、去掉端口(chrome:// / about: 一律不命中)
-  const host = ruleHostOfUrl(url);
-  return host ? ruleMatcher.match(host) : null;
+  // ruleHostOfUrl 只做 http(s) 守卫(chrome:// / about: 一律不命中);
+  // 匹配器必须吃完整 URL——路径规则需要 pathname,传裸 host 等于废了该维度
+  return ruleHostOfUrl(url) ? ruleMatcher.match(url) : null;
 }
 
 // 检查某个组名是否属于任何一条自定义域名规则
@@ -495,14 +495,23 @@ async function cleanupRemovedRules(oldRules, newRules) {
     for (const tab of tabs) {
       if (!tab.url || tab.url.startsWith('chrome')) continue;
       if (tab.groupId === -1 || !tab.groupId) continue; // 散标签没有遗留
-      let host;
-      try { host = new URL(tab.url).hostname; } catch { continue; }
-      // 老规则覆盖、新规则不再覆盖 = 这条规则的归属被删掉了
-      if (oldMatcher.match(host) == null) continue;
-      if (newMatcher.match(host) != null) continue;
+      // 差分必须吃完整 URL(与 matchGroup 同一理由): 路径规则删除后,
+      // 传裸 host 会让"该路径也不再覆盖"永远检测不到,标签赖在死规则组里
+      if (oldMatcher.match(tab.url) == null) continue;
       // 当前组名须是被编辑过的规则组(手动组不动)
       const current = await chrome.tabGroups.get(tab.groupId).catch(() => null);
       if (!current || !oldGroupNames.has(current.title)) continue;
+      // 仍命中新规则(同域另一条兜底,如删掉路径规则后落回裸域名):
+      // 当场迁去新命中的组——不能指望 groupExistingTabs,旧组此刻已脱离规则名册,
+      // 会被它的"自定义手动组不拆"保护当成手动组永远冻结(保护条款打架的缝)
+      const newHit = newMatcher.match(tab.url);
+      if (newHit) {
+        if (newHit !== current.title) {
+          await enqueueGroupOp(() => attachTabToGroup(tab, newHit));
+          moved += 1;
+        }
+        continue;
+      }
       // 走归组串行队列,与事件驱动的 autoGroupTab 互斥
       // (query→group 两步竞态与归组同源)
       await enqueueGroupOp(() => moveTabFromRemovedRule(tab, current.title));

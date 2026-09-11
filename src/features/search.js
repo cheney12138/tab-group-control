@@ -12,12 +12,14 @@ import { state, searchCollapsed, collapsed, saveCollapsed, mediaTabIds } from '.
 let actions = null; // initSearch 注入: { render, refreshData, focusInput, getInputValue, setInputValue }
 export function initSearch(injected) { actions = injected; }
 
-// ---- 命令模式数据源: /b 书签 /h 历史 ----
+// ---- 命令模式数据源: /b 书签 /h 历史 /r 最近关闭 ----
 // 结构与 state.allTabs 同构([{tab, group}]),tab.id 用负数避免与真实 tabId 冲突
 let bookmarkItems = [];
 let historyItems = [];
+let closedItems = [];
 let bookmarksLoaded = false;
 let historyLoaded = false;
+let closedLoaded = false;
 
 async function loadBookmarks() {
   if (bookmarksLoaded) return;
@@ -76,22 +78,51 @@ async function loadHistory() {
   }
 }
 
+// /r 最近关闭: Chrome sessions 给的"关闭现场"快照(关的那一刻的标题/URL/favIcon),
+// 与 /h 的浏览足迹语义不同(CONTEXT.md「最近关闭」)
+async function loadClosed() {
+  if (closedLoaded) return;
+  try {
+    const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 25 });
+    // 只收单标签会话: 窗口级条目(.window)一开就是一窝,与"找回那一页"的场景不合
+    // 同 URL 折叠: 关了开、开了又关的页面只留最近关闭的一次(取 API 原生倒序的首见)
+    const seen = new Set();
+    closedItems = [];
+    for (const s of sessions) {
+      const t = s.tab;
+      if (!t || !t.url || seen.has(t.url)) continue;
+      seen.add(t.url);
+      closedItems.push({
+        tab: { id: -20000 - closedItems.length, title: t.title || t.url, url: t.url,
+               favIconUrl: t.favIconUrl || '', active: false, windowId: -1,
+               lastAccessed: (s.lastModified || 0) * 1000 }, // lastModified 是秒
+        group: null,
+      });
+    }
+    closedLoaded = closedItems.length > 0; // 失败/空结果允许重试
+  } catch (e) {
+    console.error('加载最近关闭失败:', e);
+    closedLoaded = false;
+  }
+}
+
 
 export function search(query) {
   const q = query.trim();
-  // 命令模式(QuicKey 同款): /b 书签 /h 历史(含已关标签)
+  // 命令模式(QuicKey 同款): /b 书签 /h 历史 /r 最近关闭
   // 前缀命中即进入命令模式,switchTo 对负 id 条目走"新开标签"
   const isBookmarksCmd = q === '/b' || q.startsWith('/b ');
   const isHistoryCmd = q === '/h' || q.startsWith('/h ');
-  const inCommandMode = isBookmarksCmd || isHistoryCmd;
+  const isClosedCmd = q === '/r' || q.startsWith('/r ');
+  const inCommandMode = isBookmarksCmd || isHistoryCmd || isClosedCmd;
   let source = inCommandMode
-    ? (isBookmarksCmd ? bookmarkItems : historyItems)
+    ? (isBookmarksCmd ? bookmarkItems : isHistoryCmd ? historyItems : closedItems)
     : (state.view === 'current' && state.currentWindowId != null
         ? state.allTabs.filter(x => x.tab.windowId === state.currentWindowId)
         : state.allTabs);
   // 命令模式剥掉前缀再匹配;裸命令(如"/b")无关键词 → 浏览全量
   const matchQ = inCommandMode
-    ? (q.split(/^\/[bh] ?/)[1] || '') : q;
+    ? (q.split(/^\/[bhr] ?/)[1] || '') : q;
   // 供行渲染区分: /h 的条目加半透明降级(历史非活标签)
   state.currentSourceIsHistory = isHistoryCmd;
   if (!q || (inCommandMode && !matchQ)) {
@@ -235,7 +266,7 @@ let debounceTimer = null;
 // 判断依据是胶囊状态 state.activeCmd——前缀已被从输入框剥离,
 // 检查 input.value.startsWith('/h') 会永远 false,裸命令就永远空白
 export function refreshIfCmdMode() {
-  if (state.activeCmd === '/b' || state.activeCmd === '/h') {
+  if (state.activeCmd === '/b' || state.activeCmd === '/h' || state.activeCmd === '/r') {
     search(searchValue());
     actions.render();
     if (state.filtered.length) setActive(0);
@@ -298,10 +329,10 @@ export function syncCmdChip() {
   // 已激活后 input.value 只存纯关键词,不再重新检测(否则剥掉前缀后
   // 下次 input 事件匹配不到命令,胶囊会误消失)
   if (!state.activeCmd) {
-    const m = input.value.match(/^(\/[bh])\s?/);
+    const m = input.value.match(/^(\/[bhr])\s?/);
     if (m) {
       state.activeCmd = m[1];
-      const kw = input.value.replace(/^\/[bh]\s?/, '');
+      const kw = input.value.replace(/^\/[bhr]\s?/, '');
       input.value = kw; // 剥掉前缀只留关键词
     }
   }
@@ -370,6 +401,7 @@ input.addEventListener('input', () => {
     // 命令模式触发对应数据源的按需加载(书签/历史,弹窗存活期内缓存)
     if (state.activeCmd === '/b') loadBookmarks().then(refreshIfCmdMode);
     else if (state.activeCmd === '/h') loadHistory().then(refreshIfCmdMode);
+    else if (state.activeCmd === '/r') loadClosed().then(refreshIfCmdMode);
     // search() 需要完整值(含前缀)判定命令模式——胶囊只是视觉层
     search(state.activeCmd ? state.activeCmd + ' ' + input.value : input.value);
     actions.render();
