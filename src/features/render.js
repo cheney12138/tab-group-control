@@ -401,7 +401,18 @@ function buildTabRow(item) {
   info.className = 'tab-info';
   const title = document.createElement('div');
   title.className = 'title';
-  title.innerHTML = markText(t.title || t.url, item.titleHits);
+  // 休眠标题前缀(休眠工具/系统往原始标题塞的 💤): 剥离正文并降权为小角标,
+  // 搜索高亮偏移随剥离长度前移,避免 emoji 在 13px 字号下挤成噪点
+  const rawTitle = t.title || t.url;
+  const sleepPrefix = rawTitle.match(/^[\s\u200B-\u200D\uFEFF]*(?:\u{1F4A4}[\s\u200B-\u200D\uFEFF]*)+/u);
+  if (sleepPrefix) {
+    const off = sleepPrefix[0].length;
+    const body = rawTitle.slice(off);
+    title.innerHTML = '<span class="sleep-mark" title="标签页已休眠">💤</span>'
+      + (body ? markText(body, item.titleHits && item.titleHits.map(i => i - off).filter(i => i >= 0)) : escapeHtml(rawTitle));
+  } else {
+    title.innerHTML = markText(rawTitle, item.titleHits);
+  }
   info.appendChild(title);
   // URL 行: 严格遵循用户设置(settings.showUrl)。未开启时绝不擅自展示,保持列表单行高度纯净整齐
   if (actions.getSettings().showUrl) {
