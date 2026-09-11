@@ -4,6 +4,8 @@
 // 域名解析/匹配函数(parseRuleEntry/ruleHostOfUrl/wildcardAllowed/siteRootOf/
 // ruleChipLabel)来自 rules-match.js(classic script 全局,与 background 共享)
 import { showToast } from '../core/dom.js';
+// markText: 与主搜索共用同一套命中高亮(<mark>,全局已有配色)
+import { markText } from '../core/pinyin.js';
 
 // ---- 自动分组规则编辑器 ----
 // 规则存 chrome.storage.local(background 同源读取,storage.onChanged 即时生效)。
@@ -17,6 +19,9 @@ function markRulesDirty() {
   saveRulesBtn.classList.add('dirty');
   saveRulesBtn.textContent = '保存规则 •';
   rulesDirtyDot.classList.add('show');
+  // 编辑器所有变更路径(改名/增删域名/增删组/导入)都会经过这里,
+  // 在此单点重算过滤——否则过滤态下新增的域名不会被正确压暗/高亮
+  applyRulesFilter();
 }
 function clearRulesDirty() {
   saveRulesBtn.classList.remove('dirty');
@@ -35,7 +40,93 @@ rulesListEl.addEventListener('click', (e) => {
 });
 // 增删组直接标脏(发生在 rulesListEl 之外)
 // 设置面板展开时由 main 调用: storage → 编辑器渲染,并据实标脏/清脏
+// ---- 规则搜索 ----
+// 匹配分组名 & 域名(大小写不敏感子串)。
+// 硬约束: 过滤只改展示, 不增删 DOM 节点——collectRulesFromEditor 靠遍历
+// #rulesList 生成落库内容, 真删节点会让“带着搜索词点保存”把看不见的规则
+// 整批删掉。所以分组用 display:none 隐藏、芯片用 opacity 压暗, 全都还在 DOM 里
+const rulesSearchEl = document.getElementById('rulesSearch');
+const rulesSearchWrap = document.getElementById('rulesSearchWrap');
+const rulesSearchCountEl = document.getElementById('rulesSearchCount');
+const rulesSearchClearBtn = document.getElementById('rulesSearchClear');
+const rulesEmptyEl = document.getElementById('rulesEmpty');
+
+let rulesFilterActive = false; // 上次是否处于过滤态(无搜索词时省掉整轮遍历)
+
+// 汉字/子串的全部命中下标(高亮用)
+function rulesFindHits(text, q) {
+  const hits = [];
+  if (!q) return hits;
+  const t = text.toLowerCase();
+  let i = t.indexOf(q);
+  while (i !== -1) {
+    for (let k = i; k < i + q.length; k += 1) hits.push(k);
+    i = t.indexOf(q, i + q.length);
+  }
+  return hits;
+}
+
+// 按当前搜索词重算展示。幂等, 内容变更后可重复调用
+export function applyRulesFilter() {
+  const q = (rulesSearchEl?.value || '').trim().toLowerCase();
+  if (!q && !rulesFilterActive) return; // 无搜索词且上次也未过滤 → 无事可做
+  rulesFilterActive = !!q;
+  rulesSearchWrap?.classList.toggle('filtering', !!q);
+
+  const groups = [...rulesListEl.querySelectorAll('.rule-group')];
+  let shown = 0;
+  for (const groupEl of groups) {
+    const name = (groupEl.querySelector('.rule-name-input')?.value || '').trim();
+    const nameHit = !!q && name.toLowerCase().includes(q);
+    let chipHit = false;
+    for (const chip of groupEl.querySelectorAll('.host-chip')) {
+      const host = chip.dataset.host || '';
+      const hit = !!q && host.toLowerCase().includes(q);
+      if (hit) chipHit = true;
+      // 命中分组名时整组都算数, 不再压暗任何芯片
+      chip.classList.toggle('chip-dim', !!q && !hit && !nameHit);
+      // 高亮按“芯片显示文本”算(通配芯片显示为 *.host)
+      const label = chip.querySelector('span');
+      if (label) {
+        const display = (chip.dataset.zone === '1' ? '*.' : '') + host;
+        const html = markText(display, hit ? rulesFindHits(display, q) : []);
+        if (label.innerHTML !== html) label.innerHTML = html;
+      }
+    }
+    // 组名是 <input>, 塞不进 <mark>: 名字命中只体现为整组保留
+    const show = !q || nameHit || chipHit;
+    groupEl.classList.toggle('rule-hidden', !show);
+    if (show) shown += 1;
+  }
+
+  if (rulesSearchCountEl) rulesSearchCountEl.textContent = q ? `${shown}/${groups.length}` : '';
+  rulesEmptyEl?.classList.toggle('show', !!q && shown === 0 && groups.length > 0);
+}
+
+rulesSearchEl?.addEventListener('input', applyRulesFilter);
+rulesSearchEl?.addEventListener('keydown', (e) => {
+  // 组合输入(拼音未上屏)期间让位给输入法
+  if (e.isComposing || e.keyCode === 229) return;
+  e.stopPropagation(); // 不触发全局快捷键
+  if (e.key !== 'Escape') return;
+  // Esc 先清搜索词, 已经空了才交还焦点(再按 Esc 才关设置面板)
+  if (rulesSearchEl.value) {
+    rulesSearchEl.value = '';
+    applyRulesFilter();
+  } else {
+    rulesSearchEl.blur();
+  }
+});
+rulesSearchClearBtn?.addEventListener('click', () => {
+  rulesSearchEl.value = '';
+  applyRulesFilter();
+  rulesSearchEl.focus();
+});
+
 export async function loadRulesForEdit() {
+  // 面板每次展开都从 storage 重渲染: 顺带清掉上次的搜索词,
+  // 免得重开时看到“莫名只剩两条规则”却不知道是过滤造成的
+  if (rulesSearchEl) rulesSearchEl.value = '';
   try {
     const stored = await chrome.storage.local.get('groupRules');
     const saved = (stored?.groupRules && typeof stored.groupRules === 'object') ? stored.groupRules : {};
@@ -62,11 +153,13 @@ function renderRulesEditor(rules) {
   const entries = Object.entries(rules);
   if (!entries.length) {
     rulesListEl.innerHTML = '<div style="padding:8px 0;color:var(--text-3);font-size:11px">暂无规则,点击下方新增组</div>';
-    return;
+  } else {
+    for (const [name, hosts] of entries) {
+      rulesListEl.appendChild(buildRuleGroup(name, hosts || []));
+    }
   }
-  for (const [name, hosts] of entries) {
-    rulesListEl.appendChild(buildRuleGroup(name, hosts || []));
-  }
+  // 重渲染后 DOM 是全新的, 把过滤状态与命中高亮重新贴回去
+  applyRulesFilter();
 }
 
 // 单个规则组的编辑行: 组名输入 + 域名芯片流(每枚可删) + 内联追加输入
@@ -296,7 +389,7 @@ export function closeGroupPop() { if (groupPop) { groupPop.remove(); groupPop = 
 //      编辑(改名/删域名瞬间被弹回),storage.onChanged 的清理链还会把
 //      编辑器里未保存的组当成"已删除"去迁移真标签。
 // 合并进 DOM + 标脏,让「保存规则」保持唯一落库口,与手工编辑/导入一致
-async function addHostToRuleGroup(hostOrEntry, groupName) {
+async function addHostToRuleGroup(hostOrEntry, groupName, opts = {}) {
   const entry = (hostOrEntry && typeof hostOrEntry === 'object')
     ? hostOrEntry : parseRuleEntry(hostOrEntry);
   if (!entry) { showToast('未识别到有效域名'); return; }
@@ -339,7 +432,45 @@ async function addHostToRuleGroup(hostOrEntry, groupName) {
   closeGroupPop();
   // 添加即保存,省去再点"保存规则"
   await saveRules({ silent: true });
-  showToast(`已将 ${ruleChipLabel(entry)} 加入「${groupName}」并保存`);
+  // 拖拽归组路径把提示合并进"移入分组"那一条,由调用方传 silent
+  if (!opts.silent) showToast(`已将 ${ruleChipLabel(entry)} 加入「${groupName}」并保存`);
+}
+
+// 拖拽归组专用入口: 把被拖动标签的域名并入目标规则组。
+// 复用编辑器草稿 + saveRules 这条唯一落库口(与「＋ 添加域名」完全同源),而不是
+// 直写 storage——直写会被用户编辑器里的未保存草稿在下一次保存时反向覆盖。
+// 返回 { status, host?, owner? }:
+//   added    已并入该组规则
+//   moved    域名原本在别组,已从旧组摘掉改隶本组(from = 旧组名)
+//   covered  该组现有规则已覆盖此域名(精确芯片或通配),无需改动
+//   invalid  取不到域名(非 http(s),如 chrome:// / file://)
+export async function addDraggedTabHostToRule(url, groupName, opts = {}) {
+  const host = ruleHostOfUrl(url);
+  if (!host || !groupName) return { status: 'invalid' };
+  // 面板从未展开时编辑器是空的: 必须先按 storage 播种。否则 saveRules 读到的
+  // DOM 草稿只有这一组,保存时会把其余规则整体覆盖掉
+  if (!rulesListEl.querySelector('.rule-group')) await loadRulesForEdit();
+  // 目标组规则已经覆盖这个主机 → 规则无需变动
+  if (createRuleMatcher(collectRulesFromEditor()).match(host) === groupName) {
+    return { status: 'covered', host };
+  }
+  // 域名只能归属一个分组: 已在别组时从旧组摘掉、改隶本组——拖拽就是用户改主意,
+  // 规则归属跟着走。旧组若因此一枚域名不剩,空组不会被落库
+  // (collectRulesFromEditor 忽略无域名的组),等同那条规则被删掉
+  const owner = [...rulesListEl.querySelectorAll('.rule-group')]
+    .find(g => chipHosts(g).includes(host));
+  let from = '';
+  if (owner) {
+    const ownerName = owner.querySelector('.rule-name-input')?.value.trim() || '';
+    if (ownerName !== groupName) {
+      [...owner.querySelectorAll('.host-chip')]
+        .find(c => (c.dataset.host || '') === host)?.remove();
+      from = ownerName;
+    }
+  }
+  // 与「＋ 添加域名」默认一致: 加精确主机(通配要用户显式声明)
+  await addHostToRuleGroup({ host, zone: false }, groupName, opts);
+  return from ? { status: 'moved', host, from } : { status: 'added', host };
 }
 try {
 currentHostBtn.addEventListener('click', async () => {

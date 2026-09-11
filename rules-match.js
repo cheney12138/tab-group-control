@@ -33,11 +33,14 @@ const SHARED_RULE_SUFFIXES = new Set([
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const IP_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-// 主机名"形状"校验: 每个标签要么字母开头(可含数字/连字符),要么是
+// 主机名"形状"校验: 每个标签要么字母开头(可含数字/连字符/下划线),要么是
 // 数字片段(IP 的组成部分)。但整串只有一个纯数字标签的(1234 / 123.456)
 // 不是任何真实主机——浏览器会把它当搜索词,规则永远匹配不上,当场拒收。
 // 数字子域(2.baidu.com)合法,点分四段 IPv4 合法
-const HOST_LABEL_RE = /^(?:[a-z][a-z0-9-]*|\d+)$/;
+// 下划线: RFC 1123 不允许,但内部主机名普遍在用
+// (x_supply-master.awp.sankuai.com),浏览器照常访问。校验、规则存储、
+// 匹配器索引共用这一个函数——这里拒了,这类域名就静默加不进规则
+const HOST_LABEL_RE = /^(?:[a-z_][a-z0-9_-]*|\d+)$/;
 function looksLikeHost(host) {
   const h = String(host || '');
   if (!h) return false;

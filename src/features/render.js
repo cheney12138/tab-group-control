@@ -348,6 +348,7 @@ function buildTabRow(item) {
         tabId: t.id,
         windowId: t.windowId,
         sourceGroupId: t.groupId && t.groupId !== -1 ? t.groupId : null,
+        url: t.url || '', // 落进规则组时要把这个域名并进该组规则
         title: t.title || t.url || '标签页'
       };
       e.dataTransfer.effectAllowed = 'move';
