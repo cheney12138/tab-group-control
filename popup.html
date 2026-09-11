@@ -8,49 +8,11 @@
     /* 原生系统字体栈(零加载延迟、匹配 macOS/Windows 原生渲染习惯、免 CSP 权限限制) */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     /* ============================================================
-     * 色板: 主体 slate(中性冷灰) + 强调蓝(与 slate 同族) */
+     * 共享度量基座: 间距/圆角/字号线(主题无关,主题块可覆盖)。
+     * 视觉 token 一律在各主题块 [data-theme="..."] 内全量定义(ADR-0003 换肤协议);
+     * :root 不再承载默认主题,data-theme 缺省/未知值一律按 linear 渲染 */
     :root {
-      color-scheme: light dark; /* 原生滚动条/checkbox 跟随深浅色 */
-      --bg: #f8fafc;                        /* 页面底(slate-50) */
-      --surface: #ffffff;                   /* 卡片面 */
-      --fill: rgba(15, 23, 42, 0.05);       /* 填充底 */
-      --fill-2: rgba(15, 23, 42, 0.09);     /* 填充底·深一档 */
-      --text: #0f172a;                      /* 主文字(slate-900) */
-      --text-2: #475569;                    /* 次级(slate-600) */
-      --text-3: #94a3b8;                    /* 三级(slate-400) */
-      --placeholder: rgba(15, 23, 42, 0.34);
-      --hairline: rgba(15, 23, 42, 0.10);   /* 发丝线 */
-      --header-line: rgba(15, 23, 42, 0.06);
-      --hover: rgba(15, 23, 42, 0.045);     /* 通用 hover 底 */
-      --accent: #2563eb;                    /* 强调·蓝(blue-600) */
-      --accent-hi: #1d4ed8;
-      --tint: rgba(37, 99, 235, 0.10);
-      --tint-2: rgba(37, 99, 235, 0.16);
-      --ring: rgba(59, 130, 246, 0.35);     /* 聚焦光环 */
-      --danger: #dc2626;
-      --danger-solid: #ef4444;
-      --danger-bg: rgba(239, 68, 68, 0.10);
-      --amber: #d97706;
-      --seg-active: #ffffff;
-      --seg-shadow: none;
-      --header-bg: #f8fafc;
-      --header-hover: rgba(15, 23, 42, 0.045);
-      --pop-bg: #ffffff;
-      --shadow-pop: 0 4px 14px rgba(15, 23, 42, 0.08);
-      --dot-ring: rgba(15, 23, 42, 0.06);
-      --btn-2: #475569;
-      --media-btn-bg: #ffffff;
-      --media-btn-shadow: 0 1px 5px rgba(15, 23, 42, 0.12);
-      --push-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
-      --search-bg: #ffffff;
-      --search-bg-focus: #ffffff;
-      --plate-bg: #f8fafc;
-      --tag-hot-c: #15803d;   --tag-hot-bg: rgba(34, 197, 94, 0.13);
-      --tag-info-c: #2563eb;  --tag-info-bg: rgba(37, 99, 235, 0.12);
-      --tag-mid-c: #475569;   --tag-mid-bg: rgba(71, 85, 105, 0.10);
-      --tag-stale-c: #b45309; --tag-stale-bg: rgba(245, 158, 11, 0.15);
-      --tag-zombie-c: #dc2626; --tag-zombie-bg: rgba(239, 68, 68, 0.12);
-      /* 设计 token: 间距 / 圆角 / 字体 */
+      color-scheme: light dark; /* 原生滚动条/checkbox 跟随深浅色(主题块声明优先) */
       --space-1: 4px;
       --space-2: 8px;
       --space-3: 12px;
@@ -59,51 +21,8 @@
       --r-xs: 6px;    --r-sm: 8px;   --r-md: 10px;  --r-lg: 12px;  --r-full: 99px;
       --fs-xs: 10.5px; --fs-sm: 11px; --fs-md: 12.5px; --fs-lg: 13px;
       --gutter: 16px;
-      --card-shadow: none;
-      --card-shadow-hover: none;
     }
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --fill: rgba(148, 163, 184, 0.12);
-        --fill-2: rgba(148, 163, 184, 0.20);
-        --text: #f8fafc;
-        --text-2: #cbd5e1;
-        --text-3: #94a3b8;
-        --placeholder: rgba(203, 213, 225, 0.40);
-        --hairline: rgba(148, 163, 184, 0.16);
-        --header-line: rgba(148, 163, 184, 0.10);
-        --hover: rgba(148, 163, 184, 0.10);
-        --accent: #3b82f6;
-        --accent-hi: #60a5fa;
-        --tint: rgba(59, 130, 246, 0.16);
-        --tint-2: rgba(59, 130, 246, 0.24);
-        --ring: rgba(59, 130, 246, 0.38);
-        --danger: #f87171;
-        --danger-solid: #ef4444;
-        --danger-bg: rgba(239, 68, 68, 0.16);
-        --amber: #f59e0b;
-        --seg-active: #334155;
-        --seg-shadow: none;
-        --header-bg: #0f172a;
-        --header-hover: rgba(148, 163, 184, 0.10);
-        --pop-bg: #1e293b;
-        --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.4);
-        --dot-ring: rgba(148, 163, 184, 0.12);
-        --btn-2: #475569;
-        --media-btn-bg: #334155;
-        --media-btn-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-        --push-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-        --search-bg: #1e293b;
-        --search-bg-focus: #1e293b;
-        --plate-bg: #0f172a;
-        --tag-hot-c: #4ade80;   --tag-hot-bg: rgba(74, 222, 128, 0.16);
-        --tag-info-c: #60a5fa;  --tag-info-bg: rgba(96, 165, 250, 0.18);
-        --tag-mid-c: #94a3b8;   --tag-mid-bg: rgba(148, 163, 184, 0.18);
-        --tag-stale-c: #fbbf24; --tag-stale-bg: rgba(251, 191, 36, 0.16);
-        --tag-zombie-c: #f87171; --tag-zombie-bg: rgba(248, 113, 113, 0.16);
-      }
 
       /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 中国风(水墨)主题绝对不动不反色 */
       html:not([data-theme="ink"]) .src-btn img,
@@ -1927,6 +1846,28 @@
       --tag-mid-c: #756B60;
       --tag-stale-c: #C08A4E;
       --tag-zombie-c: #B0503C;
+
+      /* 视觉 token 全量自有化(ADR-0003): 此前从已删除的默认主题块白嫖的值,
+       * 按水墨语义补齐,不再依赖任何外部兜底 */
+      --danger: #B0503C;
+      --danger-solid: #B0503C;
+      --danger-bg: rgba(176, 80, 60, 0.12);
+      --amber: #C08A4E;
+      --seg-active: #FBF7EE;
+      --seg-shadow: none;
+      --shadow-pop: var(--shadow);
+      --dot-ring: rgba(43, 38, 34, 0.06);
+      --btn-2: var(--ink-soft);
+      --media-btn-bg: var(--paper-card);
+      --media-btn-shadow: 0 1px 2px rgba(43, 38, 34, 0.06);
+      --push-shadow: 0 2px 10px rgba(43, 38, 34, 0.10);
+      --card-shadow: none;
+      --card-shadow-hover: none;
+      --tag-hot-bg: rgba(92, 122, 94, 0.13);
+      --tag-info-bg: rgba(63, 81, 100, 0.10);
+      --tag-mid-bg: rgba(43, 38, 34, 0.06);
+      --tag-stale-bg: rgba(192, 138, 78, 0.15);
+      --tag-zombie-bg: rgba(176, 80, 60, 0.12);
     }
 
     /* 水墨主题下的突出色选项 */

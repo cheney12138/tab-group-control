@@ -2,6 +2,7 @@
 // 三种形态共用一个栈容器: toast(纯文字)/undo(带撤销)/confirm(确认+取消)。
 // 出现=顶部滑入回弹,消失=下滑淡出,连续 push 旧的先上滑让位。
 // 从 main.js 切出,函数体零改动(undo 的 renderUndoBanner 留在 undo 域)
+import { themeAssets } from './colors.js';
 export const pushStack = document.getElementById('pushStack');
 
 // 结果列表容器(全局单例,与 pushStack 同款): main 渲染域与各 feature 共享
@@ -98,9 +99,8 @@ export function positionTabSlider(container) {
   const slider = container?.querySelector('.tab-slider');
   const active = container?.querySelector('.view-tab.active, .settings-tab.active');
   if (!slider || !active) return;
-  const isInk = document.documentElement.dataset.theme === 'ink';
-  // 水墨风顶部 Tab: 左右各比文字微挑出 3px(两端留白舒展)
-  const waveExtra = isInk && container.classList.contains('view-tabs') ? 6 : 0;
+  // 顶部 Tab 滑块挑出量是主题资产(水墨: 左右各挑出 3px,两端留白舒展)
+  const waveExtra = container.classList.contains('view-tabs') ? (themeAssets().tabSliderExtra || 0) : 0;
   const w = Math.max(1, Math.round(active.offsetWidth + waveExtra));
   slider.style.transform =
     `translateX(${active.offsetLeft - waveExtra / 2}px) scaleX(${(w / SLIDER_BASE_W).toFixed(4)})`;

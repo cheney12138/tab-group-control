@@ -41,7 +41,7 @@ export function renderUndoBanner() {
     const btn = document.createElement('button');
     btn.className = 'push-action';
     btn.textContent = '撤销';
-    btn.title = `恢复刚关闭的标签 (${MOD}Z)`;
+    btn.title = `撤销刚才关闭的标签 (${MOD}Z)`;
     btn.addEventListener('click', doUndo);
     banner.appendChild(msg);
     banner.appendChild(btn);
