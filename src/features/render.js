@@ -5,7 +5,7 @@
 import { escapeHtml, relativeTime, timeTier, displayUrl, hostOf, isBadTitle, cleanTitle, getChromeFaviconUrl, groupKey } from '../core/format.js';
 import { textToPinyin, fuzzyMatch, markText } from '../core/pinyin.js';
 import { resultsEl, input, showToast, rowByTabId, indexOfRow } from '../core/dom.js';
-import { GROUP_COLORS, INK_GROUP_COLORS, buildInkBleedSvg } from '../core/colors.js';
+import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
 import { state, collapsed, searchCollapsed, saveCollapsed, activeCollapsed, mediaTabIds, tabItemByTabId } from '../core/store.js';
 import { MOD, DEBUG } from '../core/platform.js';
 import { search, searchValue } from './search.js';
@@ -190,11 +190,8 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
   header.style.animationDelay = staggerDelay();
   header.dataset.groupKey = groupKey(group);
-  const isInk = document.documentElement.dataset.theme === 'ink';
-  const colorMap = isInk ? INK_GROUP_COLORS : GROUP_COLORS;
-  const groupColor = group
-    ? (colorMap[group.color] || (isInk ? '#A79E92' : '#BDC1C6'))
-    : (isInk ? '#A79E92' : '#BDC1C6');
+  const assets = themeAssets();
+  const groupColor = assets.groupColors[(group && group.color) || 'grey'] || assets.groupColors.grey;
   header.style.setProperty('--group-c', groupColor);
 
   // 1. 分组竖线: 统一挪到展开/收起箭头的前面 (两主题均生效)
@@ -228,9 +225,7 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
       const bar = document.createElement('span');
       bar.className = 'group-bar';
       bar.style.width = `${Math.max(10, Math.round(count / maxCount * 40))}px`;
-      bar.style.background = group
-        ? (GROUP_COLORS[group.color] || '#8e8e93')
-        : '#8e8e93';
+      bar.style.background = groupColor;
       bar.style.opacity = '0.55';
       bar.title = `${count} 个标签`;
       header.appendChild(bar);
@@ -249,7 +244,7 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
     const countEl = document.createElement('span');
     countEl.className = 'group-count';
     countEl.textContent = count;
-    if (isInk) {
+    if (assets.inkBlot) {
       countEl.style.setProperty('--dot-ink-bg', `url("${buildInkBleedSvg(groupColor)}")`);
     }
     header.appendChild(countEl);
@@ -385,7 +380,7 @@ function buildTabRow(item) {
   const iconWrap = document.createElement('span');
   iconWrap.className = 'icon-wrap';
   // 无图标时首字母徽颜色随所在分组
-  const groupColor = item.group ? (GROUP_COLORS[item.group.color] || '#8e8e93') : 'var(--accent)';
+  const groupColor = item.group ? (themeAssets().groupColors[item.group.color] || themeAssets().groupColors.grey) : 'var(--accent)';
   iconWrap.appendChild(buildFaviconEl(t, groupColor));
   if (item.duplicates && item.duplicates.length > 0) {
     const dupBadge = document.createElement('span');

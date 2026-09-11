@@ -5,7 +5,7 @@
 // initSettings,顶层只留纯函数定义
 import { showToast, positionTabSlider } from '../core/dom.js';
 import { relativeTime } from '../core/format.js';
-import { GROUP_COLORS, INK_GROUP_COLORS, buildInkBleedSvg } from '../core/colors.js';
+import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
 import { recentlyRestoredTabs } from '../core/store.js';
 import { loadRulesForEdit } from './rules.js';
 
@@ -179,7 +179,7 @@ async function deleteArchivedGroup(id) {
   return updated;
 }
 
-// 渲染设置面板中的已归档工作区卡片列表
+// 渲染设置面板中的归档卡列表
 async function renderArchivedList() {
   const container = document.getElementById('archivedList');
   if (!container) return;
@@ -190,15 +190,14 @@ async function renderArchivedList() {
     return;
   }
 
-  const isInk = document.documentElement.dataset.theme === 'ink';
-  const colorMap = isInk ? INK_GROUP_COLORS : GROUP_COLORS;
+  const assets = themeAssets();
 
   list.forEach(item => {
     const card = document.createElement('div');
     card.className = 'archive-card';
     card.dataset.id = item.id;
 
-    const groupColor = colorMap[item.color] || (isInk ? '#A79E92' : '#BDC1C6');
+    const groupColor = assets.groupColors[item.color] || assets.groupColors.grey;
 
     // 头部行
     const header = document.createElement('div');
@@ -210,7 +209,7 @@ async function renderArchivedList() {
 
     const dot = document.createElement('span');
     dot.className = 'archive-dot';
-    if (isInk) {
+    if (assets.inkBlot) {
       dot.style.setProperty('--dot-ink-bg', `url("${buildInkBleedSvg(groupColor)}")`);
     } else {
       dot.style.background = groupColor;
@@ -245,8 +244,8 @@ async function renderArchivedList() {
 
     const restoreBtn = document.createElement('button');
     restoreBtn.className = 'btn-restore-archive';
-    restoreBtn.textContent = '恢复到标签栏';
-    restoreBtn.title = `恢复「${item.title}」分组到标签栏`;
+    restoreBtn.textContent = '重新打开';
+    restoreBtn.title = `重新打开「${item.title}」的标签并归组`;
     restoreBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await restoreArchivedGroupAction(item);
@@ -278,16 +277,17 @@ async function renderArchivedList() {
   });
 }
 
-// 恢复归档工作区: 批量创建标签 -> 归入原生分组 -> 消费存档 -> 关闭设置面板 -> 刷新列表
+// 重新打开归档卡: 批量创建标签 -> 归入原生分组 -> 核销/焚卡 -> 关闭设置面板 -> 刷新列表
 async function restoreArchivedGroupAction(item) {
   if (!item || !Array.isArray(item.tabs) || !item.tabs.length) {
-    showToast('该存档没有可恢复的标签');
+    showToast('该归档卡没有可打开的标签');
     return;
   }
 
   const win = await chrome.windows.getCurrent().catch(() => null);
   const windowId = win?.id;
   const newTabIds = [];
+  const failedTabs = [];
 
   for (const t of item.tabs) {
     if (!t.url) continue;
@@ -306,7 +306,7 @@ async function restoreArchivedGroupAction(item) {
         });
       }
     } catch (err) {
-      console.error('恢复标签创建失败:', err);
+      console.error('重新打开标签创建失败:', err); failedTabs.push(t);
     }
   }
 
@@ -325,7 +325,7 @@ async function restoreArchivedGroupAction(item) {
       if (resp?.ok) {
         mergedIntoExisting = !!resp.merged;
       } else {
-        // worker 异常兜底: 直调建组(竞态概率低,总好过恢复出的标签散着)
+        // worker 异常兜底: 直调建组(竞态概率低,总好过打开的标签散着)
         if (resp && !resp.ok) console.error('队列建组失败,转直调:', resp.error);
         const dupQuery = { title };
         if (windowId) dupQuery.windowId = windowId;
@@ -341,7 +341,7 @@ async function restoreArchivedGroupAction(item) {
           await chrome.tabGroups.update(gid, { title, color: safeColor });
         }
       }
-      // 仅对非规则组(如自定义项目组)写入人工干预标记: 恢复在已有规则组下的标签不计入白名单
+      // 仅对非规则组(如自定义项目组)写入人工干预标记: 重新打开且落在已有规则组下的标签不计入白名单
       const storedRules = await chrome.storage.local.get('groupRules');
       const rules = (storedRules?.groupRules && typeof storedRules.groupRules === 'object') ? storedRules.groupRules : {};
       const isRuleGroup = item.title && Object.prototype.hasOwnProperty.call(rules, item.title);
@@ -352,17 +352,27 @@ async function restoreArchivedGroupAction(item) {
         await chrome.storage.local.set({ manualTabIds: [...set] });
       }
     } catch (err) {
-      console.error('恢复标签归组失败:', err);
+      console.error('重新打开归组失败:', err);
     }
   }
 
-  // 消费该存档
-  await deleteArchivedGroup(item.id);
+  // 焚卡前提 = 全部重新打开成功(ADR-0001): 部分失败只核销已打开的标签,
+  // 失败的留在卡里可随时再来——无条件焚卡等于把失败部分静默销毁
+  const failedSet = new Set(failedTabs);
+  const remainingTabs = item.tabs.filter(t => t.url && failedSet.has(t));
+  if (remainingTabs.length) {
+    const list = await getArchivedGroups();
+    await setArchivedGroups(list.map(x => x.id === item.id ? { ...x, tabs: remainingTabs } : x));
+  } else {
+    await deleteArchivedGroup(item.id);
+  }
 
   // 关闭设置面板
   closeSettingsPanel();
 
-  showToast(`已恢复分组「${item.title}」(${newTabIds.length} 个标签) 到标签栏${mergedIntoExisting ? ',已并入现有同名组' : ''}`);
+  showToast(failedTabs.length
+    ? `已重新打开 ${newTabIds.length} 个标签,${failedTabs.length} 个失败保留在归档卡中`
+    : `已重新打开「${item.title}」(${newTabIds.length} 个标签)${mergedIntoExisting ? ',已并入现有同名组' : ''}`);
   await actions.refreshData({ forceFresh: true });
 
   // 展开目标分组 + 渲染 + 定位高亮(折叠状态/列表光标是 main 侧状态,交回 main)
@@ -415,7 +425,7 @@ export async function archiveGroupAction(group) {
     }
   }
 
-  showToast(`已归档「${group.title || '分组'}」(${tabsToSave.length} 个标签)，已收纳进设置 ⚙️ 面板`);
+  showToast(`已归档「${group.title || '分组'}」(${tabsToSave.length} 个标签)，已归档进设置 ⚙️ 面板`);
   await actions.refreshData({ forceFresh: true });
   actions.render();
 }

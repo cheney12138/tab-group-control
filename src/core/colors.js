@@ -1,4 +1,4 @@
-// core/colors.js: 分组色板(纯常量,render 域与设置面板归档卡片共享)
+// core/colors.js: 分组色板 + 主题资产表(纯常量,render 域与设置面板归档卡片共享)
 // 从 main.js 切出,零改动
 
 // Chrome 组色名 → Chrome 原生分组渲染色号(精准提取自附图 Chrome 标签组调色板)
@@ -31,4 +31,20 @@ export const INK_GROUP_COLORS = {
 export function buildInkBleedSvg(hex) {
   const c = encodeURIComponent(hex || '#2B2622');
   return `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><defs><filter id='bleedFilter' x='-20%' y='-20%' width='140%' height='140%'><feTurbulence type='fractalNoise' baseFrequency='0.09' numOctaves='3' result='noise'/><feDisplacementMap in='SourceGraphic' in2='noise' scale='7' xChannelSelector='R' yChannelSelector='G'/></filter><radialGradient id='inkWashGrad' cx='56%' cy='42%' r='55%'><stop offset='0%' stop-color='${c}' stop-opacity='0.42'/><stop offset='55%' stop-color='${c}' stop-opacity='0.20'/><stop offset='85%' stop-color='${c}' stop-opacity='0.06'/><stop offset='100%' stop-color='${c}' stop-opacity='0'/></radialGradient><radialGradient id='inkCoreGrad' cx='46%' cy='48%' r='50%'><stop offset='0%' stop-color='${c}'/><stop offset='65%' stop-color='${c}'/><stop offset='85%' stop-color='${c}' stop-opacity='0.95'/><stop offset='100%' stop-color='${c}' stop-opacity='0.55'/></radialGradient></defs><path d='M48 10 C72 6, 90 20, 88 44 C86 68, 70 86, 46 85 C24 84, 8 70, 10 46 C12 22, 26 13, 48 10 Z' fill='url(%23inkWashGrad)' filter='url(%23bleedFilter)'/><path d='M48 16 C68 14, 82 25, 80 48 C78 70, 68 81, 48 80 C28 79, 15 68, 17 48 C19 28, 30 18, 48 16 Z' fill='url(%23inkCoreGrad)' filter='url(%23bleedFilter)'/><ellipse cx='47' cy='48' rx='25' ry='24' fill='${c}' opacity='0.96'/><circle cx='75' cy='78' r='4' fill='${c}'/><circle cx='85' cy='72' r='2' fill='${c}' opacity='0.85'/><circle cx='76' cy='89' r='1.5' fill='${c}' opacity='0.75'/><circle cx='18' cy='28' r='1.8' fill='${c}' opacity='0.45'/></svg>`;
+}
+
+// ---- 主题资产表(ADR-0003 Q6: 表驱动单点化) ----
+// JS 一律经 themeAssets() 取当前主题资产,禁止再出现 dataset.theme === '...'
+// 的散点比较(主题加载/持久化层 settings.js 的裸读取除外——那是挂载点本身)。
+// 新主题 = 表里加一行,不是各调用点加 if:
+//   groupColors      9 色组色映射(强制)
+//   inkBlot          计数角标使用晕染墨团(可选视觉资产)
+//   tabSliderExtra   顶部 Tab 滑块左右挑出量 px(可选视觉资产)
+export const THEME_ASSETS = {
+  linear: { groupColors: GROUP_COLORS },
+  ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, tabSliderExtra: 6 },
+};
+export function themeAssets() {
+  const t = document.documentElement.dataset.theme;
+  return THEME_ASSETS[t] || THEME_ASSETS.linear; // 契约: 缺省/未知一律按 linear
 }
