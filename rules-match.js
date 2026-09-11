@@ -5,6 +5,13 @@
 // 通配语义: 显式声明,不做自动推断。
 //   - 用户写 "bilibili.com"(开关关): 只精确匹配该主机(含 www 别名)
 //   - 用户写 "*.bilibili.com"(开关开): 连同其所有子域(search/live/space/...)一起归组
+//
+// 路径语义(CONTEXT.md「路径规则」): 仅精确主机可挂纯前缀路径。
+//   - "github.com/cheney12138" → 该主机且路径以 /cheney12138 打头才归组
+//   - "*.github.com/team" → 非法(通配是"粗"语义,不接"细"枝),整条规则丢弃
+//   - 路径只做纯前缀 startsWith(不带 glob、不区分尾斜杠),与主机同随小写比较
+// 命中裁决(最长优先): 先比主机具体度(*.域 > 裸域,链首跳 > 祖先跳),
+// 同级再比: 带路径 > 纯域名,路径长 > 路径短
 
 // 多租户/公共后缀: 这些域名下面的每个子域属于不同主体,整站通配会误伤别人的站点
 // (oymel.github.io 不是我的 github.io)。单标签(localhost、com)和 IP 也在此列。
@@ -64,22 +71,45 @@ function wildcardAllowed(host) {
   return /^[a-z-]{2,}$/.test(tld);
 }
 
-// 规则条目解析: 统一收成 { host: 裸主机名, zone: 是否通配 }
-//   "bilibili.com"    → { host: 'bilibili.com', zone: false }  只匹配这一台主机
-//   "*.bilibili.com"  → { host: 'bilibili.com', zone: true }   连同所有子域
+// 路径片段归一化: 剥 ?/#、补前导 /、去尾 /。空段(用户只写了 "host/")视为无路径
+function normalizeRulePath(rest) {
+  let p = String(rest == null ? '' : rest).split('?')[0].split('#')[0].trim();
+  p = p.replace(/\/+$/, '');
+  if (!p) return '';
+  if (p.includes(' ') || p.includes('	')) return null; // 含空白 = 非法,整条规则拒收
+  return p.startsWith('/') ? p : '/' + p; // 对象形态可能自带前导 /
+}
+
+// 规则条目解析: 统一收成 { host: 裸主机名, zone: 是否通配, path: 纯前缀路径 }
+//   "bilibili.com"              → { host, zone: false }       只匹配这一台主机
+//   "*.bilibili.com"            → { host, zone: true }        连同所有子域
+//   "github.com/cheney12138"    → { host, zone: false, path: '/cheney12138' }
+//   "*.github.com/team"         → null(通配不得挂路径,非法整条丢弃)
 // www.bilibili.com 收成 bilibili.com 精确匹配(www 只是主站别名)
 function parseRuleEntry(input) {
   if (input && typeof input === 'object' && input.host) {
+    const path = normalizeRulePath(input.path);
+    if (path === null) return null;
+    // 对象形态带路径却声明通配: 同样非法,与字符串形态一致整条丢弃
+    if (path && input.zone) return null;
     return {
       host: input.host,
       zone: !!input.zone && wildcardAllowed(input.host),
+      path: path || '',
     };
   }
   let s = String(input == null ? '' : input).trim().toLowerCase();
   if (!s) return null;
   s = s.replace(SCHEME_RE, '');
   if (s.startsWith('//')) s = s.slice(2);
-  s = s.split('/')[0].split('?')[0].split('#')[0];
+  // 先切出路径段(?/# 归路径侧剥),剩下的主机段走原有归一流程
+  let path = '';
+  const slash = s.indexOf('/');
+  if (slash >= 0) {
+    path = normalizeRulePath(s.slice(slash + 1));
+    if (path === null) return null;
+    s = s.slice(0, slash);
+  }
   const at = s.lastIndexOf('@');
   if (at >= 0) s = s.slice(at + 1);
 
@@ -101,7 +131,9 @@ function parseRuleEntry(input) {
     const rest = s.slice(4);
     if (rest.includes('.')) s = rest;
   }
-  return { host: s, zone: zone && wildcardAllowed(s) };
+  zone = zone && wildcardAllowed(s);
+  if (path && zone) return null; // 通配是"粗"语义,不得再接"细"枝
+  return { host: s, zone, path };
 }
 
 // 只取裸主机名(URL 归一 / 去重 key 用)
@@ -130,39 +162,76 @@ function siteRootOf(host) {
   return wildcardAllowed(two) ? two : h;
 }
 
-// 芯片/导出展示文本: 显式通配加 "*." 前缀,精确的原样
+// 芯片/导出展示文本: 显式通配加 "*." 前缀,带路径的原样缀上
 function ruleChipLabel(entry) {
   if (typeof entry === 'string') entry = parseRuleEntry(entry);
-  return entry && entry.host ? (entry.zone ? `*.${entry.host}` : entry.host) : '';
+  if (!entry || !entry.host) return '';
+  return (entry.zone ? `*.${entry.host}` : entry.host) + (entry.path || '');
 }
 
-// { 组名: [域名字符串...] } → 匹配器
-// 域名字符串 "*.host" = 整站通配, "host" = 精确单机匹配。
+// match() 入参归一为 { host, path }: 完整 URL 用 URL 拆出真实 host+pathname,
+// 裸主机名(编辑器测试/内部调用)path 视为 '"。裸 host 永远不会命中带路径规则。
+function hostPathOfInput(input) {
+  const s = String(input == null ? '' : input).trim();
+  if (!s) return null;
+  if (SCHEME_RE.test(s) || s.includes('/')) {
+    try {
+      const u = new URL(SCHEME_RE.test(s) ? s : `https://${s}`);
+      return { host: normalizeRuleHost(u.hostname), path: (u.pathname || '/').toLowerCase() };
+    } catch (e) { /* 落到裸主机解析 */ }
+  }
+  const entry = parseRuleEntry(s);
+  return entry ? { host: entry.host, path: '' } : null;
+}
+
+// { 组名: [规则字符串...] } → 匹配器
+// 规则字符串 "*.host" = 整站通配, "host" = 精确单机, "host/prefix" = 精确主机的路径前缀。
 // 匹配: 沿标签链向上做后缀匹配,天然最长优先:
-//   - 第一跳(完整主机名)允许命中精确或通配规则;
-//   - 往上的每一跳必须是 zone 通配规则.
+//   - 第一跳(完整主机名)允许命中: 先在该 host 的路径规则里做最长纯前缀匹配,
+//     落空再落该 host 的纯域名规则(精确/通配皆可);
+//   - 往上的每一跳只看纯域名通配规则(路径规则是精确主机语义,不参与祖先链)。
 function createRuleMatcher(rules) {
-  const index = new Map(); // host → { group, zone }
+  const index = new Map(); // host → { hostOnly: {group, zone}|null, paths: [{prefix, group}] }
   for (const [group, list] of Object.entries(rules || {})) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
       const entry = parseRuleEntry(item);
       if (!entry) continue;
-      // 一个域名只能归属一个分组: 首见为准
-      if (!index.has(entry.host)) index.set(entry.host, { group, zone: entry.zone });
+      let cell = index.get(entry.host);
+      if (!cell) { cell = { hostOnly: null, paths: [] }; index.set(entry.host, cell); }
+      if (entry.path) {
+        cell.paths.push({ prefix: entry.path, group });
+      } else if (!cell.hostOnly) {
+        // 一个域名只能归属一个分组: 首见为准
+        cell.hostOnly = { group, zone: entry.zone };
+      }
     }
+  }
+  // 路径层定序: 前缀长者优先;同长保持书写顺序(稳定排序)
+  for (const cell of index.values()) {
+    cell.paths.sort((a, b) => b.prefix.length - a.prefix.length);
   }
   return {
     index,
     // 入参可以是裸主机名也可以是完整 URL
     match(input) {
-      const first = parseRuleEntry(input);
-      if (!first) return null;
-      let p = first.host;
+      const q = hostPathOfInput(input);
+      if (!q || !q.host) return null;
+      let p = q.host;
       let full = true;
       for (;;) {
-        const hit = index.get(p);
-        if (hit && (full || hit.zone)) return hit.group;
+        const cell = index.get(p);
+        if (cell) {
+          if (full) {
+            if (cell.paths.length && q.path) {
+              const hit = cell.paths.find(r => q.path.startsWith(r.prefix));
+              if (hit) return hit.group;
+            }
+            if (cell.hostOnly) return cell.hostOnly.group;
+          } else if (cell.hostOnly && cell.hostOnly.zone) {
+            return cell.hostOnly.group;
+          }
+        }
         const i = p.indexOf('.');
         if (i < 0) return null;
         p = p.slice(i + 1);

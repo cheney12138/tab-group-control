@@ -21,7 +21,7 @@ export const state = {
   allTabs: [],                 // 全量标签条目(loadTabs 重建)
   filtered: [],                // 当前展示条目(search 重建)
   searching: false,            // 是否搜索态(折叠集合选择/渲染排布依据)
-  activeCmd: null,             // slash 命令: null | '/b' | '/h'
+  activeCmd: null,             // slash 命令: null | '/b' | '/h' | '/r'
   view: 'grouped',             // 视图: grouped | recent | current
   currentWindowId: null,       // 弹窗所属窗口
   currentSourceIsHistory: false, // /h 命令模式下行渲染加半透明降级
