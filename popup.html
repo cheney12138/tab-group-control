@@ -138,7 +138,7 @@
     :root[data-theme="linear"] {
       color-scheme: light dark;
       --bg: #f9f9fb; --surface: #ffffff; --fill: rgba(8, 9, 10, 0.05); --fill-2: rgba(8, 9, 10, 0.08);
-      --text: #08090a; --text-2: #5e6b7a; --text-3: #9ca3af; --placeholder: rgba(8, 9, 10, 0.32);
+      --text: #08090a; --text-2: #5e6b7a; --text-3: #9ca3af; --placeholder: rgba(8, 9, 10, 0.44);
       --hairline: rgba(8, 9, 10, 0.08); --header-line: rgba(8, 9, 10, 0.05); --hover: rgba(8, 9, 10, 0.04);
       --accent: #2563eb; --accent-hi: #3b82f6;
       --tint: color-mix(in srgb, var(--accent) 12%, transparent); --tint-2: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -189,7 +189,7 @@
       :root[data-theme="linear"][data-accent="rose"]   { --accent: #F28B82; --accent-hi: #f6ada7; }
       :root[data-theme="linear"] {
         --bg: #08090a; --surface: #16171c; --fill: rgba(255, 255, 255, 0.05); --fill-2: rgba(255, 255, 255, 0.08);
-        --text: #f7f8f8; --text-2: #9ca3af; --text-3: #6b7280; --placeholder: rgba(247, 248, 248, 0.35);
+        --text: #f7f8f8; --text-2: #9ca3af; --text-3: #6b7280; --placeholder: rgba(247, 248, 248, 0.50);
         --hairline: rgba(255, 255, 255, 0.06); --header-line: rgba(255, 255, 255, 0.04); --hover: rgba(255, 255, 255, 0.06);
         --danger: #f87171; --danger-solid: #f87171; --danger-bg: rgba(248, 113, 113, 0.14);
         --amber: #f59e0b; --seg-active: #1e1f25; --seg-shadow: none; --header-bg: #08090a; --header-hover: rgba(255, 255, 255, 0.06);
@@ -1263,6 +1263,9 @@
     #results {
       flex: 1;
       overflow-y: auto;
+      /* 滚动条出现/消失不再引发横向重排(自定义 5px 滚动条占布局宽度,
+       * 不预留 gutter 时列表跨临界线会整体左移);与 settings-body/rules-list 对齐 */
+      scrollbar-gutter: stable;
       /* 扁平: 顶部命令栏已不透明,无需负 margin 让内容滑动穿透 ——
        * 列表直接顶到命令栏下缘;吸顶组头贴在命令栏下沿,不穿到底下 */
       padding: 0 0 4px;
@@ -1373,7 +1376,7 @@
       margin-left: 0 !important;
     }
     /* 计数徽章: 采用与中国风一致的微圆角方形小徽章(border-radius: 4px),与圆形删除按钮彻底区隔;
-     * 适度加重视觉对比度,清晰利落但克制 */
+     * 中性灰底,不再随组色——颜色信号由左侧色条承担,避免与全局强调色争抢视觉锚点 */
     .group-count {
       display: inline-flex;
       align-items: center;
@@ -1382,10 +1385,10 @@
       height: 18px;
       padding: 0 5px;
       border-radius: 4px;
-      background: color-mix(in srgb, var(--group-c, var(--accent)) 26%, transparent);
-      box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--group-c, var(--accent)) 35%, transparent), 0 1px 2px rgba(0, 0, 0, 0.12);
-      color: var(--group-c, var(--accent));
-      font-weight: 700;
+      background: var(--fill);
+      box-shadow: inset 0 0 0 0.5px var(--hairline);
+      color: var(--text-2);
+      font-weight: 600;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0;
@@ -1459,15 +1462,15 @@
       transform: translate(-50%, -50%) scale(1);
       pointer-events: auto; /* 热区生效: 仅此圆钮 */
     }
-    /* 行内容置灰淡出: 图标和文字降到近灰阶,覆盖感(带过渡) */
+    /* 行内容让位淡出: 焦点交给媒体控件,但标题仍保持可辨认(不降到不可读) */
     .tab-item.has-media .icon-wrap,
     .tab-item.has-media .tab-info {
       transition: opacity 0.15s, filter 0.15s;
     }
     .tab-item.has-media:hover .icon-wrap,
     .tab-item.has-media:hover .tab-info {
-      opacity: 0.18;
-      filter: saturate(0);
+      opacity: 0.5;
+      filter: saturate(0.4);
     }
     .media-btn {
       width: 30px;
@@ -1614,6 +1617,14 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+    }
+    /* 休眠徽标: 标题里 💤 前缀剥离后的小降权角标,信息保留但不抢标题视觉 */
+    .sleep-mark {
+      font-size: 9px;
+      opacity: 0.5;
+      margin-right: 3px;
+      vertical-align: 1px;
+      filter: grayscale(0.6);
     }
     .tab-item .title {
       font-size: 13px;
@@ -1871,7 +1882,7 @@
       --paper-card: #FBF7EE;
       --ink: #2B2622;
       --ink-soft: #6B625A;
-      --ink-faint: #A79E92;
+      --ink-faint: #857B6E;
       --seal: #B23A2E;
       --seal-ink: #FBF3E7;
 
@@ -1892,8 +1903,8 @@
       --fill-2: rgba(43, 38, 34, 0.08);
       --text: #2B2622;
       --text-2: #6B625A;
-      --text-3: #A79E92;
-      --placeholder: #A79E92;
+      --text-3: #756B60;
+      --placeholder: #857B6E;
       --hairline: rgba(43, 38, 34, 0.14);
       --header-line: transparent;
       --hover: rgba(43, 38, 34, 0.035);
@@ -1913,7 +1924,7 @@
       /* 水墨风格时间标签色系 */
       --tag-hot-c: #5C7A5E;
       --tag-info-c: #3F5164;
-      --tag-mid-c: #A79E92;
+      --tag-mid-c: #756B60;
       --tag-stale-c: #C08A4E;
       --tag-zombie-c: #B0503C;
     }
@@ -2164,8 +2175,9 @@
     }
     html[data-theme="ink"] .search-ink-brush-path {
       fill: var(--ink);
-      opacity: 0.88;
-      filter: drop-shadow(0 0.5px 0.5px rgba(43, 38, 34, 0.18));
+      opacity: 0.9;
+      /* 不加 drop-shadow: 5px 高度下投影等于给笔画糊一圈柔边,是毛刺感的来源之一;
+       * 墨的层次靠 body 全局纸纹 multiply 叠加自然呈现 */
     }
     html[data-theme="ink"] input#search {
       color: var(--ink);
@@ -2258,7 +2270,7 @@
       justify-content: flex-end;
       gap: 7px;
       padding-right: 38px;
-      background: linear-gradient(to left, var(--paper) 52%, rgba(243, 238, 228, 0.88) 75%, rgba(243, 238, 228, 0) 100%);
+      background: linear-gradient(to left, var(--paper) 32%, rgba(243, 238, 228, 0.8) 46%, rgba(243, 238, 228, 0) 62%);
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.16s ease;
@@ -2548,7 +2560,7 @@
     </button>
     <div class="search-ink-stroke" aria-hidden="true">
       <svg viewBox="0 0 1000 20" preserveAspectRatio="none">
-        <path class="search-ink-brush-path" d="M 8.00 10.02 C 16.20 9.64 40.80 8.14 57.20 7.77 C 73.60 7.41 90.00 7.89 106.40 7.83 C 122.80 7.78 139.20 7.60 155.60 7.47 C 172.00 7.33 188.40 7.15 204.80 7.01 C 221.20 6.87 237.60 6.74 254.00 6.62 C 270.40 6.50 286.80 6.39 303.20 6.29 C 319.60 6.20 336.00 6.11 352.40 6.04 C 368.80 5.96 385.20 5.90 401.60 5.85 C 418.00 5.80 434.40 5.76 450.80 5.74 C 467.20 5.71 483.60 5.70 500.00 5.70 C 516.40 5.70 532.80 5.71 549.20 5.74 C 565.60 5.76 582.00 5.80 598.40 5.85 C 614.80 5.90 631.20 5.96 647.60 6.04 C 664.00 6.11 680.40 6.20 696.80 6.29 C 713.20 6.39 729.60 6.50 746.00 6.62 C 762.40 6.74 778.80 6.87 795.20 7.01 C 811.60 7.15 828.00 7.31 844.40 7.47 C 860.80 7.63 877.20 7.84 893.60 7.96 C 910.00 8.08 926.40 7.80 942.80 8.20 C 959.20 8.60 983.80 9.99 992.00 10.35 L 992.00 12.05 C 983.80 12.34 959.20 13.53 942.80 13.77 C 926.40 14.02 910.00 13.56 893.60 13.51 C 877.20 13.46 860.80 13.49 844.40 13.48 C 828.00 13.46 811.60 13.45 795.20 13.43 C 778.80 13.42 762.40 13.39 746.00 13.36 C 729.60 13.34 713.20 13.31 696.80 13.28 C 680.40 13.26 664.00 13.23 647.60 13.21 C 631.20 13.19 614.80 13.17 598.40 13.15 C 582.00 13.13 565.60 13.12 549.20 13.11 C 532.80 13.10 516.40 13.10 500.00 13.10 C 483.60 13.10 467.20 13.10 450.80 13.11 C 434.40 13.12 418.00 13.13 401.60 13.15 C 385.20 13.17 368.80 13.19 352.40 13.21 C 336.00 13.23 319.60 13.26 303.20 13.28 C 286.80 13.31 270.40 13.34 254.00 13.36 C 237.60 13.39 221.20 13.41 204.80 13.43 C 188.40 13.45 172.00 13.45 155.60 13.48 C 139.20 13.51 122.80 13.51 106.40 13.63 C 90.00 13.75 73.60 14.41 57.20 14.20 C 40.80 13.99 16.20 12.68 8.00 12.38 Z" />
+        <path class="search-ink-brush-path" d="M 14 11.2 C 7 9.6, 7.5 6.4, 15.5 5.9 C 25 5.4, 36 5.9, 46 6.6 C 96 5.8, 158 6.8, 230 7.6 C 330 8.5, 480 9.0, 650 8.7 C 790 8.4, 895 8.9, 952 9.8 C 970 10.3, 984 11.2, 992 12.1 C 983 12.7, 966 13.1, 944 13.4 C 855 14.1, 715 14.6, 555 14.8 C 415 15.0, 295 14.8, 190 14.3 C 120 13.9, 62 13.6, 32 13.4 C 23 13.8, 16 12.8, 14 11.2 Z" />
       </svg>
     </div>
   </div>
