@@ -3,7 +3,7 @@
 // 单向依赖: → search(刷新 filtered) / nav(光标) / settings(归档) / dnd(拖拽) /
 // media(媒体按钮) / undo(撤销) / core 各层;不依赖 main。
 import { escapeHtml, relativeTime, timeTier, displayUrl, hostOf, isBadTitle, cleanTitle, getChromeFaviconUrl, groupKey } from '../core/format.js';
-import { textToPinyin, fuzzyMatch, markText } from '../core/pinyin.js';
+import { textToPinyin, fuzzyMatch, markText, matchField } from '../core/pinyin.js';
 import { resultsEl, input, showToast, rowByTabId, indexOfRow } from '../core/dom.js';
 import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
 import { state, collapsed, searchCollapsed, saveCollapsed, activeCollapsed, mediaTabIds, tabItemByTabId } from '../core/store.js';
@@ -16,7 +16,82 @@ import { archiveGroupAction } from './settings.js';
 import { moveTabToGroupAction } from './dnd.js';
 
 let actions = null; // initRender 注入: { refreshData, getSettings }
-export function initRender(injected) { actions = injected; }
+export function initRender(injected) {
+  actions = injected;
+  initTitleTooltip();
+}
+
+// ---- 标题超长省略时的 Hover 浮层提示 ----
+let titleHoverTimer = null;
+let activeTitleTooltip = null;
+
+export function hideTitleTooltip() {
+  if (titleHoverTimer) {
+    clearTimeout(titleHoverTimer);
+    titleHoverTimer = null;
+  }
+  if (activeTitleTooltip) {
+    activeTitleTooltip.remove();
+    activeTitleTooltip = null;
+  }
+}
+
+function showTitleTooltip(targetEl, text) {
+  hideTitleTooltip();
+  const tip = document.createElement('div');
+  tip.className = 'tab-title-tooltip';
+  tip.textContent = text;
+  document.body.appendChild(tip);
+  activeTitleTooltip = tip;
+
+  const rect = targetEl.getBoundingClientRect();
+  const tipRect = tip.getBoundingClientRect();
+
+  let left = rect.left;
+  if (left + tipRect.width > window.innerWidth - 10) {
+    left = window.innerWidth - tipRect.width - 10;
+  }
+  if (left < 10) left = 10;
+
+  // 优先在标题正上方，若距顶不足则放在正下方
+  let top = rect.top - tipRect.height - 6;
+  if (top < 6) {
+    top = rect.bottom + 6;
+  }
+
+  tip.style.left = `${Math.round(left)}px`;
+  tip.style.top = `${Math.round(top)}px`;
+  requestAnimationFrame(() => tip.classList.add('visible'));
+}
+
+function initTitleTooltip() {
+  resultsEl.addEventListener('pointerover', (e) => {
+    const titleEl = e.target.closest('.tab-item .title');
+    if (!titleEl) return;
+    if (e.relatedTarget && titleEl.contains(e.relatedTarget)) return;
+
+    hideTitleTooltip();
+    // 仅当标题文字实际发生溢出省略时才提示
+    if (titleEl.scrollWidth <= titleEl.clientWidth) return;
+    const fullText = titleEl.dataset.fullTitle;
+    if (!fullText) return;
+
+    titleHoverTimer = setTimeout(() => {
+      showTitleTooltip(titleEl, fullText);
+    }, 180);
+  });
+
+  resultsEl.addEventListener('pointerout', (e) => {
+    const titleEl = e.target.closest('.tab-item .title');
+    if (!titleEl) return;
+    if (e.relatedTarget && titleEl.contains(e.relatedTarget)) return;
+    hideTitleTooltip();
+  });
+
+  resultsEl.addEventListener('scroll', hideTitleTooltip, { passive: true });
+  window.addEventListener('blur', hideTitleTooltip);
+  document.addEventListener('keydown', hideTitleTooltip);
+}
 
 // 把 Chrome 内部窗口 id 映射为从 1 开始的序号,比裸 id 可读
 function windowOrdinal(windowId) {
@@ -40,6 +115,7 @@ function emptyMessage() {
 }
 
 export function render() {
+  hideTitleTooltip();
   const t0 = performance.now();
   // 记住重渲染前的焦点,重建后尽量恢复
   const prevUnit = navUnits().find(u => u.classList.contains('active'));
@@ -202,8 +278,9 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
   if (group) {
     // 搜索时分组名也参与高亮,直观看到是分组名命中的召回
     const q = input.value.trim();
-    name.innerHTML = q
-      ? markText(group.title || '(未命名分组)', fuzzyMatch(q, group.title || ''))
+    const hits = q ? (matchField(q, group.title || '')?.hits || fuzzyMatch(q, group.title || '')) : null;
+    name.innerHTML = hits
+      ? markText(group.title || '(未命名分组)', hits)
       : escapeHtml(group.title || '(未命名分组)');
   } else {
     name.textContent = '未分组';
@@ -388,7 +465,8 @@ function buildTabRow(item) {
   title.className = 'title';
   // 休眠标题前缀(休眠工具/系统往原始标题塞的 💤): 剥离正文并降权为小角标,
   // 搜索高亮偏移随剥离长度前移,避免 emoji 在 13px 字号下挤成噪点
-  const rawTitle = t.title || t.url;
+  const rawTitle = t.title || t.url || '';
+  title.dataset.fullTitle = rawTitle;
   const sleepPrefix = rawTitle.match(/^[\s\u200B-\u200D\uFEFF]*(?:\u{1F4A4}[\s\u200B-\u200D\uFEFF]*)+/u);
   if (sleepPrefix) {
     const off = sleepPrefix[0].length;

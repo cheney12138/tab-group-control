@@ -2,7 +2,7 @@
 // search() 查询解析与匹配(标签/书签/历史三源),/b /h 命令模式;
 // 输入框事件与命令胶囊、数据源按钮均在本模块注册。
 // 状态: core/store.state(allTabs/filtered/searching/activeCmd/view/...)
-import { fuzzyMatch, pinyinMatch, textToPinyin } from '../core/pinyin.js';
+import { fuzzyMatch, pinyinMatch, textToPinyin, matchField } from '../core/pinyin.js';
 import { hostOf, cleanTitle, isBadTitle, groupKey } from '../core/format.js';
 import { resultsEl, showToast, input, indexOfRow, rowByTabId } from '../core/dom.js';
 import { DEBUG } from '../core/platform.js';
@@ -107,6 +107,23 @@ async function loadClosed() {
 }
 
 
+// 比较两种匹配质量:
+// 1. 先比 tier (越小越优: 1=全等, 2=前缀, 3=连续子串, 4=域名/URL, 5=紧凑模糊)
+// 2. 同等级下: 英文原生匹配优先于拼音转译
+// 3. 同语言下: 首字符出现越靠前越好
+function compareQuality(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  if (a.tier !== b.tier) return a.tier - b.tier;
+  if (a.isEnglish !== b.isEnglish) {
+    return a.isEnglish ? -1 : 1;
+  }
+  const aFirst = a.hits?.[0] ?? 9999;
+  const bFirst = b.hits?.[0] ?? 9999;
+  return aFirst - bFirst;
+}
+
 export function search(query) {
   const q = query.trim();
   // 命令模式(QuicKey 同款): /b 书签 /h 历史 /r 最近关闭
@@ -127,7 +144,7 @@ export function search(query) {
   state.currentSourceIsHistory = isHistoryCmd;
   if (!q || (inCommandMode && !matchQ)) {
     // 空查询/裸命令:展示该数据源全部条目,便于浏览
-    state.filtered = source.map(x => ({ ...x, titleHits: null, urlHits: null }));
+    state.filtered = source.map(x => ({ ...x, titleHits: null, urlHits: null, matchQuality: null }));
     return;
   }
   state.filtered = [];
@@ -136,154 +153,153 @@ export function search(query) {
     // (/h 即 chrome 历史的真实时间序,/b 即书签树序),不按匹配级别重排、不分组
     for (const x of source) {
       const title = x.tab.title || '';
-      const titleHits = fuzzyMatch(matchQ, title);
-      const host = hostOf(x.tab.url);
-      const hostHits = titleHits ? null : (matchQ ? fuzzyMatch(matchQ, host) : null);
-      if (titleHits || hostHits || !matchQ) {
-        state.filtered.push({ ...x, titleHits, urlHits: null, matchedOn: titleHits ? 'title' : 'host', exact: false, groupNameExact: false });
+      const host = hostOf(x.tab.url) || '';
+      const titleMatch = matchField(matchQ, title);
+      const hostMatch = host ? matchField(matchQ, host) : null;
+      if (titleMatch || hostMatch || !matchQ) {
+        state.filtered.push({
+          ...x,
+          titleHits: titleMatch?.hits || null,
+          urlHits: hostMatch?.hits || null,
+          matchedOn: titleMatch ? 'title' : 'host',
+          exact: titleMatch?.tier === 1,
+          groupNameExact: false,
+          matchQuality: titleMatch || hostMatch || null,
+        });
       }
     }
     return; // source 顺序即展示顺序
   }
   const qLower = q.toLowerCase();
   for (const x of source) {
-    // 多维度匹配: 标题 / 分组名 / 拼音 / 域名 / 完整 URL
+    // 多维度匹配: 标题 / 分组名 / 域名 / 完整 URL (支持英文原生 + 中文拼音)
     const title = x.tab.title || '';
     const groupTitle = x.group?.title || '';
-    const host = hostOf(x.tab.url);
+    const host = hostOf(x.tab.url) || '';
     const url = x.tab.url || '';
 
-    // 检测各字段命中
-    const titleHits = fuzzyMatch(q, title);
-    const isTitleExact = title.toLowerCase().includes(qLower);
+    // 1. 分组名匹配 (原生字符 + 拼音)
+    const groupMatch = matchField(q, groupTitle);
 
-    const pinyinHit = !titleHits && pinyinMatch(q, title);
-    const isPinyinExact = pinyinHit && textToPinyin(title).toLowerCase().includes(qLower);
+    // 2. 标题匹配 (原生字符 + 拼音)
+    const titleMatch = matchField(q, title);
 
-    const groupHits = groupTitle ? fuzzyMatch(q, groupTitle) : null;
-    const isGroupEqual = groupTitle.trim().toLowerCase() === qLower;
-    const isGroupExact = groupTitle.toLowerCase().includes(qLower);
-
-    const hostHits = host ? fuzzyMatch(q, host) : null;
-    const isHostExact = host ? host.toLowerCase().includes(qLower) : false;
-
-    const urlHits = fuzzyMatch(q, url);
-    const isUrlExact = url.toLowerCase().includes(qLower);
-
-    // 分组名全等是最强意图信号(搜"mlt"必定找名为 mlt 的组)，排在一切标题/URL命中之前
-    const groupNameExact = isGroupEqual;
-
-    // 匹配质量决策:
-    // 0. 分组名全等 -> 顶级意图
-    // 1. 精确连续包含各级(标题 > 分组 > 拼音 > 域名 > URL)
-    // 2. 模糊包含各级(标题 > 分组 > 拼音 > 域名 > URL)
-    let matchedOn = null;
-    let isExact = false;
-
-    if (groupNameExact) {
-      matchedOn = 'group';
-      isExact = true;
-    } else if (isTitleExact) {
-      matchedOn = 'title';
-      isExact = true;
-    } else if (isGroupExact) {
-      matchedOn = 'group';
-      isExact = true;
-    } else if (isPinyinExact) {
-      matchedOn = 'pinyin';
-      isExact = true;
-    } else if (isHostExact) {
-      matchedOn = 'host';
-      isExact = true;
-    } else if (isUrlExact) {
-      matchedOn = 'url';
-      isExact = true;
-    } else if (titleHits) {
-      matchedOn = 'title';
-      isExact = false;
-    } else if (groupHits) {
-      matchedOn = 'group';
-      isExact = false;
-    } else if (pinyinHit) {
-      matchedOn = 'pinyin';
-      isExact = false;
-    } else if (hostHits) {
-      matchedOn = 'host';
-      isExact = false;
-    } else if (urlHits) {
-      matchedOn = 'url';
-      isExact = false;
+    // 3. 域名连续包含匹配 (英文原生，严格连续字串)
+    let hostMatch = null;
+    if (host) {
+      const hLower = host.toLowerCase();
+      const hIdx = hLower.indexOf(qLower);
+      if (hIdx !== -1) {
+        const hits = [];
+        for (let i = hIdx; i < hIdx + qLower.length; i++) hits.push(i);
+        const isPrefix = hIdx === 0;
+        hostMatch = {
+          type: isPrefix ? 'prefix' : 'sub',
+          tier: isPrefix ? 3.5 : 4,
+          isEnglish: true,
+          hits,
+        };
+      }
     }
 
-    if (matchedOn) {
-      state.filtered.push({
-        ...x,
-        titleHits: titleHits || null,
-        urlHits: urlHits || null,
-        groupHits: groupHits || null,
-        matchedOn,
-        exact: isExact,
-        groupNameExact,
-      });
+    // 4. URL 路径连续包含匹配 (英文原生，严格连续子串，禁止跨参数散字母乱入)
+    let urlMatch = null;
+    if (url) {
+      const uLower = url.toLowerCase();
+      const uIdx = uLower.indexOf(qLower);
+      if (uIdx !== -1) {
+        const hits = [];
+        for (let i = uIdx; i < uIdx + qLower.length; i++) hits.push(i);
+        urlMatch = {
+          type: 'sub',
+          tier: 4.5,
+          isEnglish: true,
+          hits,
+        };
+      }
     }
+
+    // 5. 标题紧凑模糊匹配兜底 (仅针对标题，且跨度不超过 2 倍查询长度，防止长标题散乱噪音)
+    let titleFuzzyMatch = null;
+    if (!titleMatch && !groupMatch && !hostMatch && !urlMatch) {
+      const fHits = fuzzyMatch(q, title);
+      if (fHits && fHits.length) {
+        const span = fHits[fHits.length - 1] - fHits[0] + 1;
+        if (span <= qLower.length * 2 + 2) {
+          titleFuzzyMatch = {
+            type: 'fuzzy',
+            tier: 5,
+            isEnglish: true,
+            hits: fHits,
+          };
+        }
+      }
+    }
+
+    // 收集所有候选命中
+    const candidates = [
+      groupMatch ? { ...groupMatch, target: 'group' } : null,
+      titleMatch ? { ...titleMatch, target: 'title' } : null,
+      hostMatch ? { ...hostMatch, target: 'host' } : null,
+      urlMatch ? { ...urlMatch, target: 'url' } : null,
+      titleFuzzyMatch ? { ...titleFuzzyMatch, target: 'title' } : null,
+    ].filter(Boolean);
+
+    // 未命中任何有效规则则彻底过滤，杜绝长 URL 假阳性
+    if (!candidates.length) continue;
+
+    candidates.sort(compareQuality);
+    const best = candidates[0];
+
+    state.filtered.push({
+      ...x,
+      titleHits: titleMatch?.hits || titleFuzzyMatch?.hits || null,
+      groupHits: groupMatch?.hits || null,
+      urlHits: urlMatch?.hits || hostMatch?.hits || null,
+      matchedOn: best.target,
+      exact: best.tier <= 2,
+      groupNameExact: best.target === 'group' && best.tier === 1,
+      matchQuality: best,
+    });
   }
-  // 排序优先级(统一"匹配度优先",grouped 与 recent/current 一致):
-  // 0. 分组名全等查询词 > 一切
-  // 1. 匹配层级: 标题精确 > 分组名精确 > 拼音精确 > 域名精确 > URL精确 > 模糊匹配各级
-  // 2. 同层级内: 严格按最近使用时间倒排(相对时间显示为升序: 刚刚 -> 4小时 -> 7小时 -> 9小时)
-  // 3. 时间相同时按首字符命中位置微调, 最后按标签物理序号兜底
-  const rank = { title: 0, group: 1, pinyin: 2, host: 3, url: 4 };
-  const firstHit = f => f.titleHits?.[0] ?? f.groupHits?.[0] ?? f.urlHits?.[0] ?? 9999;
-  // 匹配层级: 组名全等(-1) > 精确包含(0~4) > 模糊包含(10~14)
-  const matchTier = f => {
-    if (f.groupNameExact) return -1;
-    return (f.exact ? 0 : 10) + rank[f.matchedOn];
-  };
-  // 组间最佳相关度分(供桶间排序, 结合命中位置判定哪个组最优先展开)
-  const matchQuality = f => {
-    if (f.groupNameExact) return -1;
-    return (f.exact ? 0 : 100) + rank[f.matchedOn] * 10 + Math.min(firstHit(f), 30);
-  };
+
   if (state.view === 'grouped') {
-    // 分组视图: 先分桶,桶内按匹配层级+最近使用排,桶间按桶内最佳排
+    // 分组视图: 按组分桶，桶间按最佳匹配质量排，桶内按匹配质量排
     const buckets = new Map(); // groupKey -> { best, items }
     for (const f of state.filtered) {
       const key = groupKey(f.group);
-      if (!buckets.has(key)) buckets.set(key, { best: Infinity, items: [] });
+      if (!buckets.has(key)) buckets.set(key, { best: null, items: [] });
       const b = buckets.get(key);
-      const q = matchQuality(f);
-      if (q < b.best) b.best = q;
-      b.items.push({ ...f, _q: q });
+      if (!b.best || compareQuality(f.matchQuality, b.best) < 0) {
+        b.best = f.matchQuality;
+      }
+      b.items.push(f);
     }
     for (const b of buckets.values()) {
       b.items.sort((x, y) => {
-        const tDiff = matchTier(x) - matchTier(y);
-        if (tDiff !== 0) return tDiff;
-        // 同层级内: 最近使用的排前面(相对时间显示为升序: 4小时 -> 7小时 -> 9小时)
+        const qDiff = compareQuality(x.matchQuality, y.matchQuality);
+        if (qDiff !== 0) return qDiff;
+        // 同等匹配质量内: 最近使用的排前面(相对时间显示为升序: 4小时 -> 7小时 -> 9小时)
         const timeDiff = (y.tab.lastAccessed || 0) - (x.tab.lastAccessed || 0);
         if (timeDiff !== 0) return timeDiff;
-        const hDiff = firstHit(x) - firstHit(y);
-        if (hDiff !== 0) return hDiff;
         return (x.tab.index || 0) - (y.tab.index || 0);
       });
     }
     state.filtered = [...buckets.values()]
       .sort((a, b) => {
-        if (a.best !== b.best) return a.best - b.best;
+        const qDiff = compareQuality(a.best, b.best);
+        if (qDiff !== 0) return qDiff;
         const aTime = Math.max(...a.items.map(i => i.tab.lastAccessed || 0));
         const bTime = Math.max(...b.items.map(i => i.tab.lastAccessed || 0));
         return bTime - aTime;
       })
-      .flatMap(b => b.items)
-      .map(({ _q, ...f }) => f); // 剥掉临时排序字段
+      .flatMap(b => b.items);
   } else {
     state.filtered.sort((a, b) => {
-      const tDiff = matchTier(a) - matchTier(b);
-      if (tDiff !== 0) return tDiff;
+      const qDiff = compareQuality(a.matchQuality, b.matchQuality);
+      if (qDiff !== 0) return qDiff;
       const timeDiff = (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0);
       if (timeDiff !== 0) return timeDiff;
-      const hDiff = firstHit(a) - firstHit(b);
-      if (hDiff !== 0) return hDiff;
       return (a.tab.index || 0) - (b.tab.index || 0);
     });
   }

@@ -58,6 +58,136 @@ export function pinyinMatch(query, text) {
     || fuzzyMatch(q, textToPinyinInitials(text)) !== null;
 }
 
+// 精确拼音匹配与汉字高亮区间映射
+export function matchPinyin(query, text) {
+  if (!text || !/[一-鿿]/.test(text)) return null;
+  const q = query.trim().toLowerCase();
+  if (!q || !/^[a-z0-9]+$/.test(q)) return null;
+
+  let pyFull = '';
+  let pyInit = '';
+  const charRanges = []; // 对应原 text 每个字符在 pyFull 中的 [start, end]
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const py = charPinyin(ch);
+    const init = charPinyinInitial(ch);
+    const chPy = py !== null ? py.toLowerCase() : ch.toLowerCase();
+    const chInit = init !== null ? init.toLowerCase() : ch.toLowerCase();
+
+    const start = pyFull.length;
+    pyFull += chPy;
+    const end = pyFull.length;
+    charRanges.push([start, end]);
+
+    pyInit += chInit;
+  }
+
+  // 1. 全拼全等 (ceshi -> 测试)
+  if (pyFull === q) {
+    const hits = [];
+    for (let i = 0; i < text.length; i++) hits.push(i);
+    return { type: 'equal', tier: 1, isEnglish: false, hits };
+  }
+
+  // 2. 首字母全等 (cs -> 测试)
+  if (pyInit === q) {
+    const hits = [];
+    for (let i = 0; i < text.length; i++) hits.push(i);
+    return { type: 'equal', tier: 1.2, isEnglish: false, hits };
+  }
+
+  // 3. 全拼前缀 (ce -> 测试)
+  if (pyFull.startsWith(q)) {
+    const hits = [];
+    for (let i = 0; i < text.length; i++) {
+      if (charRanges[i][0] < q.length) hits.push(i);
+    }
+    return { type: 'prefix', tier: 2, isEnglish: false, hits };
+  }
+
+  // 4. 首字母前缀 (c -> 测试)
+  if (pyInit.startsWith(q)) {
+    const hits = [];
+    for (let i = 0; i < q.length; i++) hits.push(i);
+    return { type: 'prefix', tier: 2.2, isEnglish: false, hits };
+  }
+
+  // 5. 全拼连续包含 (ceshi -> 自动化测试)
+  const subIdx = pyFull.indexOf(q);
+  if (subIdx !== -1) {
+    const qEnd = subIdx + q.length;
+    const hits = [];
+    for (let i = 0; i < text.length; i++) {
+      const [cs, ce] = charRanges[i];
+      if (Math.max(cs, subIdx) < Math.min(ce, qEnd)) {
+        hits.push(i);
+      }
+    }
+    return { type: 'sub', tier: 3, isEnglish: false, hits };
+  }
+
+  // 6. 首字母连续包含 (cs -> 自动化测试)
+  const initSubIdx = pyInit.indexOf(q);
+  if (initSubIdx !== -1) {
+    const hits = [];
+    for (let i = initSubIdx; i < initSubIdx + q.length; i++) {
+      hits.push(i);
+    }
+    return { type: 'sub', tier: 3.2, isEnglish: false, hits };
+  }
+
+  return null;
+}
+
+// 原生字符直接匹配 (英文/数字/原生直接命中)
+export function matchExact(query, text) {
+  if (!text) return null;
+  const q = query.trim().toLowerCase();
+  const t = text.toLowerCase();
+  if (!q) return null;
+
+  // 1. 完全相等
+  if (t === q) {
+    const hits = [];
+    for (let i = 0; i < text.length; i++) hits.push(i);
+    return { type: 'equal', tier: 1, isEnglish: true, hits };
+  }
+
+  // 2. 前缀匹配
+  if (t.startsWith(q)) {
+    const hits = [];
+    for (let i = 0; i < q.length; i++) hits.push(i);
+    return { type: 'prefix', tier: 2, isEnglish: true, hits };
+  }
+
+  // 3. 连续子串包含
+  const idx = t.indexOf(q);
+  if (idx !== -1) {
+    const hits = [];
+    for (let i = idx; i < idx + q.length; i++) hits.push(i);
+    return { type: 'sub', tier: 3, isEnglish: true, hits };
+  }
+
+  return null;
+}
+
+// 综合字段匹配: 同等级别下英文/原生优先
+export function matchField(query, text) {
+  if (!text) return null;
+  const exact = matchExact(query, text);
+  const pinyin = matchPinyin(query, text);
+
+  if (exact && !pinyin) return exact;
+  if (!exact && pinyin) return pinyin;
+  if (exact && pinyin) {
+    if (exact.tier < pinyin.tier) return exact;
+    if (pinyin.tier < exact.tier) return pinyin;
+    return exact; // 同等匹配度，英文原生优先
+  }
+  return null;
+}
+
 export function fuzzyMatch(query, text) {
   // 固定模糊匹配: 按序散字符命中(子串是其特例)。曾有「模糊匹配」开关
   // 已删——低频配置不值得占设置面板,模糊匹配是更好的默认
