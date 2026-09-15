@@ -1257,7 +1257,6 @@
       stroke-linejoin: round;
     }
     .group-header.collapsed .caret { transform: rotate(-90deg); }
-    .group-header.active { background: var(--tint) !important; color: var(--accent) !important; }
     /* 归档收纳箱按钮: 默认不可见, hover 分组头时优雅浮现 */
     .btn-archive-group {
       border: none;
@@ -1445,7 +1444,7 @@
       cursor: pointer;
       border-radius: var(--r-xs);
       margin: 0 var(--gutter);
-      transition: background 0.12s;
+      transition: background 0.12s ease, transform 0.15s ease, box-shadow 0.15s ease;
       position: relative;
     }
     /* 选中态: 左侧 3px 主色细节条 + 极淡底色,克制但有存在感 */
@@ -1470,12 +1469,19 @@
       outline: 1.5px dashed var(--accent);
       outline-offset: -1px;
     }
-    /* 选中: 柔和地从左边缘淡出的主题色洗染(现代风,比中国风更淡) */
+    /* 选中: 柔和地从左边缘淡出的主题色洗染(现代风,比中国风更淡) + 整行 Q 弹膨胀 (Back-out 弹性过冲) */
     .tab-item.active {
       background: linear-gradient(to right, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 3%, transparent) 50%, transparent 88%);
+      transform: scale(1.02);
+      z-index: 2;
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 10%, transparent);
+      transition: background 0.12s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease;
     }
-    /* 选中时 favicon 微弹(触感反馈,1.08 察觉不到但手眼协调更顺) */
-    .tab-item.active .icon-wrap { transform: scale(1.08); }
+    /* 选中时 favicon 微弹(触感反馈,协同整行弹性过冲) */
+    .tab-item.active .icon-wrap {
+      transform: scale(1.08);
+      transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
     /* 定位当前标签: 目标行浅蓝底闪烁 2 次,左侧蓝条点亮 */
     @keyframes locate-flash {
       0%, 100% { background-color: transparent; }
@@ -1484,7 +1490,7 @@
     }
     .tab-item.locating { animation: locate-flash 0.6s ease 2; }
     .tab-item.locating::before { opacity: 1; }
-    .tab-item .icon-wrap { transition: transform 0.12s ease; }
+    .tab-item .icon-wrap { transition: transform 0.15s ease; }
     .tab-item img {
       width: 16px;
       height: 16px;

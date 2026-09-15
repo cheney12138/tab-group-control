@@ -145,56 +145,95 @@ export function search(query) {
     }
     return; // source 顺序即展示顺序
   }
+  const qLower = q.toLowerCase();
   for (const x of source) {
-    // 匹配优先级: 标题 > 拼音首字母 > 分组名 > 域名(host) > 完整 URL
+    // 多维度匹配: 标题 / 分组名 / 拼音 / 域名 / 完整 URL
     const title = x.tab.title || '';
+    const groupTitle = x.group?.title || '';
+    const host = hostOf(x.tab.url);
+    const url = x.tab.url || '';
+
+    // 检测各字段命中
     const titleHits = fuzzyMatch(q, title);
+    const isTitleExact = title.toLowerCase().includes(qLower);
+
     const pinyinHit = !titleHits && pinyinMatch(q, title);
-    let urlHits = null;
-    let matchedOn = null; // 'title' | 'pinyin' | 'group' | 'host' | 'url'
-    let groupHits = null;
-    if (titleHits) {
-      matchedOn = 'title';
-    } else if (pinyinHit) {
-      // 拼音首字母命中: "dd"匹配「订单管理」。无高亮(字符不对应),参与排序
-      matchedOn = 'pinyin';
-    } else if (x.group && x.group.title && (groupHits = fuzzyMatch(q, x.group.title))) {
-      // 分组名命中: 搜"订单"能召回分组叫"订单系统"里所有标签
+    const isPinyinExact = pinyinHit && textToPinyin(title).toLowerCase().includes(qLower);
+
+    const groupHits = groupTitle ? fuzzyMatch(q, groupTitle) : null;
+    const isGroupEqual = groupTitle.trim().toLowerCase() === qLower;
+    const isGroupExact = groupTitle.toLowerCase().includes(qLower);
+
+    const hostHits = host ? fuzzyMatch(q, host) : null;
+    const isHostExact = host ? host.toLowerCase().includes(qLower) : false;
+
+    const urlHits = fuzzyMatch(q, url);
+    const isUrlExact = url.toLowerCase().includes(qLower);
+
+    // 分组名全等是最强意图信号(搜"mlt"必定找名为 mlt 的组)，排在一切标题/URL命中之前
+    const groupNameExact = isGroupEqual;
+
+    // 匹配质量决策:
+    // 0. 分组名全等 -> 顶级意图
+    // 1. 精确连续包含各级(标题 > 分组 > 拼音 > 域名 > URL)
+    // 2. 模糊包含各级(标题 > 分组 > 拼音 > 域名 > URL)
+    let matchedOn = null;
+    let isExact = false;
+
+    if (groupNameExact) {
       matchedOn = 'group';
-      // 分组名召回的条目同时检测 URL/标题命中,仅为高亮显示(不改变匹配级别):
-      // 搜"arena"时能看到具体哪个路径也含这个词
-      urlHits = fuzzyMatch(q, x.tab.url || '') || null;
-    } else {
-      const host = hostOf(x.tab.url);
-      const hostHits = host ? fuzzyMatch(q, host) : null;
-      if (hostHits) {
-        matchedOn = 'host';
-      } else {
-        urlHits = fuzzyMatch(q, x.tab.url || '');
-        if (urlHits) matchedOn = 'url';
-      }
+      isExact = true;
+    } else if (isTitleExact) {
+      matchedOn = 'title';
+      isExact = true;
+    } else if (isGroupExact) {
+      matchedOn = 'group';
+      isExact = true;
+    } else if (isPinyinExact) {
+      matchedOn = 'pinyin';
+      isExact = true;
+    } else if (isHostExact) {
+      matchedOn = 'host';
+      isExact = true;
+    } else if (isUrlExact) {
+      matchedOn = 'url';
+      isExact = true;
+    } else if (titleHits) {
+      matchedOn = 'title';
+      isExact = false;
+    } else if (groupHits) {
+      matchedOn = 'group';
+      isExact = false;
+    } else if (pinyinHit) {
+      matchedOn = 'pinyin';
+      isExact = false;
+    } else if (hostHits) {
+      matchedOn = 'host';
+      isExact = false;
+    } else if (urlHits) {
+      matchedOn = 'url';
+      isExact = false;
     }
+
     if (matchedOn) {
-      // 记录匹配质量: exact = 查询串整体作为连续子串出现(含首字对齐),否则为 fuzzy
-      const exactText = matchedOn === 'title' ? title
-        : matchedOn === 'pinyin' ? textToPinyin(title)
-        : matchedOn === 'group' ? (x.group?.title || '')
-        : matchedOn === 'host' ? hostOf(x.tab.url) : (x.tab.url || '');
-      const isExact = exactText.toLowerCase().includes(q.toLowerCase());
-      // 分组名全等(组名就是查询词)是最强意图信号: 搜"arena"就是想找 arena 组,
-      // 排在一切模糊命中的标题之前
-      const groupNameExact = matchedOn === 'group'
-        && (x.group?.title || '').toLowerCase() === q.toLowerCase();
-      state.filtered.push({ ...x, titleHits, urlHits, groupHits, matchedOn, exact: isExact, groupNameExact });
+      state.filtered.push({
+        ...x,
+        titleHits: titleHits || null,
+        urlHits: urlHits || null,
+        groupHits: groupHits || null,
+        matchedOn,
+        exact: isExact,
+        groupNameExact,
+      });
     }
   }
   // 排序优先级(统一"匹配度优先",grouped 与 recent/current 一致):
   // 0. 分组名全等查询词 > 一切
-  // 1. 匹配层级: 标题精确 > 拼音精确 > 分组名精确 > 域名精确 > URL精确 > 模糊匹配各级
+  // 1. 匹配层级: 标题精确 > 分组名精确 > 拼音精确 > 域名精确 > URL精确 > 模糊匹配各级
   // 2. 同层级内: 严格按最近使用时间倒排(相对时间显示为升序: 刚刚 -> 4小时 -> 7小时 -> 9小时)
   // 3. 时间相同时按首字符命中位置微调, 最后按标签物理序号兜底
-  const rank = { title: 0, pinyin: 1, group: 2, host: 3, url: 4 };
-  const firstHit = f => f.titleHits?.[0] ?? f.urlHits?.[0] ?? 9999;
+  const rank = { title: 0, group: 1, pinyin: 2, host: 3, url: 4 };
+  const firstHit = f => f.titleHits?.[0] ?? f.groupHits?.[0] ?? f.urlHits?.[0] ?? 9999;
   // 匹配层级: 组名全等(-1) > 精确包含(0~4) > 模糊包含(10~14)
   const matchTier = f => {
     if (f.groupNameExact) return -1;
@@ -229,7 +268,12 @@ export function search(query) {
       });
     }
     state.filtered = [...buckets.values()]
-      .sort((a, b) => a.best - b.best)
+      .sort((a, b) => {
+        if (a.best !== b.best) return a.best - b.best;
+        const aTime = Math.max(...a.items.map(i => i.tab.lastAccessed || 0));
+        const bTime = Math.max(...b.items.map(i => i.tab.lastAccessed || 0));
+        return bTime - aTime;
+      })
       .flatMap(b => b.items)
       .map(({ _q, ...f }) => f); // 剥掉临时排序字段
   } else {

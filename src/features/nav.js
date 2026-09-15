@@ -1,6 +1,5 @@
 // features/nav.js: 键盘光标与滚动原语(组件)
-// setActive/navUnits/clearActiveUnit 统一编址(分组头+标签行),←→/↑↓/Enter 共用。
-// focusGroupHeader 当前无调用方(功能保留,焦点在分组头的语义备用)。
+// setActive/navUnits/clearActiveUnit 统一编址(仅标签行),←→/↑↓/Enter 共用。
 import { resultsEl } from '../core/dom.js';
 import { groupKey } from '../core/format.js';
 import { state } from '../core/store.js';
@@ -56,16 +55,10 @@ export function focusCurrentTab() {
   setActive(currentRow ? rows.indexOf(currentRow) : 0);
 }
 
-// 可聚焦单元 = 分组头 + 标签行,统一编址,←→/↑↓/Enter 都基于它工作
+// 可聚焦单元 = 仅标签行,统一编址,上下移动/Enter/快捷键共用,越过分组头
 export function navUnits() {
-  return [...resultsEl.querySelectorAll('.group-header, .tab-item')];
+  return [...resultsEl.querySelectorAll('.tab-item')];
 }
 export function clearActiveUnit() {
-  navUnits().forEach(u => u.classList.remove('active'));
-}
-// 分组头的选中态
-function focusGroupHeader(header) {
-  clearActiveUnit();
-  header.classList.add('active');
-  state.activeIndex = -2; // 标记当前焦点在分组头上,不在标签行序列里
+  resultsEl.querySelectorAll('.tab-item, .group-header').forEach(u => u.classList.remove('active'));
 }

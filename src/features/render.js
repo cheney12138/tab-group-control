@@ -43,7 +43,6 @@ export function render() {
   const t0 = performance.now();
   // 记住重渲染前的焦点,重建后尽量恢复
   const prevUnit = navUnits().find(u => u.classList.contains('active'));
-  const prevKey = prevUnit?.dataset.groupKey;
   const prevTabId = prevUnit?.dataset.tabId;
   resultsEl.innerHTML = '';
   staggerIdx = 0; // stagger 入场计数器,每行取号后递增(封顶 12 防长列表拖尾)
@@ -108,7 +107,7 @@ export function render() {
       }
     }
     resultsEl.appendChild(frag);
-    restoreFocus(prevKey, prevTabId);
+    restoreFocus(prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
     return;
   }
@@ -159,28 +158,18 @@ export function render() {
     staleKeys.forEach(k => collapsed.delete(k));
     saveCollapsed();
   }
-  restoreFocus(prevKey, prevTabId);
+  restoreFocus(prevTabId);
   if (DEBUG) console.log(`[TGS] render 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
 }
 
-// 重渲染后恢复焦点: 优先同 tabId 的行,其次同 key 的分组头,找不到则不聚焦
-function restoreFocus(prevKey, prevTabId) {
-  if (!prevKey && !prevTabId) return;
+// 重渲染后恢复焦点: 优先同 tabId 的行,找不到则不聚焦
+function restoreFocus(prevTabId) {
+  if (!prevTabId) return;
   const units = navUnits();
-  let target = null;
-  if (prevTabId) {
-    target = units.find(u => u.classList.contains('tab-item') && Number(u.dataset.tabId) === Number(prevTabId));
-  }
-  if (!target && prevKey) {
-    target = units.find(u => u.classList.contains('group-header') && u.dataset.groupKey === prevKey);
-  }
+  const target = units.find(u => Number(u.dataset.tabId) === Number(prevTabId));
   if (target) {
     target.classList.add('active');
-    if (target.classList.contains('tab-item')) {
-      state.activeIndex = indexOfRow(target);
-    } else {
-      state.activeIndex = -2;
-    }
+    state.activeIndex = indexOfRow(target);
   }
 }
 
