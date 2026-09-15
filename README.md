@@ -1,6 +1,9 @@
-# Tab Group Search
+<h1 align="center">
+  <img src="icons/icon128.png" width="96" alt="Tab Group Search"><br>
+  Tab Group Search
+</h1>
 
-一个为多环境开发场景设计的 Chrome 扩展:**搜索切换 + 自动分组 + 归档收纳**,一个弹窗管好几百个标签页。
+<p align="center">一个为多环境开发场景设计的 Chrome 扩展:<b>搜索切换 + 自动分组 + 归档收纳</b>,一个弹窗管好几百个标签页。</p>
 
 ## 功能一览
 
