@@ -327,7 +327,7 @@ function handleShortcuts(e) {
   }
   const units = navUnits();
   if (!units.length) return;
-  // 当前焦点单元: 优先取带 active 的单元(可能是分组头或行)
+  // 当前焦点单元: 优先取带 active 的标签行(分组头不参与焦点)
   const focusedUnit = units.find(u => u.classList.contains('active')) || units[0];
   const focusIdx = units.indexOf(focusedUnit);
 
@@ -339,35 +339,28 @@ function handleShortcuts(e) {
     clearActiveUnit();
     el.classList.add('active');
     scrollPastSticky(el);
-    if (el.classList.contains('tab-item')) {
-      state.activeIndex = indexOfRow(el);
-    } else {
-      state.activeIndex = -2; // 焦点在分组头
-    }
+    state.activeIndex = indexOfRow(el);
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     // → 收起 / ← 展开焦点所在的分组; 焦点在标签行上时取该行所属分组
     // recent / current 视图没有分组头,收起无处展示,不响应
     if (state.view !== 'grouped') return;
-    let key;
-    if (focusedUnit.classList.contains('group-header')) {
-      key = focusedUnit.dataset.groupKey;
-    } else {
-      const found = findGroupOfTab(Number(focusedUnit.dataset.tabId));
-      if (!found) return; // 未分组的标签,无组可收
-      key = groupKey(found.group);
-    }
+    const found = findGroupOfTab(Number(focusedUnit.dataset.tabId));
+    if (!found) return; // 未分组的标签,无组可收
+    const key = groupKey(found.group);
     const set = activeCollapsed();
     if (DEBUG) console.log('[TGS] 分组键:', key, '已收起:', set.has(key));
     if (e.key === 'ArrowRight' && !set.has(key)) {
       set.add(key);
       if (!state.searching) saveCollapsed();
       render();
-      // 收起后光标落在该分组头上,再按 ← 可原地展开
-      const header = navUnits().find(u => u.classList.contains('group-header') && u.dataset.groupKey === key);
-      if (header) {
-        header.classList.add('active');
-        header.scrollIntoView({ block: 'nearest' });
-        state.activeIndex = -2;
+      // 收起后保持在就近的可见标签行上，不再选中分组头
+      const remainingRows = [...resultsEl.querySelectorAll('.tab-item')];
+      if (remainingRows.length) {
+        const targetIdx = Math.min(focusIdx, remainingRows.length - 1);
+        setActive(targetIdx);
+      } else {
+        clearActiveUnit();
+        state.activeIndex = -1;
       }
     } else if (e.key === 'ArrowLeft' && set.has(key)) {
       set.delete(key);
@@ -376,25 +369,20 @@ function handleShortcuts(e) {
       // 展开后选中该分组下第一行
       const rows = [...resultsEl.querySelectorAll('.tab-item')];
       const firstRow = rows.find(r => {
-        const found = findGroupOfTab(Number(r.dataset.tabId));
-        return found && groupKey(found.group) === key;
+        const f = findGroupOfTab(Number(r.dataset.tabId));
+        return f && groupKey(f.group) === key;
       });
       if (firstRow) {
         setActive(rows.indexOf(firstRow));
-      } else {
-        // 组内无可见行(如未分组区),光标留在分组头
-        const header = navUnits().find(u => u.classList.contains('group-header') && u.dataset.groupKey === key);
-        if (header) { header.classList.add('active'); state.activeIndex = -2; }
       }
     }
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (focusedUnit.classList.contains('tab-item')) {
+    if (focusedUnit && focusedUnit.classList.contains('tab-item')) {
       const tabId = Number(focusedUnit.dataset.tabId);
       const target = state.filtered.find(f => f.tab.id === tabId);
       if (target) switchTo(target.tab);
     }
-    // 焦点在分组头上时回车不做操作
   } else if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey) && e.shiftKey) {
     // ⌘⇧K / Ctrl+Shift+K 清理 7 天以上未使用的标签
     e.preventDefault();
