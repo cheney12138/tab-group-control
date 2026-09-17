@@ -77,7 +77,8 @@ function markActiveSwatch(el) {
 
 function applyThemeAccent(theme) {
   const isInk = theme === 'ink';
-  const savedAccent = localStorage.getItem(isInk ? 'tgs-accent-ink' : 'tgs-accent-linear') ||
+  // 每主题独立键(ink 无 data-accent 兜底,其余主题回落全局旧键再回落 blue)
+  const savedAccent = localStorage.getItem(isInk ? 'tgs-accent-ink' : `tgs-accent-${theme}`) ||
                       (isInk ? '' : (localStorage.getItem('tgs-accent') || 'blue'));
   if (savedAccent) {
     document.documentElement.dataset.accent = savedAccent;
@@ -463,7 +464,7 @@ try {
       document.documentElement.dataset.accent = b.dataset.accent;
       markActiveSwatch(b);
       try {
-        localStorage.setItem(currentTheme === 'ink' ? 'tgs-accent-ink' : 'tgs-accent-linear', b.dataset.accent);
+        localStorage.setItem(currentTheme === 'ink' ? 'tgs-accent-ink' : `tgs-accent-${currentTheme}`, b.dataset.accent);
         localStorage.setItem('tgs-accent', b.dataset.accent);
       } catch (e) {}
       actions.render();

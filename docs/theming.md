@@ -28,3 +28,4 @@
 - 组件层(主题块之外)写死色值 / 出现主题判断
 - 覆盖层里 `!important` 压别的覆盖(只准压基础层)
 - 向 `:root` 共享基座加视觉 token(基座只放度量)
+- 禁用公共交互层:`.tab-item.active` 的上浮效果(渐变高亮 + scale + 弹性过冲 + 投影)是全主题共享件,任何主题(含未来新增)不得在其命名空间内覆盖 `transform`/`box-shadow`/`transition` 将其关闭;主题只准通过 `--accent` 等 token 影响其配色

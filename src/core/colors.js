@@ -27,6 +27,19 @@ export const INK_GROUP_COLORS = {
   orange: '#C08A4E', // 赭石
 };
 
+// Chrome 组色名 → 终端蓝低饱和色(用于 herdr 主题,雾蓝底上依然可辨)
+export const HERDR_GROUP_COLORS = {
+  grey: '#8A90B4',   // 雾灰蓝
+  blue: '#3D5BC4',   // 电光蓝
+  red: '#D0524C',    // 砖红
+  yellow: '#C49A3A', // 芥末黄
+  green: '#4E8C5F',  // 苔绿
+  pink: '#C0648C',   // 玫粉
+  purple: '#7A5FB8', // 靛紫
+  cyan: '#3D93B8',   // 青蓝
+  orange: '#C9762E', // 陶橙
+};
+
 // 构造水墨风 100% 同款晕染墨团 SVG (支持按分组色动态渲染)
 export function buildInkBleedSvg(hex) {
   const c = encodeURIComponent(hex || '#2B2622');
@@ -43,6 +56,7 @@ export function buildInkBleedSvg(hex) {
 export const THEME_ASSETS = {
   linear: { groupColors: GROUP_COLORS },
   ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, tabSliderExtra: 6 },
+  herdr: { groupColors: HERDR_GROUP_COLORS },
 };
 export function themeAssets() {
   const t = document.documentElement.dataset.theme;

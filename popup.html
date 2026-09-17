@@ -24,28 +24,28 @@
     }
     @media (prefers-color-scheme: dark) {
 
-      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 中国风(水墨)主题绝对不动不反色 */
-      html:not([data-theme="ink"]) .src-btn img,
-      html:not([data-theme="ink"]) .settings-btn img {
+      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝)绝对不动不反色 */
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn img {
         filter: invert(0.88) brightness(1.1);
         opacity: 0.85;
       }
-      html:not([data-theme="ink"]) .src-btn:hover img,
-      html:not([data-theme="ink"]) .settings-btn:hover img,
-      html:not([data-theme="ink"]) .src-btn.active img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active img {
         filter: invert(1) brightness(1.2);
         opacity: 1;
       }
-      html:not([data-theme="ink"]) .src-btn svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn svg {
         color: var(--text-2);
         opacity: 0.88;
       }
-      html:not([data-theme="ink"]) .src-btn:hover svg,
-      html:not([data-theme="ink"]) .src-btn.active svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover svg,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active svg {
         color: var(--accent);
         opacity: 1;
       }
-      html:not([data-theme="ink"]) .help-card-head img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]) .help-card-head img {
         filter: invert(0.88) brightness(1.1);
       }
     }
@@ -1470,6 +1470,9 @@
       outline-offset: -1px;
     }
     /* 选中: 柔和地从左边缘淡出的主题色洗染(现代风,比中国风更淡) + 整行 Q 弹膨胀 (Back-out 弹性过冲) */
+    /* 公共交互层(全主题共享,主题覆盖层不得禁用): 选中行上浮效果 =
+     * accent 渐变高亮 + scale(1.02) 上浮 + 弹性过冲 + 柔和投影。
+     * ink/linear/herdr 及未来新增主题一律继承此处,主题只准调整配色类 token */
     .tab-item.active {
       background: linear-gradient(to right, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 3%, transparent) 50%, transparent 88%);
       transform: scale(1.02);
@@ -2503,6 +2506,163 @@
       mix-blend-mode: multiply;
       opacity: 0.98;
     }
+
+    /* ============================================================
+     * 新增主题: 终端蓝 (data-theme="herdr")
+     * 纯视觉换肤,严格限定在 [data-theme="herdr"] 命名空间下,不影响其他主题
+     * 配色/设计语言取自 herdr.dev: 雾蓝紫底 #E3E4EE | 藏青墨 #1F2A5A |
+     * 电光蓝 #3D5BC4 | 全局等宽字体 + 极淡方格底纹 | 实心藏青主按钮
+     * 亮色单面主题(与 ink 同策略): color-scheme: light,不跟随系统深色
+     * ============================================================ */
+    :root[data-theme="herdr"] {
+      color-scheme: light;
+      --bg: #DEDFE9;
+      --surface: #E9EAF3;
+      --fill: rgba(31, 42, 90, 0.06);
+      --fill-2: rgba(31, 42, 90, 0.10);
+      --text: #1F2A5A;
+      --text-2: #5C6591;
+      --text-3: #8A90B4;
+      --placeholder: rgba(31, 42, 90, 0.42);
+      --hairline: rgba(31, 42, 90, 0.16);
+      --header-line: transparent;
+      --hover: rgba(31, 42, 90, 0.05);
+      --accent: #3D5BC4;
+      --accent-hi: #2E4AAE;
+      --tint: color-mix(in srgb, var(--accent) 10%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 16%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+
+      --header-bg: #DEDFE9;
+      --header-hover: rgba(31, 42, 90, 0.05);
+      --plate-bg: #DEDFE9;
+      --search-bg: #E9EAF3;
+      --search-bg-focus: #EFF0F6;
+      --pop-bg: #E9EAF3;
+
+      /* 终端风时间标签色系(红/橙/绿状态信号,herdr 同款低饱和) */
+      --tag-hot-c: #3E7B4F;
+      --tag-info-c: #3D5BC4;
+      --tag-mid-c: #5C6591;
+      --tag-stale-c: #C4762A;
+      --tag-zombie-c: #D0453F;
+
+      /* 视觉 token 全量自有化(ADR-0003): 不依赖任何外部兜底 */
+      --danger: #D0453F;
+      --danger-solid: #D0453F;
+      --danger-bg: rgba(208, 69, 63, 0.12);
+      --amber: #C4762A;
+      --seg-active: #E9EAF3;
+      --seg-shadow: none;
+      --shadow-pop: 0 2px 10px rgba(31, 42, 90, 0.16);
+      --dot-ring: rgba(31, 42, 90, 0.08);
+      --btn-2: #5C6591;
+      --media-btn-bg: #E9EAF3;
+      --media-btn-shadow: 0 1px 2px rgba(31, 42, 90, 0.12);
+      --push-shadow: 0 2px 10px rgba(31, 42, 90, 0.14);
+      --card-shadow: none;
+      --card-shadow-hover: none;
+      --tag-hot-bg: rgba(62, 123, 79, 0.13);
+      --tag-info-bg: rgba(61, 91, 196, 0.11);
+      --tag-mid-bg: rgba(31, 42, 90, 0.07);
+      --tag-stale-bg: rgba(196, 118, 42, 0.14);
+      --tag-zombie-bg: rgba(208, 69, 63, 0.11);
+
+      /* 度量基座覆盖(ADR-0003 允许主题覆盖): TUI 直角语言,一切容器退圆为方。
+       * 这是 herdr 与 linear 的骨架级分野,不是配色差异 */
+      --r-xs: 2px; --r-sm: 3px; --r-md: 4px; --r-lg: 5px;
+    }
+
+    /* 终端蓝主题下的突出色选项: 沿用 herdr 低饱和终端色系 */
+    :root[data-theme="herdr"][data-accent="blue"]   { --accent: #3D5BC4; --accent-hi: #2E4AAE; }
+    :root[data-theme="herdr"][data-accent="cyan"]   { --accent: #1F7A8C; --accent-hi: #186573; }
+    :root[data-theme="herdr"][data-accent="green"]  { --accent: #3E7B4F; --accent-hi: #2F6440; }
+    :root[data-theme="herdr"][data-accent="orange"] { --accent: #C4762A; --accent-hi: #A65F1E; }
+    :root[data-theme="herdr"][data-accent="rose"]   { --accent: #C24B58; --accent-hi: #A53B47; }
+
+    /* 全局等宽字体(herdr 的核心气质): 拉丁/数字走 mono,CJK 自动回落系统中文。
+     * 背景是纯色雾蓝紫(hero 区取色): 列表本身文字信息密度高,不叠任何网格纹理 */
+    html[data-theme="herdr"] body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace;
+      background: var(--bg);
+    }
+
+    /* 等宽字形略宽,微调关键节奏点的字号/字距,保持与另两主题相近的行内密度 */
+    html[data-theme="herdr"] .view-tab { font-size: 13px; letter-spacing: 0.02em; }
+    html[data-theme="herdr"] .group-title { font-size: 13.5px; letter-spacing: 0.02em; }
+    html[data-theme="herdr"] .tab-item .title { font-size: 12.5px; }
+
+    /* ---- TUI 精髓 1: 命令栏是一块"终端顶栏" —— 底部 1px 实线切出区域,
+     * 搜索框是方角代码块容器;聚焦只切边框色,绝不发光(零光晕) ---- */
+    html[data-theme="herdr"] .search-plate {
+      border-bottom: 1px solid var(--hairline);
+    }
+    html[data-theme="herdr"] .search-wrap:focus-within {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
+      box-shadow: none; /* 终端没有 glow */
+    }
+
+    /* ---- TUI 精髓 2: 列表行激活态配色走主题 token;
+     * 上浮/弹性/投影是基础层公共交互件,herdr 与其他主题同等继承,不在此覆盖 ---- */
+
+    /* ---- TUI 精髓 3: 分组分隔 = 贯通实线,替代 linear 的两端渐隐曲线 ---- */
+    html[data-theme="herdr"] .group-header::before {
+      background: var(--hairline);
+    }
+
+    /* ---- TUI 精髓 4: 计数徽章 = 方角描边盒(ASCII 括号语义),不再灰底胶囊 ---- */
+    html[data-theme="herdr"] .group-count {
+      background: transparent;
+      box-shadow: inset 0 0 0 1px var(--hairline);
+    }
+
+    /* ---- TUI 精髓 5: 部件形状方化 —— 竖条/滑块/开关/色点/媒体钮全部去圆 ---- */
+    html[data-theme="herdr"] .group-dot { border-radius: 1px; }
+    html[data-theme="herdr"] .view-tabs .tab-slider,
+    html[data-theme="herdr"] .settings-tabs .tab-slider {
+      height: 2px;
+      border-radius: 0; /* 直线指示,水墨用笔触,终端用直线 */
+    }
+    html[data-theme="herdr"] .srow input[type="checkbox"] + .toggle-track { border-radius: 2px; }
+    html[data-theme="herdr"] .srow input[type="checkbox"] + .toggle-track::after {
+      border-radius: 1px;
+      background: var(--surface);
+      box-shadow: none;
+    }
+    html[data-theme="herdr"] .accent-swatch { border-radius: 3px; }
+    html[data-theme="herdr"] .media-btn { border-radius: 5px; }
+
+    /* ---- TUI 精髓 6: 滚动条也是部件 —— 方形深色滑轨,不圆润不透明渐变 ---- */
+    html[data-theme="herdr"] ::-webkit-scrollbar { width: 8px; }
+    html[data-theme="herdr"] ::-webkit-scrollbar-track { background: transparent; }
+    html[data-theme="herdr"] ::-webkit-scrollbar-thumb {
+      background: rgba(31, 42, 90, 0.22);
+      border-radius: 0;
+    }
+    html[data-theme="herdr"] ::-webkit-scrollbar-thumb:hover { background: rgba(31, 42, 90, 0.38); }
+
+    /* 按钮语言: herdr 的实心藏青主按钮 + 描边次级按钮(方角,少圆多硬) */
+    html[data-theme="herdr"] .rules-save-btn {
+      border-radius: var(--r-sm);
+      letter-spacing: 0.03em;
+    }
+    html[data-theme="herdr"] .rules-add-btn {
+      color: var(--text);
+      border-color: rgba(31, 42, 90, 0.35);
+      border-radius: var(--r-sm);
+      letter-spacing: 0.03em;
+    }
+    html[data-theme="herdr"] .rules-add-btn:hover {
+      border-color: var(--text);
+      background: rgba(31, 42, 90, 0.06);
+    }
+
+    /* 突出色圆点改为主题真实色值(与 ink 同惯例) */
+    html[data-theme="herdr"] .accent-swatch[data-accent="blue"]   { background: #3D5BC4; }
+    html[data-theme="herdr"] .accent-swatch[data-accent="cyan"]   { background: #1F7A8C; }
+    html[data-theme="herdr"] .accent-swatch[data-accent="green"]  { background: #3E7B4F; }
+    html[data-theme="herdr"] .accent-swatch[data-accent="orange"] { background: #C4762A; }
+    html[data-theme="herdr"] .accent-swatch[data-accent="rose"]   { background: #C24B58; }
   </style>
 </head>
 <body>
@@ -2583,8 +2743,9 @@
           <div class="srow"><span class="slabel">主题风格</span>
             <span class="sselect">
               <select id="optTheme">
-                <option value="linear">极简现代 (Linear)</option>
-                <option value="ink">水墨古风 (新中式)</option>
+                <option value="linear">Linear</option>
+                <option value="ink">Ink</option>
+                <option value="herdr">Terminal</option>
               </select>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>
