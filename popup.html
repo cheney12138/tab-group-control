@@ -1427,8 +1427,11 @@
       flex-shrink: 0;
     }
     /* 列表行 stagger 入场: 逐行淡入+上浮,每行延迟 8ms(Raycast 式质感)。
-     * 只动 opacity/transform,不触发布局;搜索重渲染同样生效 */
-    .tab-item, .group-header {
+     * 只动 opacity/transform,不触发布局;**只在弹窗首次渲染生效,搜索重渲染不播** */
+    /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 420ms 后摘掉。
+     * ⚠️ 2026-09-18 病例(本机):强行动效打开后,每次敲搜索键整套列表都重新上浮 = 闪烁 ✗。
+     * 病因:入场动画挂在**常态选择器**上 ⇒ 每次重渲染都会重放。结构上把"入场"与"重渲染"分开。 */
+    body.entrance .tab-item, body.entrance .group-header {
       animation: row-enter 0.16s ease-out backwards;
     }
     @keyframes row-enter {
@@ -1800,28 +1803,36 @@
      * !important 用于覆盖 stagger 行的内联 animation-delay(JS 用
      * el.style.animationDelay 设的内联值优先级高于样式表,不加 !important
      * 逐行 stagger 仍会跑)。过渡也一并归零,hover/聚焦无渐变但功能不受影响 */
+    /* ⚠️ 2026-09-18 病例(本机):设置里加了「强行动效」开关,开了却毫无变化。真因:本段是媒体查询,
+     * JS 改不了它。想压过它只有两条路:① 后面再写 !important + 更高特异性的规则去"恢复原时长"
+     * —— 没有可用值(animation-duration: revert 在 !important 声明里倒退到 UA 值,不是作者值);
+     * ② 让处决自己带一个可被开关排除的条件 —— 就是下面的 :not()。选 ②:html 上没有
+     * data-force-motion="on" 时才处决 ⇒ 开关打开时这些选择器不匹配,原生时长自然生效。
+     * 属性由 settings.js 的 applyForceMotion() 落地,默认开启(口径同 Glance 的 motion.alwaysAnimate)。*/
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
+      html:not([data-force-motion="on"]) *,
+      html:not([data-force-motion="on"]) *::before,
+      html:not([data-force-motion="on"]) *::after {
         animation-duration: 0.001ms !important;
         animation-delay: 0s !important;
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
       }
       /* 音浪是“正在播放”状态信号,保留细微动画 + 错峰(否则被冻结/同步);暂停态小圆点静态呈现 */
-      .wave-icon.is-playing span { animation-duration: 1.6s !important; }
-      .wave-icon.is-playing span:nth-child(1) { animation-delay: 0s !important; }
-      .wave-icon.is-playing span:nth-child(2) { animation-delay: -0.27s !important; }
-      .wave-icon.is-playing span:nth-child(3) { animation-delay: -0.54s !important; }
-      .wave-icon.is-paused span { animation: none !important; }
+      html:not([data-force-motion="on"]) .wave-icon.is-playing span { animation-duration: 1.6s !important; }
+      html:not([data-force-motion="on"]) .wave-icon.is-playing span:nth-child(1) { animation-delay: 0s !important; }
+      html:not([data-force-motion="on"]) .wave-icon.is-playing span:nth-child(2) { animation-delay: -0.27s !important; }
+      html:not([data-force-motion="on"]) .wave-icon.is-playing span:nth-child(3) { animation-delay: -0.54s !important; }
+      html:not([data-force-motion="on"]) .wave-icon.is-paused span { animation: none !important; }
       /* 重复域名定位提示: 保留闪烁(否则被冻结到不可见) */
-      .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
+      html:not([data-force-motion="on"]) .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
       /* 无效输入拦截提示: 同上,提示信号不能被冻结 */
-      .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
-      .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      html:not([data-force-motion="on"]) .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      html:not([data-force-motion="on"]) .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       /* Tab 滑块与设置面板抽屉: 保留动画 */
-      .view-tabs .tab-slider,
-      .settings-tabs .tab-slider { transition-duration: 0.28s !important; }
-      .settings-panel { transition-duration: 0.24s !important; }
+      html:not([data-force-motion="on"]) .view-tabs .tab-slider,
+      html:not([data-force-motion="on"]) .settings-tabs .tab-slider { transition-duration: 0.28s !important; }
+      html:not([data-force-motion="on"]) .settings-panel { transition-duration: 0.24s !important; }
     }
 
     /* ============================================================
@@ -2739,6 +2750,7 @@
       </div>
       <div class="settings-pane" id="pane-func">
         <div class="sbox">
+          <label class="srow" title="开启后忽略系统「减弱动态效果」，入场/悬停/滑块动效照常播放；关闭则跟随系统。"><span class="slabel">强行动效</span><input type="checkbox" id="optForceMotion"><span class="toggle-track"></span></label>
           <label class="srow"><span class="slabel">显示 URL 行</span><input type="checkbox" id="optShowUrl"><span class="toggle-track"></span></label>
           <div class="srow"><span class="slabel">主题风格</span>
             <span class="sselect">

@@ -100,6 +100,10 @@ function windowOrdinal(windowId) {
 }
 
 let staggerIdx = 0; // stagger 入场: render 内每行取号
+// 入场动效只为"弹窗首次渲染"播放;之后任何重渲染(敲搜索/切分组/操作后刷新)都不播。
+// 病例(本机 2026-09-18):强行动效打开后每次输入整套列表重新上浮 = 闪烁。
+// 计时:最长 stagger 96ms(12 行 × 8ms) + 动画 160ms ⇒ 420ms 足够走完。
+let entrancePlayed = false;
 function staggerDelay() {
   const i = Math.min(staggerIdx++, 12); // 封顶 12 行,后面同时入场
   return `${i * 8}ms`;
@@ -122,6 +126,14 @@ export function render() {
   const prevTabId = prevUnit?.dataset.tabId;
   resultsEl.innerHTML = '';
   staggerIdx = 0; // stagger 入场计数器,每行取号后递增(封顶 12 防长列表拖尾)
+  if (!entrancePlayed) {
+    entrancePlayed = true;
+    document.body.classList.add('entrance');
+    setTimeout(() => document.body.classList.remove('entrance'), 420);
+  } else if (document.body.classList.contains('entrance')) {
+    // 首帧还没走完就又重渲染了:立刻停掉入场,否则新行会再从头开始上浮(闪第二次)
+    document.body.classList.remove('entrance');
+  }
   if (!state.filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
     return;

@@ -14,6 +14,29 @@ let settingsBtn = null;      // 以下元素引用在 initSettings 内赋值
 let settingsPanel = null;
 let optAutoGroup = null;
 let optOthersGroup = null;
+let optForceMotion = null;
+
+// ---- 强行动效(忽略系统「减弱动态效果」) ----
+// 口径同 Glance 的 motion.alwaysAnimate:**默认开启**(undefined = 没写过 ⇒ 开)。
+// CSS 侧处决写成 html:not([data-force-motion="on"]) ⇒ 属性在 = 不处决。
+// 必须**同步**落地:chrome.storage 是异步的,等它回来首帧已经画完(会看到"不动的首帧")。
+// 所以用 localStorage 镜像做首帧依据;chrome.storage 仍是唯一真源(开面板时对账)。
+function applyForceMotion(on) {
+  if (on) document.documentElement.setAttribute('data-force-motion', 'on');
+  else document.documentElement.removeAttribute('data-force-motion');
+  try { localStorage.setItem('tgs-force-motion', on ? '1' : '0'); } catch (e) {}
+}
+try { if (localStorage.getItem('tgs-force-motion') !== '0') applyForceMotion(true); } catch (e) {}
+
+async function loadForceMotionSwitch() {
+  let on = true;
+  try {
+    const stored = await chrome.storage.local.get('forceMotionEnabled');
+    on = stored?.forceMotionEnabled !== false;   // 默认开;写成 false 才算关
+  } catch (e) { /* 读不到 ⇒ 保持默认开 */ }
+  applyForceMotion(on);
+  if (optForceMotion) optForceMotion.checked = on;
+}
 
 export function isSettingsOpen() {
   return !!(settingsPanel && settingsPanel.classList.contains('open'));
@@ -27,6 +50,7 @@ function openSettingsPanel() {
   loadRulesForEdit();
   loadAutoGroupSwitch();
   loadOthersGroupSwitch();
+  loadForceMotionSwitch();
   renderArchivedList();
   requestAnimationFrame(() => positionTabSlider(document.querySelector('.settings-tabs')));
 }
@@ -535,6 +559,13 @@ optOthersGroup.addEventListener('change', async () => {
   }, 1500);
 });
 // 快捷键速查已改为 hover 气泡(纯 CSS),无需 JS
+// 强行动效开关(唯一出口 applyForceMotion —— 属性不许在别处被漏改)
+optForceMotion = document.getElementById('optForceMotion');
+optForceMotion.addEventListener('change', async () => {
+  applyForceMotion(optForceMotion.checked);
+  try { await chrome.storage.local.set({ forceMotionEnabled: optForceMotion.checked }); } catch (e) {}
+  showToast(optForceMotion.checked ? '动效已强制开启(忽略系统设置)' : '动效跟随系统设置');
+});
 const optShowUrl = document.getElementById('optShowUrl');
 // (模糊匹配开关已删: 功能保留、永远开启,不再暴露配置)
 optShowUrl.checked = actions.getSettings().showUrl;
