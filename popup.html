@@ -24,28 +24,28 @@
     }
     @media (prefers-color-scheme: dark) {
 
-      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝)绝对不动不反色 */
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn img {
+      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝/Y2K)绝对不动不反色 */
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .settings-btn img {
         filter: invert(0.88) brightness(1.1);
         opacity: 0.85;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .settings-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn.active img {
         filter: invert(1) brightness(1.2);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn svg {
         color: var(--text-2);
         opacity: 0.88;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover svg,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn:hover svg,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .src-btn.active svg {
         color: var(--accent);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .help-card-head img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="y2k"]) .help-card-head img {
         filter: invert(0.88) brightness(1.1);
       }
     }
@@ -2688,6 +2688,381 @@
     html[data-theme="herdr"] .accent-swatch[data-accent="green"]  { background: #3E7B4F; }
     html[data-theme="herdr"] .accent-swatch[data-accent="orange"] { background: #C4762A; }
     html[data-theme="herdr"] .accent-swatch[data-accent="rose"]   { background: #C24B58; }
+
+    /* ============================================================
+     * 第四套主题: Y2K 千禧复古 (data-theme="y2k")
+     * 纯视觉换肤,严格限定在 [data-theme="y2k"] 命名空间下,不影响其他主题
+     * 设计语言取自 2000 年前后中文 BBS / Windows 经典窗口(用户附图):
+     *   蓝灰点阵底 #D8E1E8 | 藏青 2px 窗口硬外框 | 蓝渐变标题条 #CFE1F3→#3F6DA3 |
+     *   分组横幅 = 参考图那条蓝渐变横条 | 列表选中 = 实心强调色高亮 + 白字 |
+     *   凸起/内凹双向斜面(bevel)取代圆角与柔投影 | 琥珀橙 CTA 按钮
+     * 亮色单面主题(与 ink/herdr 同策略): color-scheme: light,不跟随系统深色
+     * ============================================================ */
+    :root[data-theme="y2k"] {
+      color-scheme: light;
+
+      /* 主题内部调色板(仅 y2k 装饰块复用) */
+      --y2k-frame: #1B3A5C;                  /* 窗口外框深藏青 */
+      --y2k-face: #D5DEE6;                   /* 经典对话框灰面 */
+      --y2k-face-2: #E8EEF3;                 /* 按钮/卡片亮面 */
+      --y2k-hi: rgba(255, 255, 255, 0.92);   /* 斜面高光边 */
+      --y2k-lo: rgba(27, 58, 92, 0.42);      /* 斜面暗边 */
+      --y2k-bar-a: #CFE1F3;                  /* 标题条渐变起 */
+      --y2k-bar-b: #3F6DA3;                  /* 标题条渐变止 */
+      --y2k-banner-a: #7BA0CE;               /* 分组横幅渐变起 */
+      --y2k-banner-b: #3C5F97;               /* 分组横幅渐变止 */
+      --y2k-amber: #F0A93B;                  /* 指示条琥珀(藏青底上唯一的亮色锚点) */
+      --y2k-dots: radial-gradient(rgba(27, 58, 92, 0.085) 1px, transparent 1px);
+
+      /* 视觉 token 全量自有化(ADR-0003): 不依赖任何外部兜底 */
+      --bg: #D8E1E8;
+      --surface: #F6F9FB;
+      --fill: rgba(27, 58, 92, 0.07);
+      --fill-2: rgba(27, 58, 92, 0.12);
+      --text: #16202B;
+      --text-2: #46586B;
+      --text-3: #7A8B9C;
+      --placeholder: rgba(22, 32, 43, 0.45);
+      --hairline: rgba(27, 58, 92, 0.26);
+      --header-line: rgba(27, 58, 92, 0.20);
+      --hover: rgba(36, 86, 143, 0.10);
+      --accent: #24568F;
+      --accent-hi: #1B4477;
+      --tint: color-mix(in srgb, var(--accent) 14%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 22%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 40%, transparent);
+
+      --danger: #C0392B;
+      --danger-solid: #C0392B;
+      --danger-bg: rgba(192, 57, 43, 0.12);
+      --amber: #B0690E;
+
+      --seg-active: #F6F9FB;
+      --seg-shadow: none;
+      --header-bg: #D8E1E8;
+      --header-hover: rgba(36, 86, 143, 0.10);
+      --pop-bg: #E8EEF3;
+      /* 经典硬投影: 零模糊、纯位移(win98 不用柔光晕) */
+      --shadow-pop: 2px 2px 0 rgba(27, 58, 92, 0.34);
+      --dot-ring: rgba(27, 58, 92, 0.14);
+      --btn-2: #46586B;
+      --media-btn-bg: #E8EEF3;
+      --media-btn-shadow: 1px 1px 0 rgba(27, 58, 92, 0.32);
+      --push-shadow: 2px 2px 0 rgba(27, 58, 92, 0.34);
+      --search-bg: #FFFFFF;
+      --search-bg-focus: #FFFFFF;
+      --plate-bg: #D8E1E8;
+
+      --tag-hot-c: #1F7A3D;    --tag-hot-bg: rgba(31, 122, 61, 0.14);
+      --tag-info-c: #24568F;   --tag-info-bg: rgba(36, 86, 143, 0.13);
+      --tag-mid-c: #5B6C7D;    --tag-mid-bg: rgba(27, 58, 92, 0.09);
+      --tag-stale-c: #B0690E;  --tag-stale-bg: rgba(176, 105, 14, 0.15);
+      --tag-zombie-c: #C0392B; --tag-zombie-bg: rgba(192, 57, 43, 0.13);
+
+      --card-shadow: none;
+      --card-shadow-hover: none;
+
+      /* 度量基座覆盖(ADR-0003 允许主题覆盖): Y2K/win98 是纯直角语言,一切圆角归零。
+       * 这是 y2k 与另三套主题的骨架级分野,不是配色差异 */
+      --r-xs: 0px; --r-sm: 0px; --r-md: 0px; --r-lg: 0px; --r-full: 0px;
+    }
+
+    /* 千禧复古突出色: 取自经典 Windows / HTML 256 色系 */
+    :root[data-theme="y2k"][data-accent="blue"]   { --accent: #24568F; --accent-hi: #1B4477; }
+    :root[data-theme="y2k"][data-accent="cyan"]   { --accent: #1C7C93; --accent-hi: #146274; }
+    :root[data-theme="y2k"][data-accent="green"]  { --accent: #2E7D46; --accent-hi: #226236; }
+    :root[data-theme="y2k"][data-accent="orange"] { --accent: #C2701A; --accent-hi: #A05B12; }
+    :root[data-theme="y2k"][data-accent="rose"]   { --accent: #B8485F; --accent-hi: #9C3A4E; }
+
+    /* ---- Y2K 精髓 1: 弹窗本体就是一块 Win 窗口 —— 2px 深藏青硬外框 + 经典点阵桌面底。
+     * 字体走 Tahoma/Verdana(千禧年最典型的西文字形),中文回落系统中文字体 ---- */
+    html[data-theme="y2k"] body {
+      border: 2px solid var(--y2k-frame);
+      background-color: var(--bg);
+      background-image: var(--y2k-dots);
+      background-size: 4px 4px;
+      font-family: Tahoma, Verdana, Geneva, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    /* ---- Y2K 精髓 2: 顶部命令区 = 窗口标题条。
+     * 视图 Tab 行满幅出血(抵消 .search-plate 的 --gutter 内边距)后铺蓝渐变 + 内圈高光,
+     * Tab 文字转白加暗影;滑块改琥珀色 —— 藏青渐变底上强调色会糊掉,琥珀是唯一亮锚点 ---- */
+    html[data-theme="y2k"] .search-plate {
+      background-color: var(--bg);
+      background-image: var(--y2k-dots);
+      background-size: 4px 4px;
+      border-bottom: 1px solid var(--y2k-lo);
+    }
+    html[data-theme="y2k"] .view-tabs {
+      margin: 2px calc(-1 * var(--gutter)) 4px;
+      padding: 2px var(--gutter) 4px;
+      background: linear-gradient(180deg, var(--y2k-bar-a) 0%, #6E96C6 55%, var(--y2k-bar-b) 100%);
+      border-bottom: 1px solid var(--y2k-frame);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+    html[data-theme="y2k"] .view-tab {
+      color: rgba(255, 255, 255, 0.82);
+      text-shadow: 0 1px 0 rgba(15, 40, 70, 0.55);
+      letter-spacing: 0.01em;
+    }
+    html[data-theme="y2k"] .view-tab:hover,
+    html[data-theme="y2k"] .view-tab.active { color: #fff; }
+    html[data-theme="y2k"] .view-tabs .tab-slider {
+      height: 3px;
+      border-radius: 0;
+      background: var(--y2k-amber);
+      box-shadow: 0 0 0 1px rgba(15, 40, 70, 0.35);
+    }
+
+    /* ---- Y2K 精髓 3: 搜索框 = 内凹斜面输入格(暗边压左上、亮边挑右下),零光晕 ---- */
+    html[data-theme="y2k"] .search-wrap {
+      background: #fff;
+      border: 2px solid;
+      border-color: var(--y2k-lo) var(--y2k-hi) var(--y2k-hi) var(--y2k-lo);
+      box-shadow: none;
+    }
+    html[data-theme="y2k"] .search-wrap:focus-within {
+      background: #fff;
+      border-color:
+        color-mix(in srgb, var(--accent) 65%, var(--y2k-lo)) var(--y2k-hi)
+        var(--y2k-hi) color-mix(in srgb, var(--accent) 65%, var(--y2k-lo));
+      box-shadow: none;
+    }
+    html[data-theme="y2k"] input#search { font-weight: 500; }
+
+    /* ---- Y2K 精髓 4: 分组头 = 参考图里那条蓝色渐变横幅(白字 + 高光顶边 + 内凹计数格) ---- */
+    html[data-theme="y2k"] .group-header {
+      background: linear-gradient(180deg, var(--y2k-banner-a) 0%, var(--y2k-banner-b) 100%);
+      border: 1px solid #2A4470;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      color: #fff;
+    }
+    html[data-theme="y2k"] .group-header:hover {
+      background: linear-gradient(180deg, #88ACD8 0%, #44699F 100%);
+      color: #fff;
+    }
+    html[data-theme="y2k"] .group-header .group-title {
+      color: #fff;
+      text-shadow: 0 1px 0 rgba(15, 40, 70, 0.55);
+      letter-spacing: 0;
+    }
+    html[data-theme="y2k"] .caret { color: rgba(255, 255, 255, 0.88); }
+    html[data-theme="y2k"] .btn-archive-group { color: rgba(255, 255, 255, 0.92); }
+    html[data-theme="y2k"] .btn-archive-group:hover { background: rgba(255, 255, 255, 0.24); color: #fff; }
+    html[data-theme="y2k"] .group-count {
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: inset 1px 1px 0 var(--y2k-lo);
+      color: var(--accent);
+    }
+    /* 分组间分割线: 由两端渐隐曲线改成一条朴素实线(参考图的表格分界) */
+    html[data-theme="y2k"] .group-header::before { background: rgba(27, 58, 92, 0.22); }
+    html[data-theme="y2k"] .group-dot { border-radius: 0; }
+
+    /* ---- Y2K 精髓 5: 列表选中 = 参考图同源的实心强调色高亮 + 白字。
+     * ⚠️ 仅改配色:上浮/弹性过冲/投影是基础层公共交互件,本主题不覆盖
+     * transform/box-shadow/transition ---- */
+    html[data-theme="y2k"] .tab-item.active { background: var(--accent); }
+    html[data-theme="y2k"] .tab-item.active .title,
+    html[data-theme="y2k"] .tab-item.active .url { color: #fff; }
+    html[data-theme="y2k"] .tab-item.active .title mark { color: #FFE9A8; }
+    html[data-theme="y2k"] .tab-item.active .close-btn { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+    /* ---- Y2K 精髓 6(骨架级资产,已登记 docs/theming.md): 开关由滑块胶囊改为
+     * 经典内凹勾选框 —— 34×20 圆角胶囊 → 15×15 直角凹格,钩子用当前强调色 ---- */
+    html[data-theme="y2k"] .srow input[type="checkbox"] + .toggle-track,
+    html[data-theme="y2k"] .zone-switch-knob {
+      width: 15px;
+      height: 15px;
+      border-radius: 0;
+      background: #fff;
+      border: 2px solid;
+      border-color: var(--y2k-lo) var(--y2k-hi) var(--y2k-hi) var(--y2k-lo);
+      transition: none;
+    }
+    html[data-theme="y2k"] .srow input[type="checkbox"] + .toggle-track::after,
+    html[data-theme="y2k"] .zone-switch-knob::after {
+      content: '✓';
+      top: 0; left: 0; width: 100%; height: 100%;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      transform: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      transition: none;
+    }
+    html[data-theme="y2k"] .srow input[type="checkbox"]:checked + .toggle-track,
+    html[data-theme="y2k"] .zone-switch input:checked + .zone-switch-knob {
+      background: #fff;
+      border-color: var(--y2k-lo) var(--y2k-hi) var(--y2k-hi) var(--y2k-lo);
+    }
+    html[data-theme="y2k"] .srow input[type="checkbox"]:checked + .toggle-track::after,
+    html[data-theme="y2k"] .zone-switch input:checked + .zone-switch-knob::after { transform: none; }
+    html[data-theme="y2k"] .srow input[type="checkbox"]:not(:checked) + .toggle-track::after,
+    html[data-theme="y2k"] .zone-switch input:not(:checked) + .zone-switch-knob::after { content: ''; }
+
+    /* ---- Y2K 精髓 7: 直角语言 —— 全站部件退圆为方(win98 没有任何圆角) ---- */
+    html[data-theme="y2k"] .group-header,
+    html[data-theme="y2k"] .group-count,
+    html[data-theme="y2k"] .btn-archive-group,
+    html[data-theme="y2k"] .cmd-chip-x,
+    html[data-theme="y2k"] .settings-btn,
+    html[data-theme="y2k"] .settings-close-btn,
+    html[data-theme="y2k"] .close-btn,
+    html[data-theme="y2k"] .unf-icon,
+    html[data-theme="y2k"] .dup-badge,
+    html[data-theme="y2k"] .media-btn,
+    html[data-theme="y2k"] .accent-swatch,
+    html[data-theme="y2k"] .keycap,
+    html[data-theme="y2k"] .s-tab-pill,
+    html[data-theme="y2k"] .archive-dot,
+    html[data-theme="y2k"] .archive-card,
+    html[data-theme="y2k"] .archive-tabs-preview,
+    html[data-theme="y2k"] .btn-archive-del,
+    html[data-theme="y2k"] .help-card,
+    html[data-theme="y2k"] .hint-icon,
+    html[data-theme="y2k"] .hint-tip,
+    html[data-theme="y2k"] .group-pop,
+    html[data-theme="y2k"] .group-pop-close,
+    html[data-theme="y2k"] .group-pop-zone,
+    html[data-theme="y2k"] .group-pop-add,
+    html[data-theme="y2k"] .group-pop-new input,
+    html[data-theme="y2k"] .rule-group,
+    html[data-theme="y2k"] .rule-del-btn,
+    html[data-theme="y2k"] .rule-group-name input,
+    html[data-theme="y2k"] .host-chip,
+    html[data-theme="y2k"] .host-chip span,
+    html[data-theme="y2k"] .host-chip button,
+    html[data-theme="y2k"] .host-add-input,
+    html[data-theme="y2k"] .rules-list,
+    html[data-theme="y2k"] .rules-search,
+    html[data-theme="y2k"] .rules-search-clear,
+    html[data-theme="y2k"] .settings-tabs .tab-slider,
+    html[data-theme="y2k"] .push-banner,
+    html[data-theme="y2k"] .push-action,
+    html[data-theme="y2k"] .push-progress,
+    html[data-theme="y2k"] .tab-title-tooltip { border-radius: 0; }
+
+    /* ---- Y2K 精髓 8: 按钮双向斜面 —— 次级 = 灰面凸起,主按钮 = 琥珀橙凸起(参考图"发布留言")。
+     * padding 各减 1px 补偿 2px 边框,按钮外框尺寸与另三主题保持一致 ---- */
+    html[data-theme="y2k"] .rules-add-btn {
+      background: var(--y2k-face-2);
+      border: 2px solid;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      color: var(--text);
+      font-weight: 600;
+      padding: 7px 15px;
+    }
+    html[data-theme="y2k"] .rules-add-btn:hover {
+      background: #F1F6FA;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      color: var(--text);
+    }
+    html[data-theme="y2k"] .rules-save-btn {
+      background: linear-gradient(180deg, #F8C24E 0%, #DD8A17 100%);
+      border: 2px solid;
+      border-color: #FBD98A #A5640C #A5640C #FBD98A;
+      color: #4A2B00;
+      font-weight: 700;
+      padding: 7px 17px;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+    html[data-theme="y2k"] .rules-save-btn:hover { background: linear-gradient(180deg, #FFD06A 0%, #E89A2A 100%); }
+    /* 未保存脏态: 加深橙 + 压成内凹面,与常态拉开区分(脉动动画仍由基础层承担) */
+    html[data-theme="y2k"] .rules-save-btn.dirty {
+      background: linear-gradient(180deg, #FFD86B 0%, #C96A0A 100%);
+      border-color: #8A4E06 #FFE9AE #FFE9AE #8A4E06;
+      color: #3A2100;
+    }
+    /* 按下 = 斜面翻转(纯装饰,不动任何动画/时长) */
+    html[data-theme="y2k"] .rules-add-btn:active,
+    html[data-theme="y2k"] .rules-save-btn:active {
+      border-color: var(--y2k-lo) var(--y2k-hi) var(--y2k-hi) var(--y2k-lo);
+    }
+
+    /* ---- Y2K 精髓 9: 滚动条 = 经典斜面轨(14px 方轨 + 凸起滑块),不做纤细浮动条 ---- */
+    html[data-theme="y2k"] ::-webkit-scrollbar { width: 14px; height: 14px; }
+    html[data-theme="y2k"] ::-webkit-scrollbar-track {
+      background: #E4EAEF;
+      box-shadow: inset 1px 0 0 rgba(27, 58, 92, 0.18);
+    }
+    html[data-theme="y2k"] ::-webkit-scrollbar-thumb {
+      background: var(--y2k-face);
+      border: 2px solid;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      border-radius: 0;
+    }
+    html[data-theme="y2k"] ::-webkit-scrollbar-thumb:hover { background: #E7EDF2; }
+
+    /* ---- Y2K 精髓 10: 设置面板 = 另一扇窗口 —— 蓝渐变标题条 + 贴右斜面关闭钮 ---- */
+    html[data-theme="y2k"] .settings-panel {
+      background-color: var(--bg);
+      background-image: var(--y2k-dots);
+      background-size: 4px 4px;
+    }
+    html[data-theme="y2k"] .settings-head {
+      background: linear-gradient(180deg, var(--y2k-bar-a) 0%, #6E96C6 55%, var(--y2k-bar-b) 100%);
+      border-bottom: 1px solid var(--y2k-frame);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+    html[data-theme="y2k"] .settings-title {
+      color: #fff;
+      text-shadow: 0 1px 0 rgba(15, 40, 70, 0.55);
+      letter-spacing: 0;
+    }
+    html[data-theme="y2k"] .settings-close-btn {
+      background: var(--y2k-face);
+      border: 1px solid;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 4px 7px;
+    }
+    html[data-theme="y2k"] .settings-close-btn:hover { background: #E7EDF2; color: #16202B; }
+    /* 设置页开关行/卡片: 经典 groupbox 面 */
+    html[data-theme="y2k"] .sbox {
+      background: var(--y2k-face-2);
+      border: 1px solid var(--y2k-lo);
+    }
+    html[data-theme="y2k"] .help-card {
+      background: var(--y2k-face-2);
+      border: 1px solid var(--y2k-lo);
+    }
+    html[data-theme="y2k"] .keycap {
+      background: var(--y2k-face-2);
+      border: 1px solid;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      color: var(--text);
+    }
+    /* 突出色方块: 直角 + 斜面,选中项外挑一圈强调色 ---- */
+    html[data-theme="y2k"] .accent-swatch {
+      box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55), inset -1px -1px 0 rgba(0, 0, 0, 0.30);
+      border: 1px solid rgba(22, 32, 43, 0.55);
+    }
+    html[data-theme="y2k"] .accent-swatch.active {
+      box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.30), 0 0 0 1px #fff, 0 0 0 2px var(--accent);
+    }
+    html[data-theme="y2k"] .accent-swatch[data-accent="blue"]   { background: #24568F; }
+    html[data-theme="y2k"] .accent-swatch[data-accent="cyan"]   { background: #1C7C93; }
+    html[data-theme="y2k"] .accent-swatch[data-accent="green"]  { background: #2E7D46; }
+    html[data-theme="y2k"] .accent-swatch[data-accent="orange"] { background: #C2701A; }
+    html[data-theme="y2k"] .accent-swatch[data-accent="rose"]   { background: #B8485F; }
+
+    /* ---- Y2K 精髓 11: 推送通知 = 经典对话框(灰面 + 双向斜边 + 硬投影) ---- */
+    html[data-theme="y2k"] .push-banner {
+      background: var(--y2k-face);
+      border: 2px solid;
+      border-color: var(--y2k-hi) var(--y2k-lo) var(--y2k-lo) var(--y2k-hi);
+      color: var(--text);
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -2772,6 +3147,7 @@
                 <option value="linear">Linear</option>
                 <option value="ink">Ink</option>
                 <option value="herdr">Terminal</option>
+                <option value="y2k">Y2K</option>
               </select>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>

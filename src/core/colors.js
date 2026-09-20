@@ -40,6 +40,19 @@ export const HERDR_GROUP_COLORS = {
   orange: '#C9762E', // 陶橙
 };
 
+// Chrome 组色名 → Y2K 千禧复古色(用于 y2k 主题,取自经典 Windows/HTML 256 色系,饱和而不刺目)
+export const Y2K_GROUP_COLORS = {
+  grey: '#8A97A6',   // 银灰(经典按钮面)
+  blue: '#2E5C9A',   // 窗口蓝
+  red: '#C0392B',    // 警示红
+  yellow: '#C79A1E', // 芥末黄
+  green: '#2E7D46',  // 开始钮绿
+  pink: '#C0559A',   // 洋红
+  purple: '#6B4FA8', // 紫罗兰
+  cyan: '#1C7C93',   // 窗青
+  orange: '#C2701A', // 琥珀橙
+};
+
 // 构造水墨风 100% 同款晕染墨团 SVG (支持按分组色动态渲染)
 export function buildInkBleedSvg(hex) {
   const c = encodeURIComponent(hex || '#2B2622');
@@ -57,6 +70,7 @@ export const THEME_ASSETS = {
   linear: { groupColors: GROUP_COLORS },
   ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, tabSliderExtra: 6 },
   herdr: { groupColors: HERDR_GROUP_COLORS },
+  y2k: { groupColors: Y2K_GROUP_COLORS },
 };
 export function themeAssets() {
   const t = document.documentElement.dataset.theme;
