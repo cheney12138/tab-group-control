@@ -1596,6 +1596,20 @@
       opacity: 1;
       transform: translateY(0);
     }
+    /* 撞车行的差异片段: 比 URL 亮一档,并强制 ltr —— 基类是 direction:rtl(为了从尾部截断 URL),
+     * 对 "traceId -18196748…4175" 这种以符号开头的串会出现 bidi 视觉错序 */
+    .tab-item .url.dup {
+      direction: ltr;   /* 基类是 rtl(为了从尾部截 URL);差异片段要"从头读",故强制 ltr */
+      text-align: left;
+      letter-spacing: 0.01em;
+    }
+    /* 撞车行的三级层次(2026-09-19 用户反馈:「Type 名字和底下 URL 的区分有点模糊」——
+     * 之前差异片段用了 600 字重 + 最亮色,抢了标题的位置)。
+     * 现在:标题 = --text(400/13px) > 差异片段 = --text-2(400,不加粗) > 业务标识 = --text-3。
+     * 区分靠"内容不同",不靠"更粗更亮"。 */
+    .tab-item .url .dup-delta { color: var(--text-2); font-weight: 400; }
+    .tab-item .url .dup-id { color: var(--text-3); }
+    .tab-item .url .dup-id::before { content: '·'; margin: 0 5px; opacity: .5; }
     .tab-item .url {
       font-size: 11.5px;
       font-weight: 400;

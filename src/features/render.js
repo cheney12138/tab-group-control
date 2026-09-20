@@ -2,7 +2,7 @@
 // render() 全量重绘 + 分组头/标签行构建 + closeTab/switchTo/copyTabUrl。
 // 单向依赖: → search(刷新 filtered) / nav(光标) / settings(归档) / dnd(拖拽) /
 // media(媒体按钮) / undo(撤销) / core 各层;不依赖 main。
-import { escapeHtml, relativeTime, timeTier, displayUrl, hostOf, isBadTitle, cleanTitle, getChromeFaviconUrl, groupKey } from '../core/format.js';
+import { escapeHtml, relativeTime, timeTier, displayUrl, hostOf, isBadTitle, cleanTitle, getChromeFaviconUrl, groupKey, distinguishingLabels } from '../core/format.js';
 import { textToPinyin, fuzzyMatch, markText, matchField } from '../core/pinyin.js';
 import { resultsEl, input, showToast, rowByTabId, indexOfRow } from '../core/dom.js';
 import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
@@ -36,6 +36,7 @@ export function hideTitleTooltip() {
   }
 }
 
+// text 由调用方决定:标题行给完整标题,URL 行给完整 URL
 function showTitleTooltip(targetEl, text) {
   hideTitleTooltip();
   const tip = document.createElement('div');
@@ -66,25 +67,28 @@ function showTitleTooltip(targetEl, text) {
 
 function initTitleTooltip() {
   resultsEl.addEventListener('pointerover', (e) => {
-    const titleEl = e.target.closest('.tab-item .title');
-    if (!titleEl) return;
-    if (e.relatedTarget && titleEl.contains(e.relatedTarget)) return;
+    // 提示对象:标题行(完整标题)**与 URL 行(完整 URL)**。
+    // 用户口径(2026-09-19):「把那个 hover 的对象改一下,展示完整 URL 好了」——
+    // URL 行几乎总是被省略的,而完整 URL 恰是撞车行最需要看的东西(列表里那行只放差异片段 + 业务标识)。
+    const el = e.target.closest('.tab-item .title, .tab-item .url');
+    if (!el) return;
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
 
     hideTitleTooltip();
-    // 仅当标题文字实际发生溢出省略时才提示
-    if (titleEl.scrollWidth <= titleEl.clientWidth) return;
-    const fullText = titleEl.dataset.fullTitle;
+    // 仅当文字**实际发生溢出省略**时才提示(没被截断就别打扰)
+    if (el.scrollWidth <= el.clientWidth) return;
+    const fullText = el.dataset.fullTitle || el.dataset.fullUrl;
     if (!fullText) return;
 
     titleHoverTimer = setTimeout(() => {
-      showTitleTooltip(titleEl, fullText);
+      showTitleTooltip(el, fullText);
     }, 180);
   });
 
   resultsEl.addEventListener('pointerout', (e) => {
-    const titleEl = e.target.closest('.tab-item .title');
-    if (!titleEl) return;
-    if (e.relatedTarget && titleEl.contains(e.relatedTarget)) return;
+    const el = e.target.closest('.tab-item .title, .tab-item .url');
+    if (!el) return;
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
     hideTitleTooltip();
   });
 
@@ -149,6 +153,24 @@ export function render() {
   for (const it of state.filtered) {
     const k = cleanTitle(it.tab.title || it.tab.url);
     it.titleDup = (titleCount.get(k) || 0) > 1;
+  }
+  // 撞车标签:只有当 URL 行**会被显示**时才算(开关关着就"通通不显示 URL"⇒ 算了也没人看,
+  // 还白花每帧的 URL 解析)。URL 行的口径见下。
+  if (actions.getSettings().showUrl) {
+    const dupGroups = new Map();
+    for (const it of state.filtered) {
+      const k = cleanTitle(it.tab.title || it.tab.url);
+      if (!k) continue;
+      if (!dupGroups.has(k)) dupGroups.set(k, []);
+      dupGroups.get(k).push(it);
+    }
+    for (const group of dupGroups.values()) {
+      if (group.length < 2) continue;
+      const labels = distinguishingLabels(group.map(x => x.tab.url || ''));
+      group.forEach((it, i) => {
+        it.dupLabel = labels[i] || '';
+      });
+    }
   }
   // 离屏构建再一次性挂载: 逐行 append 到已挂载的容器会引发增量布局,
   // 长列表(几百行)时白白多算多次;fragment 只触发一次挂载级布局
@@ -480,6 +502,9 @@ function buildTabRow(item) {
   const rawTitle = t.title || t.url || '';
   title.dataset.fullTitle = rawTitle;
   const sleepPrefix = rawTitle.match(/^[\s\u200B-\u200D\uFEFF]*(?:\u{1F4A4}[\s\u200B-\u200D\uFEFF]*)+/u);
+  // 撞车行**标题不动**(用户口径 2026-09-19:「不能直接替换 tab 的名称」):
+  // 标题是"这是哪一类页面"的锚点,而且这些平台共用同一个 logo ⇒ 标题再换掉就彻底没锚点了。
+  // 区分职责全部交给下面那行 URL(.url.dup)。
   if (sleepPrefix) {
     const off = sleepPrefix[0].length;
     const body = rawTitle.slice(off);
@@ -489,18 +514,27 @@ function buildTabRow(item) {
     title.innerHTML = markText(rawTitle, item.titleHits);
   }
   info.appendChild(title);
-  // URL 行: 严格遵循用户设置(settings.showUrl)。未开启时绝不擅自展示,保持列表单行高度纯净整齐
+  // URL 行:**完全**遵循用户设置(settings.showUrl)。
+  // 用户口径(2026-09-19):「如果这个开关是关的,不管什么场景下通通不显示 URL」。
+  // 撞车**不是**例外(之前写成 `showUrl || item.dupLabel` 是越权:开关关了还冒出来一行)。
+  // 开关打开时,撞车行的文本用"类型 · 服务名"(见 format.distinguishingLabels)替代冗长 URL。
   if (actions.getSettings().showUrl) {
     const url = document.createElement('div');
-    url.className = 'url';
-    // 只显示域名,除非: ① 搜索命中了 URL, 或 ② 标题完全重复(同名 tab 需展示完整 URL 才能区分)
-    const showFull = item.urlHits || item.titleDup;
-    const shownUrl = showFull ? displayUrl(t.url) : hostOf(t.url);
-    // URL 兜底匹配发生在完整 URL 上,但展示的是 host+path,需在展示文本上重算高亮
-    const urlHits = item.urlHits
-      ? (fuzzyMatch(input.value.trim(), shownUrl) || item.urlHits)
-      : null;
-    url.innerHTML = markText(shownUrl, urlHits);
+    url.className = item.dupLabel ? 'url dup' : 'url';
+    url.dataset.fullUrl = t.url;   // hover 时展示完整 URL(见 initTitleTooltip)
+    if (item.dupLabel) {
+      // 标签本身就是"类型 · 服务名"(identityOf 已在里面)⇒ 不再另拼一段身份,否则会重复两遍
+      url.innerHTML = `<span class="dup-delta">${escapeHtml(item.dupLabel)}</span>`;
+    } else {
+      // ① 搜索命中 URL 或 ② 标题重复 ⇒ 完整 URL,其余只给域名
+      const showFull = item.urlHits || item.titleDup;
+      const shownUrl = showFull ? displayUrl(t.url) : hostOf(t.url);
+      // URL 兜底匹配发生在完整 URL 上,但展示的是 host+path,需在展示文本上重算高亮
+      const urlHits = item.urlHits
+        ? (fuzzyMatch(input.value.trim(), shownUrl) || item.urlHits)
+        : null;
+      url.innerHTML = markText(shownUrl, urlHits);
+    }
     info.appendChild(url);
   }
 
