@@ -24,10 +24,20 @@
 | 媒体蒙层整行宣纸羽化 | ink | `.tab-item.has-media .media-overlay` | linear 是中央浮钮,水墨是整行右起蒙层,定位模型不同 |
 | 顶部 Tab 滑块挑出 | ink | `tabSliderExtra`(dom.js) | 两端挑出文字营造舒展留白 |
 | 搜索框毛笔长横 | ink | `.search-ink-stroke` SVG | 主题独有装饰件,linear 无对应物 |
-| 弹窗 2px 藏青外框 | y2k | `body` border | 窗口外框必须贴死弹窗边缘才算"一块窗口";内容区收窄 4px |
-| 标题条满幅出血 | y2k | `.view-tabs` 负 margin + 左右 padding | 蓝渐变标题条不贯穿左右就不成立(负 margin 抵消 `.search-plate` 的 `--gutter`,总高不变,不影响滑块量取) |
-| 开关改内凹勾选框 | y2k | `.srow ... + .toggle-track` / `.zone-switch-knob` | 经典勾选框是 15×15 直角凹格,滑块胶囊的 34×20 尺寸必须改 |
-| 按钮 padding 边框补偿 | y2k | `.rules-add-btn` / `.rules-save-btn` | 凸起斜面用 2px 边框,各减 1px padding 保持外框尺寸与另三主题一致 |
+| 弹窗 1px 窗口外框 | y2k | `body` border | 窗口外框必须贴死弹窗边缘才算"一块窗口";内容区收窄 2px |
+| 标题条满幅出血 | y2k | `.view-tabs` 负 margin + 左右 padding | 蓝色标题条不贯穿左右就不成立(负 margin 抵消 `.search-plate` 的 `--gutter`,总高不变,不影响滑块量取) |
+| 开关改内凹勾选框 | y2k | `.srow ... + .toggle-track` / `.zone-switch-knob` | 经典勾选框是 13×13 直角凹格,滑块胶囊的 34×20 尺寸必须改 |
+| 按钮 padding 边框补偿 | y2k | `.rules-add-btn` / `.rules-save-btn` | 凸起斜面需要 1px 边框,各减 1px padding 保持外框尺寸与另三主题一致 |
+
+### y2k 取色纪律(改这个主题前先读)
+
+y2k 的色值**全部由参考截图逐像素取样得到**,不是凭印象调的。第一版凭"win98 印象"写,结果色值普遍比原图亮 2~3 档、边框粗一倍、还凭空加了硬投影,视觉上"很重,不如参考图自然"。三条硬约束:
+
+1. **低饱和** —— 约 90% 面积是中性冷灰(`#B6`~`#D4` 之间,彩度近 0),彩色只给蓝条 + 几个小色点。任何"再加一个彩色面"的改动都算违规。
+2. **低对比** —— 相邻表面亮度差只有 8~20 级,层级靠 1px 细线划分,不靠明暗拉开。
+3. **零投影** —— 参考图全图找不到一处投影。立体感只由 1px 斜面提供(`--y2k-hi` 上左 / `--y2k-lo` 下右)。**禁止**给 y2k 加零模糊硬投影(`Npx Npx 0 ...`),那是"重"的最大来源。
+
+底纹同理:参考图是 ~3px 周期的斜织十字布纹,不是圆点。y2k 用 `--y2k-weave`(两组 45°/-45° 1px 暗线,alpha 0.038)实现,换回 `radial-gradient` 圆点会立刻读出"波点图案"而不是"织物"。
 
 ## 禁止
 

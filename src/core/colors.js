@@ -40,17 +40,19 @@ export const HERDR_GROUP_COLORS = {
   orange: '#C9762E', // 陶橙
 };
 
-// Chrome 组色名 → Y2K 千禧复古色(用于 y2k 主题,取自经典 Windows/HTML 256 色系,饱和而不刺目)
+// Chrome 组色名 → Y2K 千禧复古色(用于 y2k 主题)
+// 参考截图的画面是「中性冷灰 + 一条钢蓝 + 几个小色点」,所以这九色整体降一档饱和,
+// 让它落进那个灰世界里而不是糊在纸上。色相仍沿用经典 Windows/HTML 256 色系。
 export const Y2K_GROUP_COLORS = {
-  grey: '#8A97A6',   // 银灰(经典按钮面)
-  blue: '#2E5C9A',   // 窗口蓝
-  red: '#C0392B',    // 警示红
-  yellow: '#C79A1E', // 芥末黄
-  green: '#2E7D46',  // 开始钮绿
-  pink: '#C0559A',   // 洋红
-  purple: '#6B4FA8', // 紫罗兰
-  cyan: '#1C7C93',   // 窗青
-  orange: '#C2701A', // 琥珀橙
+  grey: '#8E969A',   // 银灰(经典按钮面)
+  blue: '#3A6089',   // 窗口蓝
+  red: '#B2453A',    // 警示红
+  yellow: '#BC9440', // 芥末黄
+  green: '#3D7852',  // 开始钮绿
+  pink: '#B9528F',   // 洋红
+  purple: '#6C55A0', // 紫罗兰
+  cyan: '#2C7888',   // 窗青
+  orange: '#B8772A', // 琥珀橙
 };
 
 // 构造水墨风 100% 同款晕染墨团 SVG (支持按分组色动态渲染)
