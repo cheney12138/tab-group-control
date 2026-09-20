@@ -2,7 +2,21 @@
 
 扩展原本 `"icons": {}` —— 工具条上是 Chrome 默认的拼图块。这里补上自绘标记。
 
-## 定稿:浏览器标签条(黑白色 · 拟物)
+## 当前定稿(2026-09-20 起):外部设计稿
+
+深色圆角方块 + 亮蓝 `tab` 字标(外部设计工具产出,非本目录脚本绘制)。
+
+- 母图:`tab-logo-master.png`(1254×1254 · RGBA · 留白与圆角外**自带透明**,别用转存件)
+- 出图:`python3 design/icon/build_from_master.py` → `icons/icon{16,32,48,128}.png`
+- 处理:除等比缩放(LANCZOS)与保留 alpha 外**不做任何事** —— 不裁边、不抠底、不改构图
+
+> 母图是唯一真源,换设计就替换这张图再重跑脚本。**不要手改 `icons/` 里的 PNG**。
+> 坑:聊天工具粘贴图片会把 PNG 转成 JPEG(白底压成实色、alpha 丢失),千万别拿转存件当母图,
+> 否则后面所有尺寸都带着 JPEG 白毛刺,还得靠抠底补救。
+
+下面的「黑白标签条」是上一版定稿,脚本保留作留档。
+
+## 旧定稿:浏览器标签条(黑白色 · 拟物)
 
 **主体就是浏览器标签页**:三张**等高**标签坐在一条标签栏上,最左那张**最亮 = 当前**。
 风格 = **黑白色 + 拟物**:全灰阶,靠**渐变(面)/ 顶高光 / 斜面边 / 下落影**做体积,零彩色。
@@ -33,17 +47,22 @@
 草图脚本:`make_logo.py`(放大镜系)、`make_flat.py`(扁平配色)、`make_tabs{,2..6}.py`(标签系五轮)、
 `make_skeu.py`(拟物暗/亮两案)。对照表在 `build/*_sheet.png`。
 
-## 出图与接线
+## 出图与接线(旧定稿)
 
 ```bash
-python3 design/icon/build_icons.py     # → icons/icon{16,32,48,128}.png
-python3 design/icon/preview.py         # 尺寸梯度 + 工具条实景 → build/preview.png
+python3 design/icon/build_icons.py            # 旧标记(黑白标签条) → icons/icon{16,32,48,128}.png
+python3 design/icon/build_from_master.py      # 当前标记(外部设计稿) → 同上
+python3 design/icon/preview.py                # 尺寸梯度 + 工具条实景 → build/preview.png
 ```
 
-四档都从矢量直接栅格化(Chrome headless,无第三方依赖),不做二次采样。
+`build_icons.py` 四档都从矢量直接栅格化(Chrome headless,无第三方依赖),不做二次采样。
+`build_from_master.py` 是位图母图路线(LANCZOS),需要 Pillow。
+**两个脚本写同一批文件** —— 谁后跑谁说了算,当前交付以 `build_from_master.py` 为准。
+
 `manifest.json` 两处接线:`icons`(扩展页/商店)与 `action.default_icon`(工具条)。
 
-- `mark.py` —— **定稿源**(改设计只改这里)
-- `build_icons.py` / `preview.py` —— 出图 / 预览
+- `tab-logo-master.png` —— **当前定稿源**(外部设计稿位图)
+- `mark.py` —— 旧定稿源(矢量,改旧设计只改这里)
+- `build_from_master.py` / `build_icons.py` / `preview.py` —— 出图 / 预览
 
-> 改设计请改脚本,不要手改 PNG。
+> 改设计请改脚本或换母图,不要手改 PNG。
