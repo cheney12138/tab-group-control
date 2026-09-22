@@ -40,6 +40,21 @@ export const HERDR_GROUP_COLORS = {
   orange: '#C9762E', // 陶橙
 };
 
+// Chrome 组色名 → 云天低饱和色(用于 sky 主题)
+// 参考图是「蓝天+白云」的双色世界,但组色是功能性信号必须可分辨 —— 于是九色整体降饱和、偏冷,
+// 落进云天世界(云层上可辨)而不跳戏。色相仍沿用 Chrome 九色,只压饱和与明度。
+export const SKY_GROUP_COLORS = {
+  grey: '#8E9AB8',   // 云影灰蓝
+  blue: '#3D63BE',   // 天空蓝
+  red: '#C4565A',    // 暮云红
+  yellow: '#C9A24B', // 晚照金
+  green: '#4E8C6A',  // 雨后青
+  pink: '#C4708F',   // 霞粉
+  purple: '#7A6BB5', // 暮紫
+  cyan: '#3E93B8',   // 晴空青
+  orange: '#C97F45', // 夕照橙
+};
+
 // 构造水墨风 100% 同款晕染墨团 SVG (支持按分组色动态渲染)
 export function buildInkBleedSvg(hex) {
   const c = encodeURIComponent(hex || '#2B2622');
@@ -57,6 +72,7 @@ export const THEME_ASSETS = {
   linear: { groupColors: GROUP_COLORS },
   ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, tabSliderExtra: 6 },
   herdr: { groupColors: HERDR_GROUP_COLORS },
+  sky: { groupColors: SKY_GROUP_COLORS },
 };
 export function themeAssets() {
   const t = document.documentElement.dataset.theme;

@@ -24,28 +24,28 @@
     }
     @media (prefers-color-scheme: dark) {
 
-      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝)绝对不动不反色 */
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn img {
+      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝/云天)绝对不动不反色 */
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .settings-btn img {
         filter: invert(0.88) brightness(1.1);
         opacity: 0.85;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .settings-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn.active img {
         filter: invert(1) brightness(1.2);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn svg {
         color: var(--text-2);
         opacity: 0.88;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover svg,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active svg {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn:hover svg,
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .src-btn.active svg {
         color: var(--accent);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .help-card-head img {
+      html:not([data-theme="ink"]):not([data-theme="herdr"]):not([data-theme="sky"]) .help-card-head img {
         filter: invert(0.88) brightness(1.1);
       }
     }
@@ -2688,6 +2688,170 @@
     html[data-theme="herdr"] .accent-swatch[data-accent="green"]  { background: #3E7B4F; }
     html[data-theme="herdr"] .accent-swatch[data-accent="orange"] { background: #C4762A; }
     html[data-theme="herdr"] .accent-swatch[data-accent="rose"]   { background: #C24B58; }
+
+    /* ============================================================
+     * 新增主题: 蓝天颗粒 (data-theme="sky")
+     * 纯视觉换肤,严格限定在 [data-theme="sky"] 命名空间下,不影响其他主题
+     * 设计语言取自参考图「蓝天 + 白云 + 白色手绘线稿 + 重胶片颗粒」,色值逐像素取样:
+     *   天空 #2B50A5→#688AD3(135° 渐变) | 云白冷调 #B7C6D8–#EDEFFC(B 通道恒最高) |
+     *   纯白 #FFFFFF 仅给线稿 | 颗粒 std≈16(全图签名)
+     * 结构: 天空在上(顶栏=天空层) / 云海在下(列表=云层),文字全落在云上保证可读。
+     * 固定亮色单面(color-scheme: light,不做暗色适配,与 ink/herdr 同策略)。
+     * 设计纪律见 docs/theme-sky-design.md。
+     * ============================================================ */
+    :root[data-theme="sky"] {
+      color-scheme: light;
+
+      /* —— 私有色板(参考图逐像素取样) —— */
+      --sky-deep: #2B50A5;     /* 天空深端(左上) */
+      --sky-mid: #3E64B9;      /* 天空中值 */
+      --sky-light: #688AD3;    /* 天空浅端(右下) */
+      --sky-cloud: #E4EAF7;    /* 云层底(蓝调冷白,B 通道最高) */
+      --sky-cloud-hi: #F2F5FC; /* 最亮云面 */
+      /* 颗粒 = 本主题签名: 中立灰噪点(强制不透明) + 混合,只压对比不加色。
+       * matrix 转灰度并把噪点 alpha 强制为 1;再用 feComponentTransfer 的 linear(1.5, -0.595)
+       * 把偏移到亮部的均值拉回 0.5 —— overlay 对灰 0.5 是恒等变换,均值不变,只加方差 */
+      --sky-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='1.5' intercept='-0.494'/><feFuncG type='linear' slope='1.5' intercept='-0.494'/><feFuncB type='linear' slope='1.5' intercept='-0.494'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+
+      /* —— 云端表面: 页面/列表/设置面板都是云 —— */
+      --bg: var(--sky-cloud);
+      --surface: var(--sky-cloud-hi);
+      --fill: rgba(31, 52, 110, 0.06);
+      --fill-2: rgba(31, 52, 110, 0.10);
+
+      /* —— 云层深蓝墨(取自天空最深端再压暗,保证白底对比) —— */
+      --text: #16224A;
+      --text-2: #46538A;
+      --text-3: #7C89B4;
+      --placeholder: rgba(22, 34, 74, 0.42);
+      --hairline: rgba(31, 52, 110, 0.12);
+      --header-line: transparent;
+      --hover: rgba(31, 52, 110, 0.055);
+
+      /* —— 强调色 = 天空本色 —— */
+      --accent: #3D63BE;
+      --accent-hi: #2E4FA6;
+      --tint: color-mix(in srgb, var(--accent) 12%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 20%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 32%, transparent);
+
+      --header-bg: var(--sky-cloud);
+      --header-hover: rgba(31, 52, 110, 0.055);
+      --plate-bg: var(--sky-mid);
+      --search-bg: var(--sky-cloud-hi);
+      --search-bg-focus: #F8FAFE;
+      --pop-bg: var(--sky-cloud-hi);
+
+      /* —— 状态色/标签: 压进天空色域的低饱和档 —— */
+      --danger: #C0455A;
+      --danger-solid: #C0455A;
+      --danger-bg: rgba(192, 69, 90, 0.10);
+      --amber: #B5793A;
+      --seg-active: var(--sky-cloud-hi);
+      --seg-shadow: none;
+      --shadow-pop: 0 2px 12px rgba(43, 80, 165, 0.16);
+      --dot-ring: rgba(31, 52, 110, 0.08);
+      --btn-2: #46538A;
+      --media-btn-bg: var(--sky-cloud-hi);
+      --media-btn-shadow: 0 1px 3px rgba(43, 80, 165, 0.18);
+      --push-shadow: 0 2px 12px rgba(43, 80, 165, 0.16);
+      --card-shadow: 0 1px 2px rgba(43, 80, 165, 0.06);
+      --card-shadow-hover: 0 2px 6px rgba(43, 80, 165, 0.10);
+
+      --tag-hot-c: #2E7D5B;    --tag-hot-bg: rgba(46, 125, 91, 0.12);
+      --tag-info-c: #3D63BE;   --tag-info-bg: rgba(61, 99, 190, 0.12);
+      --tag-mid-c: #46538A;    --tag-mid-bg: rgba(31, 52, 110, 0.07);
+      --tag-stale-c: #B5793A;  --tag-stale-bg: rgba(181, 121, 58, 0.13);
+      --tag-zombie-c: #C0455A; --tag-zombie-bg: rgba(192, 69, 90, 0.11);
+
+      /* 云朵圆角: 比 linear 更圆,度量基座允许主题覆盖(同 herdr 方角先例) */
+      --r-xs: 8px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px;
+    }
+
+    /* 突出色: 五个变体 = 一天里的天色(全部低饱和,仍留在蓝白世界里) */
+    :root[data-theme="sky"][data-accent="blue"]   { --accent: #3D63BE; --accent-hi: #2E4FA6; }
+    :root[data-theme="sky"][data-accent="cyan"]   { --accent: #3E86B5; --accent-hi: #2F6E9C; }
+    :root[data-theme="sky"][data-accent="green"]  { --accent: #3E8A6B; --accent-hi: #2F7256; }
+    :root[data-theme="sky"][data-accent="orange"] { --accent: #C47A3C; --accent-hi: #A9632C; }
+    :root[data-theme="sky"][data-accent="rose"]   { --accent: #C05A78; --accent-hi: #A34763; }
+
+    /* ---- 资产 1: 天空顶栏带 —— 顶栏读成"天空",这是与另四主题的骨架级分野 ----
+     * 只有渐变底色;颗粒交给 ::before,云缘剪影交给 ::after */
+    html[data-theme="sky"] .search-plate {
+      background-color: var(--sky-mid);
+      background-image: linear-gradient(135deg, var(--sky-deep) 0%, var(--sky-mid) 46%, #4C71C6 100%);
+    }
+    /* 天空带重颗粒(参考图 std≈16);::before 在定位子元素(Tab/搜索框)之下 */
+    html[data-theme="sky"] .search-plate::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: var(--sky-grain);
+      background-size: 160px 160px;
+      mix-blend-mode: overlay;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    /* 天空上的文字/线稿必须反白(列表文字是深蓝墨,不能继承到天空层) */
+    html[data-theme="sky"] .view-tab {
+      color: rgba(255, 255, 255, 0.72);
+      text-shadow: 0 1px 2px rgba(22, 40, 90, 0.35);
+    }
+    html[data-theme="sky"] .view-tab:hover,
+    html[data-theme="sky"] .view-tab.active { color: #FFFFFF; }
+    /* 天空层上唯一可见的纯白线稿 = 视图滑块(设置面板的滑块在云上,保持强调色) */
+    html[data-theme="sky"] .view-tabs .tab-slider {
+      background: #FFFFFF;
+      box-shadow: 0 1px 2px rgba(22, 40, 90, 0.30);
+    }
+    /* 搜索框是浮在天空里的一朵云: 最亮云面 + 蓝调柔影 */
+    html[data-theme="sky"] .search-wrap {
+      border-color: rgba(255, 255, 255, 0.55);
+      box-shadow: 0 2px 10px rgba(22, 40, 90, 0.18);
+    }
+
+    /* ---- 资产 2: 云缘剪影 —— 天空带底部的云朵鼓包,复刻参考图"天空压着云海"的交界 ----
+     * 填充色固定 = --sky-cloud #E4EAF7(data URI 内无法引用 var) */
+    html[data-theme="sky"] .search-plate::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: -5px;
+      height: 10px;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='10' viewBox='0 0 160 10' preserveAspectRatio='none'><path d='M0 10 L0 5.2 Q 13 1.4, 27 4.6 Q 40 0.6, 56 4.2 Q 70 1.0, 84 4.4 Q 99 0.4, 114 4.0 Q 128 1.2, 142 4.4 Q 152 2.0, 160 5.0 L160 10 Z' fill='%23E4EAF7'/></svg>");
+      background-repeat: repeat-x;
+      background-size: 160px 10px;
+      pointer-events: none;
+    }
+
+    /* ---- 资产 3: 手绘云缘分隔线 —— 1–2px 圆头手绘线,替换 linear 的两端渐隐直线 ---- */
+    html[data-theme="sky"] .group-header::before {
+      height: 2px;
+      background: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='2' viewBox='0 0 44 2' preserveAspectRatio='none'><path d='M1 1.2 Q 6 0.2, 11 1.1 T 22 1.1 T 33 1.0 T 43 1.2' stroke='%233D63BE' stroke-width='0.9' fill='none' stroke-linecap='round' opacity='0.5'/></svg>");
+      background-repeat: repeat-x;
+      background-size: 44px 2px;
+    }
+
+    /* ---- 资产 4: 胶片颗粒(全图签名) —— 中立灰噪点 multiply 混合,让云面也有胶片质感 ----
+     * 云面接近纯白,overlay 几乎不起作用;multiply 才能读出暗点。全局极淡,不压可读性 */
+    html[data-theme="sky"] body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: var(--sky-grain);
+      background-size: 160px 160px;
+      opacity: 0.09;
+      mix-blend-mode: multiply;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* 突出色圆点改为主题真实色值(与 ink/herdr 同惯例) */
+    html[data-theme="sky"] .accent-swatch[data-accent="blue"]   { background: #3D63BE; }
+    html[data-theme="sky"] .accent-swatch[data-accent="cyan"]   { background: #3E86B5; }
+    html[data-theme="sky"] .accent-swatch[data-accent="green"]  { background: #3E8A6B; }
+    html[data-theme="sky"] .accent-swatch[data-accent="orange"] { background: #C47A3C; }
+    html[data-theme="sky"] .accent-swatch[data-accent="rose"]   { background: #C05A78; }
   </style>
 </head>
 <body>
@@ -2772,6 +2936,7 @@
                 <option value="linear">Linear</option>
                 <option value="ink">Ink</option>
                 <option value="herdr">Terminal</option>
+                <option value="sky">Sky</option>
               </select>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>
