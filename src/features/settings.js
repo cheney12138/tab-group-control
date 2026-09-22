@@ -100,8 +100,8 @@ function markActiveSwatch(el) {
 }
 
 // 固定突出色: 只有 linear 允许用户自选, 其余主题各锁一个设计好的唯一色
-// (ink = 目前选的"玫红"档, sky = 天空蓝, herdr = 终端蓝)
-const FIXED_ACCENT = { ink: 'rose', sky: 'blue', herdr: 'blue' };
+// (ink = 目前选的"玫红"档, sky = 天空蓝)
+const FIXED_ACCENT = { ink: 'rose', sky: 'blue' };
 
 function applyThemeAccent(theme) {
   const row = document.getElementById('accentRow');
@@ -506,7 +506,12 @@ try {
 // 多主题风格切换: 原有 Linear(极简现代) / 新增 ink(水墨古风新中式)
 const optTheme = document.getElementById('optTheme');
 try {
-  const currentTheme = localStorage.getItem('tgs-theme') || document.documentElement.dataset.theme || 'linear';
+  // 只认下拉里现存的 option: 已删主题(如已下线的终端蓝 herdr)的旧存档一律降级到 linear,
+  // 否则会落在一个没有 CSS 命名空间支撑的裸 data-theme 上(选择框空白 + 主题块全失效)
+  const KNOWN_THEMES = optTheme ? [...optTheme.options].map(o => o.value) : ['linear'];
+  const pickTheme = (t) => (KNOWN_THEMES.includes(t) ? t : null);
+  const currentTheme = pickTheme(localStorage.getItem('tgs-theme')) ||
+                       pickTheme(document.documentElement.dataset.theme) || 'linear';
   document.documentElement.dataset.theme = currentTheme;
   if (optTheme) {
     optTheme.value = currentTheme;

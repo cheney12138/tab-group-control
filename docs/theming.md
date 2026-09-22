@@ -1,11 +1,11 @@
 # 新主题开工检查表
 
 加新主题时按此表逐项勾(契约原文见 `docs/adr/0003-theming-protocol.md`)。
-已落地: linear(默认) / ink(水墨) / herdr(终端蓝) / sky(蓝天颗粒)。
+已落地: linear(默认) / ink(水墨) / sky(蓝天颗粒)。
 
 ## 必做(强制义务)
 
-- [ ] **挑主题名**(短 kebab,如 `ink`),声明 `color-scheme`(亮/亮暗双 facet——暗色变体务必做 `data-theme` 内部 media 分支,不开新主题名;固定亮色主题如 ink/herdr/sky 声明 `light` 即可)
+- [ ] **挑主题名**(短 kebab,如 `ink`),声明 `color-scheme`(亮/亮暗双 facet——暗色变体务必做 `data-theme` 内部 media 分支,不开新主题名;固定亮色主题如 ink/sky 声明 `light` 即可)
 - [ ] **全量视觉系统 token 赋值**:`--bg --surface --fill --fill-2 --text --text-2 --text-3 --placeholder --hairline --header-line --hover --accent --accent-hi --tint --tint-2 --ring --danger --danger-solid --danger-bg --amber --seg-active --seg-shadow --header-bg --header-hover --pop-bg --shadow-pop --dot-ring --btn-2 --media-btn-bg --media-btn-shadow --push-shadow --search-bg --search-bg-focus --plate-bg --tag-*-c/--tag-*-bg(5 组) --card-shadow --card-shadow-hover`
 - [ ] **5 个 accent 变体值**(变体仍须全量定义 —— 契约要求; 但按现行产品策略**只有 linear 在设置页暴露可选项**, 其余主题在 `settings.js` 的 `FIXED_ACCENT` 里锁一个设计色并隐藏整行):`[data-accent="blue|cyan|green|orange|rose"]` 下各自的 `--accent/--accent-hi`(及暗色 facet 的对应值)
 - [ ] **9 色 Chrome 组色映射**:`grey blue red yellow green pink purple cyan orange` 各配一个主题内色号,加进 `src/core/colors.js`
@@ -27,7 +27,7 @@
 | 媒体蒙层整行宣纸羽化 | ink | `.tab-item.has-media .media-overlay` | linear 是中央浮钮,水墨是整行右起蒙层,定位模型不同 |
 | 顶部 Tab 滑块挑出 | ink | `tabSliderExtra`(dom.js) | 两端挑出文字营造舒展留白 |
 | 搜索框毛笔长横 | ink | `.search-ink-stroke` SVG | 主题独有装饰件,linear 无对应物 |
-| 天空顶栏带(渐变+颗粒+反白) | sky | `.search-plate` 背景 + `.view-tab`/`.view-tabs .tab-slider` 反白 | 顶栏要读成「天空」,文字/图标须在天空层局部反白;这是与另四主题的骨架级分野,不是配色差异 |
+| 天空顶栏带(渐变+颗粒+反白) | sky | `.search-plate` 背景 + `.view-tab`/`.view-tabs .tab-slider` 反白 | 顶栏要读成「天空」,文字/图标须在天空层局部反白;这是与另三主题的骨架级分野,不是配色差异 |
 | 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:34px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
 | 列表上提(收留白不收云) | sky | `#results { margin-top: -18px }` | 天际线留白要收, 但云层厚度不能减 —— 只能把列表拽进天空尾部; 天空带 z-index(6) 高于 sticky 组头(5), 但该高度已被 mask 成全透明, 不遮内容 |
 | 胶片噪点(共享 `--grain`) | ink | `body::before`(hard-light 0.22) | 纸底很亮, overlay/multiply 在亮端增益极低(overlay 在 0.92 底上仅 0.16), 颗粒几乎看不出; hard-light 亮底增益≈1, 低不透明度即可出颗粒且不压暗。**强度上限 std≈3**: hard-light 在亮底只往暗侧发力(暗侧增益 2*base≈1.8, 亮侧仅 0.16), 出的是深色暗斑; ink 的纸是一整片扁平暖白, 没有明暗层次可以融合暗斑, 超限直读成"脏"。实测 0.5→std 6.8(脏) / 0.35→4.8(偏脏) / 0.22→3.0(采用)。**原 3px 纸纹点阵已删** —— 规则点阵会把细颗粒藏掉, 两层叠一起读成布纹 |
@@ -39,7 +39,7 @@
 sky 的色值全部由参考图(蓝天+白云+白线稿+重颗粒,2432×1018)逐像素取样得到,不是凭印象调的:
 
 1. **双色纪律** —— 全图只有天蓝与云白两个色相。禁止出现第二个彩色面;彩色只准以组色点/强调色/状态标签的小面积出现。
-2. **天空带明度纪律** —— `#2B50A5`(深端)~ `#688AD3`(浅端)。更深会读成「夜晚/终端蓝」,更浅会与云白撞失去层次。
+2. **天空带明度纪律** —— `#2B50A5`(深端)~ `#688AD3`(浅端)。更深会读成「夜晚」,更浅会与云白撞失去层次。
 3. **颗粒纪律** —— 颗粒是签名: 噪点作为 `.search-plate::before` 的**首层背景**用 `background-blend-mode: overlay` 叠在天色上(没有 opacity 乘法器, 强度由 `feComponentTransfer` 的 slope 标定);文字所在云面的全局 `body::before` 只能是 multiply `opacity 0.16`。禁止用 `filter: blur()` / 发光替代颗粒。
 4. **云白纪律** —— 云面一律蓝调白(`#E4EAF7` / `#F2F5FC`,B 通道最高);禁中性白、禁纯白。
 5. **纯白纪律** —— `#FFFFFF` 只给线稿与天空层上的文字/图标;云面与正文禁用纯白。
