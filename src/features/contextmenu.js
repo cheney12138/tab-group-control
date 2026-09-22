@@ -20,9 +20,8 @@ import { state } from '../core/store.js';
 import { loadCloseScope, loadScopeByKey, computeTargets, runCloseBatch } from './close-batch.js';
 import { archiveGroupAction } from './settings.js';
 
-let actions = null; // initContextMenu 注入: { refreshData, render, dropTabs }
-export function initContextMenu(injected) { actions = injected; }
-
+// 菜单自己不碰数据: 靶子算完直接交给 close-batch 的 runCloseBatch(它负责撤销条与刷新)。
+// 所以本模块**没有 initX 接线**, 不存在"忘了初始化"这种失灵模式。
 const GROUP_NONE = -1;
 let menuEl = null;
 let openToken = 0; // 异步取 scope 期间用户又右键了别处 → 旧的那次作废

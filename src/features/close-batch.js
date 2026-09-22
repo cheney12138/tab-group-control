@@ -110,11 +110,15 @@ export async function runCloseBatch(scope, targetIds) {
     console.error('批量关闭失败(部分标签可能已不存在):', e);
   }
 
-  if (actions) {
-    actions.dropTabs?.(new Set(ids));
-    renderUndoBanner();
-    await actions.refreshData({ forceFresh: true });
-    actions.render();
+  // 关闭已经落地, 后面的收尾(撤销条 + 刷新列表)**绝不能静默跳过** ——
+  // 漏接线时这里必须吵出声, 否则表现是"标签关了但没撤销条"(真实踩过)
+  if (!actions) {
+    console.error('[TGS] initCloseBatch 未被调用: 标签已关闭, 但撤销条与列表刷新都没执行');
+    return ids.length;
   }
+  actions.dropTabs?.(new Set(ids));
+  renderUndoBanner();
+  await actions.refreshData({ forceFresh: true });
+  actions.render();
   return ids.length;
 }

@@ -15,7 +15,7 @@ import { initUndo, isUndoAvailable, doUndo, restoreUndoBatch } from './features/
 import { initClean, cleanStaleTabs } from './features/clean.js';
 import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollPastSticky, findGroupOfTab } from './features/nav.js';
 import { initDnd, moveTabToGroupAction } from './features/dnd.js';
-import { initContextMenu } from './features/contextmenu.js';
+import { initCloseBatch } from './features/close-batch.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
@@ -456,6 +456,13 @@ function afterRestore(group, tabIds) {
 }
 
 // 设置面板组件初始化: 注入 main 侧能力(refreshData=数据层刷新,render=渲染层)
+//
+// ★ 接线义务: features/ 下每个导出了 initXxx 的模块都**必须**在这里被调用一次。
+// 漏了不会报语法错, 只是功能做一半就静默收工 —— 真实踩过: initCloseBatch 漏接线, 
+// 表现是"右键批量关闭把标签关了, 却不弹撤销条也不刷新列表"。
+// 自检(两条命令的输出应当完全一致):
+//   grep -rho 'export function init[A-Za-z]*' src/features | sort -u
+//   grep -o 'init[A-Za-z]*(' src/main.js | tr -d '(' | sort -u
 initSettings({
   refreshData: async (opts) => { await loadTabs(opts); search(searchValue()); },
   render,
@@ -479,7 +486,7 @@ initClean({
 });
 initNav({ getFiltered: () => state.filtered, getCurrentWindowId: () => state.currentWindowId });
 initDnd({ refreshData, render, isGroupedView: () => state.view === 'grouped' });
-initContextMenu({
+initCloseBatch({
   refreshData,
   render,
   dropTabs: (ids) => { state.allTabs = state.allTabs.filter(x => !ids.has(x.tab.id)); },
