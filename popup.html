@@ -1961,15 +1961,18 @@
      * 而不是颗粒 —— 与 sky 一样只留噪点。
      * 混合用 hard-light: 纸底很亮(近白), overlay/multiply 在亮端灵敏度极低
      * (overlay 在 0.92 底上只有 0.16 的增益), 颗粒几乎看不出; hard-light 在亮底
-     * 上增益接近 1, 实测 std 2.4 -> 6.8, 且用低不透明度就能做到, 均值不被压暗
-     * (纸底 238 -> 235)。0.5 是"看得出颗粒、又不脏"的档。 */
+     * 上增益接近 1, 低不透明度就能出颗粒, 且均值不被压暗。
+     * 强度必须比 sky 云面低得多: hard-light 在亮底上只往暗侧发力(暗侧增益
+     * 2*base≈1.8, 亮侧仅 0.16), 出的是"深色斑点"; 而 ink 的纸是一整片扁平暖白,
+     * 没有任何明暗层次能融合这些暗斑 —— 超过 std≈3 就直读成脏。
+     * 实测: 0.5 -> std 6.8(脏), 0.35 -> 4.8(偏脏), 0.22 -> 3.0(采用, 干净纸纹)。 */
     html[data-theme="ink"] body::before {
       content: "";
       position: fixed;
       inset: 0;
       background-image: var(--grain);
       background-size: 160px 160px;
-      opacity: 0.5;
+      opacity: 0.22;
       mix-blend-mode: hard-light;
       pointer-events: none;
       z-index: 999;
