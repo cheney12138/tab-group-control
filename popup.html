@@ -885,6 +885,45 @@
     .group-pop-item:hover { background: var(--hover); }
     .group-pop-empty { color: var(--text-3); font-size: 11px; padding: 6px 8px; }
     .group-pop-new { display: flex; gap: 6px; margin-top: 8px; border-top: 1px solid var(--hairline); padding-top: 8px; }
+    /* ---- 标签/分组右键菜单(共享组件) ----
+     * 只消费系统 token(--pop-bg / --shadow-pop / --hairline / --hover / --text-2 /
+     * --danger …), 所以它天生就“像当前主题”(linear 白浮层 / ink 宣纸 / sky 云白)。
+     * 这里不出现任何主题判断;每套主题的专属语言另在自己的命名空间补(见 docs/theming.md
+     * 的“新增共享组件时的反向义务”)。危险项的红必须是**这套主题的红** —— 走 --danger。 */
+    .ctx-menu {
+      position: fixed;
+      z-index: 120;
+      min-width: 176px;
+      /* 文案里带着组名(ADR-0005 用它消歧), 别太早 ellipsis —— 弹窗 480px, 340 还留足余量 */
+      max-width: 340px;
+      padding: 5px;
+      background: var(--pop-bg);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-pop);
+      font-size: var(--fs-md);
+      color: var(--text);
+      user-select: none;
+      animation: ctx-in 90ms ease-out;
+    }
+    @keyframes ctx-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; } }
+    .ctx-item {
+      padding: 7px 10px;
+      border-radius: var(--r-xs);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: default;
+      color: var(--text);
+      line-height: 1.35;
+    }
+    .ctx-item:hover:not(.disabled) { background: var(--hover); }
+    /* 危险项: 排最下 + 隔一条分隔线 + 各主题自己的红 */
+    .ctx-item.danger { color: var(--danger); }
+    .ctx-item.danger:hover:not(.disabled) { background: var(--danger-bg); }
+    /* 靶子为空 → 禁用置灰而不是隐藏: 让“这里本来有这个能力”看得见 */
+    .ctx-item.disabled { color: var(--text-3); opacity: 0.5; }
+    .ctx-sep { height: 1px; margin: 4px 6px; background: var(--hairline); }
     /* 整站通配开关: 视觉规格与设置页 .srow toggle 同一套(34×20/白knob),类名独立 */
     .group-pop-zone {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;

@@ -14,6 +14,7 @@ import { buildMediaControls } from './media.js';
 import { showUndo } from './undo.js';
 import { archiveGroupAction } from './settings.js';
 import { moveTabToGroupAction } from './dnd.js';
+import { openTabMenu, openGroupMenu, closeContextMenu } from './contextmenu.js';
 
 let actions = null; // initRender 注入: { refreshData, getSettings }
 export function initRender(injected) {
@@ -128,6 +129,7 @@ export function render() {
   // 记住重渲染前的焦点,重建后尽量恢复
   const prevUnit = navUnits().find(u => u.classList.contains('active'));
   const prevTabId = prevUnit?.dataset.tabId;
+  closeContextMenu(); // 列表重建后, 已打开的菜单指着旧 DOM 行
   resultsEl.innerHTML = '';
   staggerIdx = 0; // stagger 入场计数器,每行取号后递增(封顶 12 防长列表拖尾)
   if (!entrancePlayed) {
@@ -207,7 +209,7 @@ export function render() {
         if (searchCollapsed.has(key)) searchCollapsed.delete(key);
         else searchCollapsed.add(key);
         render();
-      }, maxCount));
+      }, maxCount, null)); // 搜索态未分组分区跨窗口合并 ⇒ 回落到当前窗口
       if (!isCollapsed) {
         for (const item of items) {
           const row = buildTabRow(item);
@@ -250,7 +252,7 @@ export function render() {
       else collapsed.add(key);
       saveCollapsed();
       render();
-    }, maxCount));
+    }, maxCount, section.windowId)); // 未分组分区必须带上自己的窗口, 否则会关错窗口
 
     if (!isCollapsed) {
       section.items.forEach(item => {
@@ -285,7 +287,11 @@ function restoreFocus(prevTabId) {
 
 // 分组头: group 为 null 表示未分组; onClick 为空时不可点击(搜索模式的分隔条)
 // maxCount: 本次渲染中最大的组内条目数(迷你条形图的分母),空则不画条
-function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
+// scopeWindowId: **仅未分组分区用**。未分组不是组对象, 拿不到 group.windowId,
+//   而不分窗口的浏览模式会把每个窗口的未分组标签各排一个分区 —— 不把窗口传下来,
+//   右键任意一个都会去关「当前窗口」那一堆(错窗口)。搜索模式未分组分区是跨窗口合并的
+//   (哨兵 __ungrouped__), 传 null ⇒ 回落到 state.currentWindowId。
+function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWindowId = null) {
   const header = document.createElement('div');
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
   header.style.animationDelay = staggerDelay();
@@ -350,6 +356,14 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount) {
     }
     header.appendChild(countEl);
   }
+  // 右键菜单: 组级动作(关闭全组 / 归档)的入口。未分组分区同样吃这套(group=null),
+  // 它没有组名, 只能靠“本窗口”交代作用域
+  header.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openGroupMenu(group, scopeWindowId, e.clientX, e.clientY);
+  });
+
   if (onClick) header.addEventListener('click', () => {
     onClick();
     // 点击后浏览器会把真实焦点给到被点的元素,键盘事件就不再经过 input;
@@ -590,6 +604,15 @@ function buildTabRow(item) {
   row.appendChild(closeBtn);
 
   row.addEventListener('click', () => switchTo(t));
+
+  // 右键菜单: 虚拟条目(书签/历史, 负 id)不是真实标签, 没有关闭语义
+  if (!isVirtualItem) {
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTabMenu(t.id, e.clientX, e.clientY);
+    });
+  }
   return row;
 }
 

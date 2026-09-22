@@ -10,10 +10,47 @@ export function initUndo(injected) { actions = injected; }
 // ---- 撤销关闭 ----
 let undoTimer = null;
 let undoStack = []; // 最近关闭的标签快照,支持连续撤销
+// 撤销窗口。批量关闭会连弹窗一起关掉(靶子含激活标签时),内存栈随 popup 消失,
+// 所以这条路径必须先把快照落 session —— 见 ADR-0006 的 Consequences
+const UNDO_WINDOW_MS = 6000;
+const UNDO_SESSION_KEY = 'tgs-undo-pending';
 
 // 批量路径入栈(cleanStaleTabs 循环里逐个入栈后统一 renderUndoBanner)
 export function pushUndo(snapshot) {
   undoStack.push(snapshot);
+}
+
+// ---- 跨 popup 生死的撤销凭证 ----
+// 只给批量关闭用: 单关(✕)是精确点击、风险量级不同, 不为此重做撤销模型
+
+export async function persistUndoBatch(snapshots) {
+  try {
+    await chrome.storage.session.set({ [UNDO_SESSION_KEY]: { snapshots, at: Date.now() } });
+  } catch (e) {
+    console.error('撤销快照落 session 失败:', e);
+  }
+}
+
+export async function clearUndoBatch() {
+  try { await chrome.storage.session.remove(UNDO_SESSION_KEY); } catch {}
+}
+
+// popup 启动时调用: 上一次若走的是"关完就死"的路径, 在这里把撤销承诺接回来
+// (过了撤销窗口就当从未发生过 —— 陈旧快照不能拿来复活很久以前关的标签)
+export async function restoreUndoBatch() {
+  try {
+    const stored = await chrome.storage.session.get(UNDO_SESSION_KEY);
+    const pending = stored?.[UNDO_SESSION_KEY];
+    if (!pending?.snapshots?.length) return;
+    const age = Date.now() - (pending.at || 0);
+    if (age >= UNDO_WINDOW_MS) { await clearUndoBatch(); return; }
+    for (const snap of pending.snapshots) {
+      if (!undoStack.some(x => x.tab?.id === snap?.tab?.id)) undoStack.push(snap);
+    }
+    renderUndoBanner({ ms: UNDO_WINDOW_MS - age });
+  } catch (e) {
+    console.error('恢复撤销快照失败:', e);
+  }
 }
 
 export function showUndo(snapshot) {
@@ -27,7 +64,8 @@ export function showUndo(snapshot) {
 // showUndo(targets[last].tab)(传了裸 Tab 而非快照对象),既重复 push
 // 又因 snapshot.tab 为 undefined 抛 TypeError,导致清理后不刷新/不提示/
 // 不能撤销。拆出本函数后批量路径只渲染不重复入栈
-export function renderUndoBanner() {
+export function renderUndoBanner(opts = {}) {
+  const ms = opts.ms || UNDO_WINDOW_MS; // 跨 popup 恢复时, 倒计时接着上一段走
   const count = undoStack.length;
   if (!count) return;
   const tab = undoStack[count - 1]?.tab;
@@ -50,11 +88,12 @@ export function renderUndoBanner() {
     const progress = document.createElement('span');
     progress.className = 'push-progress';
     banner.appendChild(progress);
-  }, { autoDismiss: 6000 });
+  }, { autoDismiss: ms });
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => {
     undoStack = [];
-  }, 6000);
+    clearUndoBatch(); // 撤销窗口一过, session 里的凭证也一并作废
+  }, ms);
 }
 
 // ⌘Z / Ctrl+Z 撤销最近关闭(等价于点击撤销按钮)
@@ -149,6 +188,7 @@ export async function doUndo() {
 
   undoStack = [];
   clearPushBanners(); // 通知条主动关闭(不等动画)
+  clearUndoBatch();   // 已兑现, 跨 popup 的凭证作废
 
   // 补归组: 优先找同名同色组; 若原分组因标签清空已销毁则重建
   await regroupRestored(restoredTabIds);

@@ -11,10 +11,11 @@ import { IS_MAC, MOD, DEBUG } from './core/platform.js';
 import { loadRulesForEdit, isGroupPopOpen, closeGroupPop } from './features/rules.js';
 import { initSettings, updateSettingsBadge, isSettingsOpen, closeSettingsPanel, toggleSettingsPane } from './features/settings.js';
 import { initMedia, applyMediaRowState, setMediaBtnState, SVG_MUTE, SVG_UNMUTE, probeMediaTabs } from './features/media.js';
-import { initUndo, isUndoAvailable, doUndo } from './features/undo.js';
+import { initUndo, isUndoAvailable, doUndo, restoreUndoBatch } from './features/undo.js';
 import { initClean, cleanStaleTabs } from './features/clean.js';
 import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollPastSticky, findGroupOfTab } from './features/nav.js';
 import { initDnd, moveTabToGroupAction } from './features/dnd.js';
+import { initContextMenu } from './features/contextmenu.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
@@ -478,6 +479,11 @@ initClean({
 });
 initNav({ getFiltered: () => state.filtered, getCurrentWindowId: () => state.currentWindowId });
 initDnd({ refreshData, render, isGroupedView: () => state.view === 'grouped' });
+initContextMenu({
+  refreshData,
+  render,
+  dropTabs: (ids) => { state.allTabs = state.allTabs.filter(x => !ids.has(x.tab.id)); },
+});
 initSearch({ render });
 initRender({ refreshData, getSettings: () => settings });
 
@@ -489,6 +495,9 @@ initRender({ refreshData, getSettings: () => settings });
   // 初始光标落在当前激活标签,Enter 直接回去
   focusCurrentTab();
   input.focus();
+  // 上一次若是"靶子含激活标签"的批量关闭(关完 popup 就死了), 撤销承诺在 session 里 ——
+  // 这里把它接回来, 让 ⌘Z 跨 popup 生死依然有效
+  restoreUndoBatch();
   console.log(`[TGS] 首帧完成, JS 侧总耗时 ${(performance.now() - bootT0).toFixed(1)}ms`);
   console.log('[TGS] BUILD 2026-09-03 v4 (fade-band) — 看不到这行=Chrome 缓存了旧 popup');
   // 首帧不阻塞: 媒体 tab 探测异步跑,命中一个补一个按钮
