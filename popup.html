@@ -22,6 +22,18 @@
       --fs-xs: 10.5px; --fs-sm: 11px; --fs-md: 12.5px; --fs-lg: 13px;
       --gutter: 16px;
     }
+
+    /* 共享纹理资产(非度量; 登记于 docs/theming.md 资产表):
+     * 胶片噪点 data URI, sky 与 ink 共用, 故在基座单点定义 —— 它是主题无关的
+     * 中立灰噪声, 不构成主题间"白嫖"(删任一主题都不影响另一主题)。
+     * 强度与混合模式由各主题自定: sky 用 background-blend-mode: overlay 压天色,
+     * ink 用 mix-blend-mode: multiply 压纸底。
+     * 构造: feTurbulence 转灰 + 强制 alpha=1, 再用 feComponentTransfer
+     * linear(0.98, -0.22) 把偏亮的均值拉回灰 0.5(overlay 对灰 0.5 是恒等变换,
+     * 均值不变只加方差; multiply 则表现为中性压暗)。 */
+    :root {
+      --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='0.98' intercept='-0.22'/><feFuncG type='linear' slope='0.98' intercept='-0.22'/><feFuncB type='linear' slope='0.98' intercept='-0.22'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+    }
     @media (prefers-color-scheme: dark) {
 
       /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝/云天)绝对不动不反色 */
@@ -1955,6 +1967,20 @@
       z-index: 999;
     }
 
+    /* 胶片噪点(与 sky 共用基座的 --grain): 水墨是暖白纸底, 近白处 overlay 读不出,
+     * 必须用 multiply 才见暗点。与上面的 3px 纸纹点阵分工: 点阵=纸纤维, 本层=胶片颗粒 */
+    html[data-theme="ink"] body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: var(--grain);
+      background-size: 160px 160px;
+      opacity: 0.12;
+      mix-blend-mode: multiply;
+      pointer-events: none;
+      z-index: 999;
+    }
+
     /* 字体分层: 气质层(衬线宋体,优先匹配 macOS 原生宋体 Songti SC 及 Windows SimSun/STSong) */
     html[data-theme="ink"] .group-title,
     html[data-theme="ink"] .view-tab,
@@ -2708,10 +2734,6 @@
       --sky-light: #688AD3;    /* 天空浅端(右下) */
       --sky-cloud: #E4EAF7;    /* 云层底(蓝调冷白,B 通道最高) */
       --sky-cloud-hi: #F2F5FC; /* 最亮云面 */
-      /* 颗粒 = 本主题签名: 中立灰噪点(强制不透明) + 混合,只压对比不加色。
-       * matrix 转灰度并把噪点 alpha 强制为 1;再用 feComponentTransfer 的 linear(1.5, -0.595)
-       * 把偏移到亮部的均值拉回 0.5 —— overlay 对灰 0.5 是恒等变换,均值不变,只加方差 */
-      --sky-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='0.98' intercept='-0.22'/><feFuncG type='linear' slope='0.98' intercept='-0.22'/><feFuncB type='linear' slope='0.98' intercept='-0.22'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 
       /* 溶解 mask: 上实下虚的渐变 + 湍流位移破形。
        * ⚠️ rect 必须**外扩**(x/y 取负、尺寸超出 viewBox): mask 铺满元素后,
@@ -2720,7 +2742,7 @@
        * 外扩后可视区四边都落在 rect 内部, 只有底部那条渐变边界被位移破形。
        * 另: 透明端(viewBox y=140)必须比元素底边(160)高出 >= 位移量(20),
        * 否则被位移顶到边界上的蓝色会在元素底边被硬裁成一条直线。 */
-      --sky-dissolve: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='160' viewBox='0 0 480 160' preserveAspectRatio='none'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-60' x2='0' y2='200'><stop offset='0' stop-color='white'/><stop offset='0.63' stop-color='white'/><stop offset='0.77' stop-color='white' stop-opacity='0'/><stop offset='1' stop-color='white' stop-opacity='0'/></linearGradient><filter id='n' x='-40%' y='-60%' width='180%' height='240%'><feTurbulence type='fractalNoise' baseFrequency='0.010 0.09' numOctaves='2' result='t'/><feDisplacementMap in='SourceGraphic' in2='t' scale='20' xChannelSelector='R' yChannelSelector='G'/></filter></defs><rect x='-60' y='-60' width='600' height='260' fill='url(%23g)' filter='url(%23n)'/></svg>");
+      --sky-dissolve: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='160' viewBox='0 0 480 160' preserveAspectRatio='none'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-60' x2='0' y2='200'><stop offset='0' stop-color='white'/><stop offset='0.63' stop-color='white'/><stop offset='0.755' stop-color='white' stop-opacity='0'/><stop offset='1' stop-color='white' stop-opacity='0'/></linearGradient><filter id='n' x='-40%' y='-60%' width='180%' height='240%'><feTurbulence type='fractalNoise' baseFrequency='0.010 0.09' numOctaves='2' result='t'/><feDisplacementMap in='SourceGraphic' in2='t' scale='20' xChannelSelector='R' yChannelSelector='G'/></filter></defs><rect x='-60' y='-60' width='600' height='260' fill='url(%23g)' filter='url(%23n)'/></svg>");
 
       /* —— 云端表面: 页面/列表/设置面板都是云 —— */
       --bg: var(--sky-cloud);
@@ -2794,13 +2816,13 @@
     html[data-theme="sky"] .search-plate {
       background: transparent;
       /* 天空留白: 给底部一个可溶解的"天际线余量", 天空才化得开(度量覆盖, 允许) */
-      padding-bottom: 34px;
+      padding-bottom: 22px;
     }
     html[data-theme="sky"] .search-plate::before {
       content: "";
       position: absolute;
       inset: 0;
-      background-image: var(--sky-grain),
+      background-image: var(--grain),
                         radial-gradient(130% 150% at 80% -25%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 62%),
                         linear-gradient(135deg, var(--sky-deep) 0%, var(--sky-mid) 46%, #4C71C6 100%);
       background-size: 160px 160px, auto, auto;
@@ -2849,7 +2871,7 @@
       content: "";
       position: fixed;
       inset: 0;
-      background-image: var(--sky-grain);
+      background-image: var(--grain);
       background-size: 160px 160px;
       opacity: 0.16;
       mix-blend-mode: multiply;
@@ -2962,7 +2984,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>
           </div>
-          <div class="srow"><span class="slabel">突出色</span>
+          <div class="srow" id="accentRow"><span class="slabel">突出色</span>
             <span class="accent-row">
               <button class="accent-swatch active" data-accent="blue" style="--sw:#387BE5" title="蓝"></button>
               <button class="accent-swatch" data-accent="cyan" style="--sw:#1BA39C" title="青"></button>

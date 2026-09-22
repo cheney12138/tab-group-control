@@ -7,7 +7,7 @@
 
 - [ ] **挑主题名**(短 kebab,如 `ink`),声明 `color-scheme`(亮/亮暗双 facet——暗色变体务必做 `data-theme` 内部 media 分支,不开新主题名;固定亮色主题如 ink/herdr/sky 声明 `light` 即可)
 - [ ] **全量视觉系统 token 赋值**:`--bg --surface --fill --fill-2 --text --text-2 --text-3 --placeholder --hairline --header-line --hover --accent --accent-hi --tint --tint-2 --ring --danger --danger-solid --danger-bg --amber --seg-active --seg-shadow --header-bg --header-hover --pop-bg --shadow-pop --dot-ring --btn-2 --media-btn-bg --media-btn-shadow --push-shadow --search-bg --search-bg-focus --plate-bg --tag-*-c/--tag-*-bg(5 组) --card-shadow --card-shadow-hover`
-- [ ] **5 个 accent 变体值**:`[data-accent="blue|cyan|green|orange|rose"]` 下各自的 `--accent/--accent-hi`(及暗色 facet 的对应值)
+- [ ] **5 个 accent 变体值**(变体仍须全量定义 —— 契约要求; 但按现行产品策略**只有 linear 在设置页暴露可选项**, 其余主题在 `settings.js` 的 `FIXED_ACCENT` 里锁一个设计色并隐藏整行):`[data-accent="blue|cyan|green|orange|rose"]` 下各自的 `--accent/--accent-hi`(及暗色 facet 的对应值)
 - [ ] **9 色 Chrome 组色映射**:`grey blue red yellow green pink purple cyan orange` 各配一个主题内色号,加进 `src/core/colors.js`
 - [ ] **THEME_ASSETS 加一行**:`<name>: { groupColors, ...视觉资产开关 }`,JS 侧即自动接管,不许加 `dataset.theme ===` 比较
 - [ ] **设置页主题下拉加 option**(`optTheme`)
@@ -17,6 +17,8 @@
 
 默认可覆盖装饰类属性(颜色/字体/背景/边框/遮罩),禁动布局骨架;动骨架的算特例资产,登记于此:
 
+共享纹理资产(基座 `:root` 中的非度量项, 需在此登记): `--grain` —— 主题无关的中立灰胶片噪点, sky/ink 共用; 放基座单点定义, 删任一主题都不影响其他(不构成"白嫖")。
+
 | 资产 | 主题 | 位置 | 为什么需要动骨架 |
 |---|---|---|---|
 | 晕染墨团计数角标 | ink | `colors.js buildInkBleedSvg` + `.group-count::before` | 墨团需超出徽标本体的溢出画布 |
@@ -25,7 +27,8 @@
 | 顶部 Tab 滑块挑出 | ink | `tabSliderExtra`(dom.js) | 两端挑出文字营造舒展留白 |
 | 搜索框毛笔长横 | ink | `.search-ink-stroke` SVG | 主题独有装饰件,linear 无对应物 |
 | 天空顶栏带(渐变+颗粒+反白) | sky | `.search-plate` 背景 + `.view-tab`/`.view-tabs .tab-slider` 反白 | 顶栏要读成「天空」,文字/图标须在天空层局部反白;这是与另四主题的骨架级分野,不是配色差异 |
-| 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:30px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
+| 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:22px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
+| 胶片噪点(共享 `--grain`) | ink | `body::after`(multiply 0.12) | 水墨是暖白纸底, 近白处 overlay 读不出, 必须 multiply; 与 `body::before` 的 3px 纸纹点阵分工(点阵=纸纤维, 本层=胶片颗粒) |
 | 手绘云缘分隔线 | sky | `.group-header::before` | linear 是 1px 两端渐隐直线,本主题是 2px 圆头手绘曲线,高度 +1px(绝对定位,不动布局) |
 | 胶片颗粒底纹 | sky | `body::before`(feTurbulence + overlay) | 颗粒是本主题签名资产;ink 已有 `body::before` 纹理先例 |
 
