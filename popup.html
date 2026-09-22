@@ -2711,7 +2711,7 @@
       /* 颗粒 = 本主题签名: 中立灰噪点(强制不透明) + 混合,只压对比不加色。
        * matrix 转灰度并把噪点 alpha 强制为 1;再用 feComponentTransfer 的 linear(1.5, -0.595)
        * 把偏移到亮部的均值拉回 0.5 —— overlay 对灰 0.5 是恒等变换,均值不变,只加方差 */
-      --sky-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='1.5' intercept='-0.494'/><feFuncG type='linear' slope='1.5' intercept='-0.494'/><feFuncB type='linear' slope='1.5' intercept='-0.494'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+      --sky-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='1.5' intercept='-0.494'/><feFuncG type='linear' slope='1.5' intercept='-0.494'/><feFuncB type='linear' slope='1.5' intercept='-0.494'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 
       /* —— 云端表面: 页面/列表/设置面板都是云 —— */
       --bg: var(--sky-cloud);
@@ -2779,7 +2779,9 @@
      * 只有渐变底色;颗粒交给 ::before,云缘剪影交给 ::after */
     html[data-theme="sky"] .search-plate {
       background-color: var(--sky-mid);
-      background-image: linear-gradient(135deg, var(--sky-deep) 0%, var(--sky-mid) 46%, #4C71C6 100%);
+      /* 大气光(右上柔光)叠在 135° 渐变上: 天空要有"光",不能只是色块 */
+      background-image: radial-gradient(130% 150% at 80% -25%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 62%),
+                        linear-gradient(135deg, var(--sky-deep) 0%, var(--sky-mid) 46%, #4C71C6 100%);
     }
     /* 天空带重颗粒(参考图 std≈16);::before 在定位子元素(Tab/搜索框)之下 */
     html[data-theme="sky"] .search-plate::before {
@@ -2789,7 +2791,7 @@
       background-image: var(--sky-grain);
       background-size: 160px 160px;
       mix-blend-mode: overlay;
-      opacity: 0.6;
+      opacity: 0.5;
       pointer-events: none;
     }
     /* 天空上的文字/线稿必须反白(列表文字是深蓝墨,不能继承到天空层) */
@@ -2810,16 +2812,20 @@
       box-shadow: 0 2px 10px rgba(22, 40, 90, 0.18);
     }
 
-    /* ---- 资产 2: 云缘剪影 —— 天空带底部的云朵鼓包,复刻参考图"天空压着云海"的交界 ----
-     * 填充色固定 = --sky-cloud #E4EAF7(data URI 内无法引用 var) */
+    /* ---- 资产 2: 柔云团 —— 天空带底部一层大尺度、不对称、边缘化开的云层
+     * (取代早期"等距小扇贝"版本: 重复小弧线会读成简笔画描边而非云)
+     * 三个大椭圆 + feTurbulence 位移破形 + 高斯模糊化开边缘,低不透明度融入云底;
+     * 直径远大于窗宽、左右溢出视口,不存在平铺接缝 */
     html[data-theme="sky"] .search-plate::after {
       content: "";
       position: absolute;
-      left: 0; right: 0; bottom: -5px;
-      height: 10px;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='10' viewBox='0 0 160 10' preserveAspectRatio='none'><path d='M0 10 L0 5.2 Q 13 1.4, 27 4.6 Q 40 0.6, 56 4.2 Q 70 1.0, 84 4.4 Q 99 0.4, 114 4.0 Q 128 1.2, 142 4.4 Q 152 2.0, 160 5.0 L160 10 Z' fill='%23E4EAF7'/></svg>");
-      background-repeat: repeat-x;
-      background-size: 160px 10px;
+      left: 0; right: 0; bottom: -2px;
+      height: 60px;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='60' viewBox='0 0 480 60'><defs><filter id='f' x='-15%' y='-90%' width='130%' height='280%'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.035' numOctaves='2' result='n'/><feDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/><feGaussianBlur stdDeviation='5.5'/></filter></defs><g filter='url(%23f)' fill='%23E4EAF7'><ellipse cx='90' cy='60' rx='190' ry='34'/><ellipse cx='300' cy='62' rx='205' ry='42'/><ellipse cx='460' cy='60' rx='150' ry='33'/></g></svg>");
+      background-repeat: no-repeat;
+      background-position: left bottom;
+      background-size: 480px 60px;
+      opacity: 0.5;
       pointer-events: none;
     }
 
