@@ -86,8 +86,11 @@
 于是**均值不变、只加方差**(不校正就会把蓝天冲淡)。噪点直接作为 `.search-plate::before` 的首层背景、
 `background-blend-mode: overlay` 叠在天色上(设了 `mix-blend-mode`/`opacity` 就变成两套混合, 不好标定)。
 天空带实测 std≈12(参考图≈16);全局 `body::before` multiply `opacity 0.16`(云面实测 std≈2.3,
-云底亮度 231→220, 正好落在参考图云区均值 220 上)。溶解 mask 的湍流: `baseFrequency='0.010 0.09'`
-(横向低、纵向高 = 边界横向起伏更缓)、`numOctaves=2`、`scale=20`(scale>30 会烂成大块斑)。`--sky-grain` 为 160px 可平铺 tile。
+云底亮度 231→220, 正好落在参考图云区均值 220 上)。溶解 mask(`--sky-dissolve`)的湍流: `baseFrequency='0.010 0.09'`
+(横向低、纵向高 = 边界横向起伏更缓)、`numOctaves=2`、`scale=20`(scale>30 会烂成大块斑)。
+**mask 的 rect 必须外扩到 viewBox 之外**(`x/y=-60`、`width/height` 超出): 否则位移会把 rect 的四条边全抖出缺口,
+顶部/左右漏出容器底色;可视区四边必须落在 rect 内部, 只有底部边界参与破形。透明端(viewBox `y=140`)还要
+比元素底边(160)高出 ≥ 位移量(20), 否则被顶上来的蓝会在底边被硬裁成直线。`--sky-grain` 为 160px 可平铺 tile。
 
 ## 六、施工步骤(本次提交范围)
 
