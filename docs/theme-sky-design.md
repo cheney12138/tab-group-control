@@ -77,6 +77,7 @@
 | 天空顶栏带 | `.search-plate` 渐变 + `.view-tab` 反白 | 顶栏要读成"天空",文字色须在天空层局部反白;这是与另四主题的骨架级分野 |
 | 胶片颗粒 | `.search-plate::before` + `body::before`(feTurbulence) | 颗粒是签名资产;ink 已有 `body::before` 纹理先例 |
 | 天空自溶(色层 mask) | `.search-plate` 透明底+余量 / `::before` 自身 mask | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**零分割线**下溶进云里 |
+| 列表上提(收留白不收云) | `#results { margin-top:-18px }` | 要收的是"留白"不是"云": 天空深浅/云层厚度一律不动, 只把列表拽进天空淡出的尾部 |
 | 手绘云缘分隔线 | `.group-header::before` | linear 是两端渐隐直线,本主题是 2px 圆头手绘曲线(绝对定位,不动布局) |
 | 白线稿滑块 | `.view-tabs .tab-slider`(仅此一处) | 天空层上唯一可见的纯白线稿装饰;设置面板的滑块在云上,保持强调色 |
 | 云朵圆角 | `--r-*` 覆盖 | 云的语言,度量基座允许主题覆盖(同 herdr 方角先例) |

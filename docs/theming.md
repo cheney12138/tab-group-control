@@ -27,7 +27,8 @@
 | 顶部 Tab 滑块挑出 | ink | `tabSliderExtra`(dom.js) | 两端挑出文字营造舒展留白 |
 | 搜索框毛笔长横 | ink | `.search-ink-stroke` SVG | 主题独有装饰件,linear 无对应物 |
 | 天空顶栏带(渐变+颗粒+反白) | sky | `.search-plate` 背景 + `.view-tab`/`.view-tabs .tab-slider` 反白 | 顶栏要读成「天空」,文字/图标须在天空层局部反白;这是与另四主题的骨架级分野,不是配色差异 |
-| 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:22px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
+| 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:34px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
+| 列表上提(收留白不收云) | sky | `#results { margin-top: -18px }` | 天际线留白要收, 但云层厚度不能减 —— 只能把列表拽进天空尾部; 天空带 z-index(6) 高于 sticky 组头(5), 但该高度已被 mask 成全透明, 不遮内容 |
 | 胶片噪点(共享 `--grain`) | ink | `body::after`(multiply 0.12) | 水墨是暖白纸底, 近白处 overlay 读不出, 必须 multiply; 与 `body::before` 的 3px 纸纹点阵分工(点阵=纸纤维, 本层=胶片颗粒) |
 | 手绘云缘分隔线 | sky | `.group-header::before` | linear 是 1px 两端渐隐直线,本主题是 2px 圆头手绘曲线,高度 +1px(绝对定位,不动布局) |
 | 胶片颗粒底纹 | sky | `body::before`(feTurbulence + overlay) | 颗粒是本主题签名资产;ink 已有 `body::before` 纹理先例 |

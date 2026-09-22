@@ -2816,7 +2816,7 @@
     html[data-theme="sky"] .search-plate {
       background: transparent;
       /* 天空留白: 给底部一个可溶解的"天际线余量", 天空才化得开(度量覆盖, 允许) */
-      padding-bottom: 22px;
+      padding-bottom: 34px;
     }
     html[data-theme="sky"] .search-plate::before {
       content: "";
@@ -2836,6 +2836,14 @@
       -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
       pointer-events: none;
     }
+    /* 列表上提: 天空带深浅不变(云层厚度完整保留), 只把列表整体往上拽,
+     * 让首个分组 cell 坐进天空淡出的尾部 —— 收缩的是"留白", 不是"云"。
+     * 天空带 z-index 6 高于 sticky 组头(5), 但它在这个高度已完全透明(mask 溶掉),
+     * 因此不会遮住列表内容 */
+    html[data-theme="sky"] #results {
+      margin-top: -18px;
+    }
+
     /* 天空上的文字/线稿必须反白(列表文字是深蓝墨,不能继承到天空层) */
     html[data-theme="sky"] .view-tab {
       color: rgba(255, 255, 255, 0.72);
