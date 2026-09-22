@@ -22,30 +22,42 @@
       --fs-xs: 10.5px; --fs-sm: 11px; --fs-md: 12.5px; --fs-lg: 13px;
       --gutter: 16px;
     }
+
+    /* 共享纹理资产(非度量; 登记于 docs/theming.md 资产表):
+     * 胶片噪点 data URI, sky 与 ink 共用, 故在基座单点定义 —— 它是主题无关的
+     * 中立灰噪声, 不构成主题间"白嫖"(删任一主题都不影响另一主题)。
+     * 强度与混合模式由各主题自定: sky 用 background-blend-mode: overlay 压天色,
+     * ink 用 mix-blend-mode: multiply 压纸底。
+     * 构造: feTurbulence 转灰 + 强制 alpha=1, 再用 feComponentTransfer
+     * linear(0.98, -0.22) 把偏亮的均值拉回灰 0.5(overlay 对灰 0.5 是恒等变换,
+     * 均值不变只加方差; multiply 则表现为中性压暗)。 */
+    :root {
+      --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='0.98' intercept='-0.22'/><feFuncG type='linear' slope='0.98' intercept='-0.22'/><feFuncB type='linear' slope='0.98' intercept='-0.22'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+    }
     @media (prefers-color-scheme: dark) {
 
-      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/终端蓝)绝对不动不反色 */
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn img {
+      /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/云天)绝对不动不反色 */
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn img,
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .settings-btn img {
         filter: invert(0.88) brightness(1.1);
         opacity: 0.85;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .settings-btn:hover img,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active img {
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .settings-btn:hover img,
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn.active img {
         filter: invert(1) brightness(1.2);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn svg {
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn svg {
         color: var(--text-2);
         opacity: 0.88;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn:hover svg,
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .src-btn.active svg {
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn:hover svg,
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .src-btn.active svg {
         color: var(--accent);
         opacity: 1;
       }
-      html:not([data-theme="ink"]):not([data-theme="herdr"]) .help-card-head img {
+      html:not([data-theme="ink"]):not([data-theme="sky"]) .help-card-head img {
         filter: invert(0.88) brightness(1.1);
       }
     }
@@ -1475,7 +1487,7 @@
     /* 选中: 柔和地从左边缘淡出的主题色洗染(现代风,比中国风更淡) + 整行 Q 弹膨胀 (Back-out 弹性过冲) */
     /* 公共交互层(全主题共享,主题覆盖层不得禁用): 选中行上浮效果 =
      * accent 渐变高亮 + scale(1.02) 上浮 + 弹性过冲 + 柔和投影。
-     * ink/linear/herdr 及未来新增主题一律继承此处,主题只准调整配色类 token */
+     * linear/ink/sky 及未来新增主题一律继承此处,主题只准调整配色类 token */
     .tab-item.active {
       background: linear-gradient(to right, color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 3%, transparent) 50%, transparent 88%);
       transform: scale(1.02);
@@ -1944,14 +1956,25 @@
       font-family: "Noto Sans SC", sans-serif;
       position: relative;
     }
+    /* 纸底肌理 = 胶片噪点(与 sky 共用基座的 --grain)。
+     * 已去掉原来的 3px 纸纹点阵: 规则点阵会把细颗粒"藏"掉, 两层叠一起读起来像布纹
+     * 而不是颗粒 —— 与 sky 一样只留噪点。
+     * 混合用 hard-light: 纸底很亮(近白), overlay/multiply 在亮端灵敏度极低
+     * (overlay 在 0.92 底上只有 0.16 的增益), 颗粒几乎看不出; hard-light 在亮底
+     * 上增益接近 1, 低不透明度就能出颗粒, 且均值不被压暗。
+     * 强度必须比 sky 云面低得多: hard-light 在亮底上只往暗侧发力(暗侧增益
+     * 2*base≈1.8, 亮侧仅 0.16), 出的是"深色斑点"; 而 ink 的纸是一整片扁平暖白,
+     * 没有任何明暗层次能融合这些暗斑 —— 超过 std≈3 就直读成脏。
+     * 实测: 0.5 -> std 6.8(脏), 0.35 -> 4.8(偏脏), 0.22 -> 3.0(采用, 干净纸纹)。 */
     html[data-theme="ink"] body::before {
       content: "";
       position: fixed;
       inset: 0;
-      background-image: radial-gradient(rgba(43, 38, 34, 0.025) 1px, transparent 1px);
-      background-size: 3px 3px;
+      background-image: var(--grain);
+      background-size: 160px 160px;
+      opacity: 0.22;
+      mix-blend-mode: hard-light;
       pointer-events: none;
-      mix-blend-mode: multiply;
       z-index: 999;
     }
 
@@ -2533,161 +2556,183 @@
     }
 
     /* ============================================================
-     * 新增主题: 终端蓝 (data-theme="herdr")
-     * 纯视觉换肤,严格限定在 [data-theme="herdr"] 命名空间下,不影响其他主题
-     * 配色/设计语言取自 herdr.dev: 雾蓝紫底 #E3E4EE | 藏青墨 #1F2A5A |
-     * 电光蓝 #3D5BC4 | 全局等宽字体 + 极淡方格底纹 | 实心藏青主按钮
-     * 亮色单面主题(与 ink 同策略): color-scheme: light,不跟随系统深色
+     * 新增主题: 蓝天颗粒 (data-theme="sky")
+     * 纯视觉换肤,严格限定在 [data-theme="sky"] 命名空间下,不影响其他主题
+     * 设计语言取自参考图「蓝天 + 白云 + 白色手绘线稿 + 重胶片颗粒」,色值逐像素取样:
+     *   天空 #2B50A5→#688AD3(135° 渐变) | 云白冷调 #B7C6D8–#EDEFFC(B 通道恒最高) |
+     *   纯白 #FFFFFF 仅给线稿 | 颗粒 std≈16(全图签名)
+     * 结构: 天空在上(顶栏=天空层) / 云海在下(列表=云层),文字全落在云上保证可读。
+     * 固定亮色单面(color-scheme: light,不做暗色适配,与 ink 同策略)。
+     * 设计纪律见 docs/theme-sky-design.md。
      * ============================================================ */
-    :root[data-theme="herdr"] {
+    :root[data-theme="sky"] {
       color-scheme: light;
-      --bg: #DEDFE9;
-      --surface: #E9EAF3;
-      --fill: rgba(31, 42, 90, 0.06);
-      --fill-2: rgba(31, 42, 90, 0.10);
-      --text: #1F2A5A;
-      --text-2: #5C6591;
-      --text-3: #8A90B4;
-      --placeholder: rgba(31, 42, 90, 0.42);
-      --hairline: rgba(31, 42, 90, 0.16);
+
+      /* —— 私有色板(参考图逐像素取样) —— */
+      --sky-deep: #2B50A5;     /* 天空深端(左上) */
+      --sky-mid: #3E64B9;      /* 天空中值 */
+      --sky-light: #688AD3;    /* 天空浅端(右下) */
+      --sky-cloud: #E4EAF7;    /* 云层底(蓝调冷白,B 通道最高) */
+      --sky-cloud-hi: #F2F5FC; /* 最亮云面 */
+
+      /* 溶解 mask: 上实下虚的渐变 + 湍流位移破形。
+       * ⚠️ rect 必须**外扩**(x/y 取负、尺寸超出 viewBox): mask 铺满元素后,
+       * 若 rect 边缘与元素边缘重合, 位移会把 rect 的四条边全抖出不规则缺口 ——
+       * 顶部/左右于是漏出容器底色(实测踩坑: 天空像被咬了一圈)。
+       * 外扩后可视区四边都落在 rect 内部, 只有底部那条渐变边界被位移破形。
+       * 另: 透明端(viewBox y=140)必须比元素底边(160)高出 >= 位移量(20),
+       * 否则被位移顶到边界上的蓝色会在元素底边被硬裁成一条直线。 */
+      --sky-dissolve: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='160' viewBox='0 0 480 160' preserveAspectRatio='none'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-60' x2='0' y2='200'><stop offset='0' stop-color='white'/><stop offset='0.63' stop-color='white'/><stop offset='0.755' stop-color='white' stop-opacity='0'/><stop offset='1' stop-color='white' stop-opacity='0'/></linearGradient><filter id='n' x='-40%' y='-60%' width='180%' height='240%'><feTurbulence type='fractalNoise' baseFrequency='0.010 0.09' numOctaves='2' result='t'/><feDisplacementMap in='SourceGraphic' in2='t' scale='20' xChannelSelector='R' yChannelSelector='G'/></filter></defs><rect x='-60' y='-60' width='600' height='260' fill='url(%23g)' filter='url(%23n)'/></svg>");
+
+      /* —— 云端表面: 页面/列表/设置面板都是云 —— */
+      --bg: var(--sky-cloud);
+      --surface: var(--sky-cloud-hi);
+      --fill: rgba(31, 52, 110, 0.06);
+      --fill-2: rgba(31, 52, 110, 0.10);
+
+      /* —— 云层深蓝墨(取自天空最深端再压暗,保证白底对比) —— */
+      --text: #16224A;
+      --text-2: #46538A;
+      --text-3: #7C89B4;
+      --placeholder: rgba(22, 34, 74, 0.42);
+      --hairline: rgba(31, 52, 110, 0.12);
       --header-line: transparent;
-      --hover: rgba(31, 42, 90, 0.05);
-      --accent: #3D5BC4;
-      --accent-hi: #2E4AAE;
-      --tint: color-mix(in srgb, var(--accent) 10%, transparent);
-      --tint-2: color-mix(in srgb, var(--accent) 16%, transparent);
-      --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+      --hover: rgba(31, 52, 110, 0.055);
 
-      --header-bg: #DEDFE9;
-      --header-hover: rgba(31, 42, 90, 0.05);
-      --plate-bg: #DEDFE9;
-      --search-bg: #E9EAF3;
-      --search-bg-focus: #EFF0F6;
-      --pop-bg: #E9EAF3;
+      /* —— 强调色 = 天空本色 —— */
+      --accent: #3D63BE;
+      --accent-hi: #2E4FA6;
+      --tint: color-mix(in srgb, var(--accent) 12%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 20%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 32%, transparent);
 
-      /* 终端风时间标签色系(红/橙/绿状态信号,herdr 同款低饱和) */
-      --tag-hot-c: #3E7B4F;
-      --tag-info-c: #3D5BC4;
-      --tag-mid-c: #5C6591;
-      --tag-stale-c: #C4762A;
-      --tag-zombie-c: #D0453F;
+      --header-bg: var(--sky-cloud);
+      --header-hover: rgba(31, 52, 110, 0.055);
+      --plate-bg: var(--sky-mid);
+      --search-bg: var(--sky-cloud-hi);
+      --search-bg-focus: #F8FAFE;
+      --pop-bg: var(--sky-cloud-hi);
 
-      /* 视觉 token 全量自有化(ADR-0003): 不依赖任何外部兜底 */
-      --danger: #D0453F;
-      --danger-solid: #D0453F;
-      --danger-bg: rgba(208, 69, 63, 0.12);
-      --amber: #C4762A;
-      --seg-active: #E9EAF3;
+      /* —— 状态色/标签: 压进天空色域的低饱和档 —— */
+      --danger: #C0455A;
+      --danger-solid: #C0455A;
+      --danger-bg: rgba(192, 69, 90, 0.10);
+      --amber: #B5793A;
+      --seg-active: var(--sky-cloud-hi);
       --seg-shadow: none;
-      --shadow-pop: 0 2px 10px rgba(31, 42, 90, 0.16);
-      --dot-ring: rgba(31, 42, 90, 0.08);
-      --btn-2: #5C6591;
-      --media-btn-bg: #E9EAF3;
-      --media-btn-shadow: 0 1px 2px rgba(31, 42, 90, 0.12);
-      --push-shadow: 0 2px 10px rgba(31, 42, 90, 0.14);
-      --card-shadow: none;
-      --card-shadow-hover: none;
-      --tag-hot-bg: rgba(62, 123, 79, 0.13);
-      --tag-info-bg: rgba(61, 91, 196, 0.11);
-      --tag-mid-bg: rgba(31, 42, 90, 0.07);
-      --tag-stale-bg: rgba(196, 118, 42, 0.14);
-      --tag-zombie-bg: rgba(208, 69, 63, 0.11);
+      --shadow-pop: 0 2px 12px rgba(43, 80, 165, 0.16);
+      --dot-ring: rgba(31, 52, 110, 0.08);
+      --btn-2: #46538A;
+      --media-btn-bg: var(--sky-cloud-hi);
+      --media-btn-shadow: 0 1px 3px rgba(43, 80, 165, 0.18);
+      --push-shadow: 0 2px 12px rgba(43, 80, 165, 0.16);
+      --card-shadow: 0 1px 2px rgba(43, 80, 165, 0.06);
+      --card-shadow-hover: 0 2px 6px rgba(43, 80, 165, 0.10);
 
-      /* 度量基座覆盖(ADR-0003 允许主题覆盖): TUI 直角语言,一切容器退圆为方。
-       * 这是 herdr 与 linear 的骨架级分野,不是配色差异 */
-      --r-xs: 2px; --r-sm: 3px; --r-md: 4px; --r-lg: 5px;
+      --tag-hot-c: #2E7D5B;    --tag-hot-bg: rgba(46, 125, 91, 0.12);
+      --tag-info-c: #3D63BE;   --tag-info-bg: rgba(61, 99, 190, 0.12);
+      --tag-mid-c: #46538A;    --tag-mid-bg: rgba(31, 52, 110, 0.07);
+      --tag-stale-c: #B5793A;  --tag-stale-bg: rgba(181, 121, 58, 0.13);
+      --tag-zombie-c: #C0455A; --tag-zombie-bg: rgba(192, 69, 90, 0.11);
+
+      /* 云朵圆角: 比 linear 更圆 —— 圆角属装饰属性, 度量基座允许主题覆盖 */
+      --r-xs: 8px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px;
     }
 
-    /* 终端蓝主题下的突出色选项: 沿用 herdr 低饱和终端色系 */
-    :root[data-theme="herdr"][data-accent="blue"]   { --accent: #3D5BC4; --accent-hi: #2E4AAE; }
-    :root[data-theme="herdr"][data-accent="cyan"]   { --accent: #1F7A8C; --accent-hi: #186573; }
-    :root[data-theme="herdr"][data-accent="green"]  { --accent: #3E7B4F; --accent-hi: #2F6440; }
-    :root[data-theme="herdr"][data-accent="orange"] { --accent: #C4762A; --accent-hi: #A65F1E; }
-    :root[data-theme="herdr"][data-accent="rose"]   { --accent: #C24B58; --accent-hi: #A53B47; }
+    /* 突出色: 五个变体 = 一天里的天色(全部低饱和,仍留在蓝白世界里) */
+    :root[data-theme="sky"][data-accent="blue"]   { --accent: #3D63BE; --accent-hi: #2E4FA6; }
+    :root[data-theme="sky"][data-accent="cyan"]   { --accent: #3E86B5; --accent-hi: #2F6E9C; }
+    :root[data-theme="sky"][data-accent="green"]  { --accent: #3E8A6B; --accent-hi: #2F7256; }
+    :root[data-theme="sky"][data-accent="orange"] { --accent: #C47A3C; --accent-hi: #A9632C; }
+    :root[data-theme="sky"][data-accent="rose"]   { --accent: #C05A78; --accent-hi: #A34763; }
 
-    /* 全局等宽字体(herdr 的核心气质): 拉丁/数字走 mono,CJK 自动回落系统中文。
-     * 背景是纯色雾蓝紫(hero 区取色): 列表本身文字信息密度高,不叠任何网格纹理 */
-    html[data-theme="herdr"] body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace;
-      background: var(--bg);
-    }
-
-    /* 等宽字形略宽,微调关键节奏点的字号/字距,保持与另两主题相近的行内密度 */
-    html[data-theme="herdr"] .view-tab { font-size: 13px; letter-spacing: 0.02em; }
-    html[data-theme="herdr"] .group-title { font-size: 13.5px; letter-spacing: 0.02em; }
-    html[data-theme="herdr"] .tab-item .title { font-size: 12.5px; }
-
-    /* ---- TUI 精髓 1: 命令栏是一块"终端顶栏" —— 底部 1px 实线切出区域,
-     * 搜索框是方角代码块容器;聚焦只切边框色,绝不发光(零光晕) ---- */
-    html[data-theme="herdr"] .search-plate {
-      border-bottom: 1px solid var(--hairline);
-    }
-    html[data-theme="herdr"] .search-wrap:focus-within {
-      border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
-      box-shadow: none; /* 终端没有 glow */
-    }
-
-    /* ---- TUI 精髓 2: 列表行激活态配色走主题 token;
-     * 上浮/弹性/投影是基础层公共交互件,herdr 与其他主题同等继承,不在此覆盖 ---- */
-
-    /* ---- TUI 精髓 3: 分组分隔 = 贯通实线,替代 linear 的两端渐隐曲线 ---- */
-    html[data-theme="herdr"] .group-header::before {
-      background: var(--hairline);
-    }
-
-    /* ---- TUI 精髓 4: 计数徽章 = 方角描边盒(ASCII 括号语义),不再灰底胶囊 ---- */
-    html[data-theme="herdr"] .group-count {
+    /* ---- 资产 1: 天空带 = 一整层会「溶进云里」的天空 ---------------------
+     * 骨架级分野: 顶栏读成"天空"。天空**不在** .search-plate 的 background 上,
+     * 而是整个交给 ::before —— 只有独立元素能单独上 mask(直接 mask 容器会把
+     * 搜索框 / Tab 一起淡掉)。::before 铺 颗粒+柔光+135°渐变 三层,
+     * 再用一块「上实下虚 + 湍流破形」的 mask 把自己的底部溶掉, 露出页面云白 ——
+     * 于是天空与云之间**没有任何分割线, 是蓝色自己化开**(替换了早期柔云团:
+     * 任何"先铺蓝、再盖一层白云形状"都会留下那道云团的边 = 底线) */
+    html[data-theme="sky"] .search-plate {
       background: transparent;
-      box-shadow: inset 0 0 0 1px var(--hairline);
+      /* 天空留白: 给底部一个可溶解的"天际线余量", 天空才化得开(度量覆盖, 允许) */
+      padding-bottom: 34px;
+    }
+    html[data-theme="sky"] .search-plate::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: var(--grain),
+                        radial-gradient(130% 150% at 80% -25%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 62%),
+                        linear-gradient(135deg, var(--sky-deep) 0%, var(--sky-mid) 46%, #4C71C6 100%);
+      background-size: 160px 160px, auto, auto;
+      background-repeat: repeat, no-repeat, no-repeat;
+      background-blend-mode: overlay, normal, normal;
+      /* mask: 顶部全白(不透明) → 底部全透明, 中段用 feTurbulence 位移把渐变边界
+       * 破成不规则云缘(自然溶解的关键一步;纯渐变会读成"渐变带") */
+      -webkit-mask-image: var(--sky-dissolve);
+      mask-image: var(--sky-dissolve);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+      pointer-events: none;
+    }
+    /* 列表上提: 天空带深浅不变(云层厚度完整保留), 只把列表整体往上拽,
+     * 让首个分组 cell 坐进天空淡出的尾部 —— 收缩的是"留白", 不是"云"。
+     * 天空带 z-index 6 高于 sticky 组头(5), 但它在这个高度已完全透明(mask 溶掉),
+     * 因此不会遮住列表内容 */
+    html[data-theme="sky"] #results {
+      margin-top: -18px;
     }
 
-    /* ---- TUI 精髓 5: 部件形状方化 —— 竖条/滑块/开关/色点/媒体钮全部去圆 ---- */
-    html[data-theme="herdr"] .group-dot { border-radius: 1px; }
-    html[data-theme="herdr"] .view-tabs .tab-slider,
-    html[data-theme="herdr"] .settings-tabs .tab-slider {
+    /* 天空上的文字/线稿必须反白(列表文字是深蓝墨,不能继承到天空层) */
+    html[data-theme="sky"] .view-tab {
+      color: rgba(255, 255, 255, 0.72);
+      text-shadow: 0 1px 2px rgba(22, 40, 90, 0.35);
+    }
+    html[data-theme="sky"] .view-tab:hover,
+    html[data-theme="sky"] .view-tab.active { color: #FFFFFF; }
+    /* 天空层上唯一可见的纯白线稿 = 视图滑块(设置面板的滑块在云上,保持强调色) */
+    html[data-theme="sky"] .view-tabs .tab-slider {
+      background: #FFFFFF;
+      box-shadow: 0 1px 2px rgba(22, 40, 90, 0.30);
+    }
+    /* 搜索框是浮在天空里的一朵云: 最亮云面 + 蓝调柔影 */
+    html[data-theme="sky"] .search-wrap {
+      border-color: rgba(255, 255, 255, 0.55);
+      box-shadow: 0 2px 10px rgba(22, 40, 90, 0.18);
+    }
+
+    /* (天空带底部可见轮廓已移除: 天空由 ::before 自己 mask 溶解, 见资产 1 */
+
+    /* ---- 资产 3: 手绘云缘分隔线 —— 1–2px 圆头手绘线,替换 linear 的两端渐隐直线 ---- */
+    html[data-theme="sky"] .group-header::before {
       height: 2px;
-      border-radius: 0; /* 直线指示,水墨用笔触,终端用直线 */
+      background: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='2' viewBox='0 0 44 2' preserveAspectRatio='none'><path d='M1 1.2 Q 6 0.2, 11 1.1 T 22 1.1 T 33 1.0 T 43 1.2' stroke='%233D63BE' stroke-width='0.9' fill='none' stroke-linecap='round' opacity='0.5'/></svg>");
+      background-repeat: repeat-x;
+      background-size: 44px 2px;
     }
-    html[data-theme="herdr"] .srow input[type="checkbox"] + .toggle-track { border-radius: 2px; }
-    html[data-theme="herdr"] .srow input[type="checkbox"] + .toggle-track::after {
-      border-radius: 1px;
-      background: var(--surface);
-      box-shadow: none;
-    }
-    html[data-theme="herdr"] .accent-swatch { border-radius: 3px; }
-    html[data-theme="herdr"] .media-btn { border-radius: 5px; }
 
-    /* ---- TUI 精髓 6: 滚动条也是部件 —— 方形深色滑轨,不圆润不透明渐变 ---- */
-    html[data-theme="herdr"] ::-webkit-scrollbar { width: 8px; }
-    html[data-theme="herdr"] ::-webkit-scrollbar-track { background: transparent; }
-    html[data-theme="herdr"] ::-webkit-scrollbar-thumb {
-      background: rgba(31, 42, 90, 0.22);
-      border-radius: 0;
-    }
-    html[data-theme="herdr"] ::-webkit-scrollbar-thumb:hover { background: rgba(31, 42, 90, 0.38); }
-
-    /* 按钮语言: herdr 的实心藏青主按钮 + 描边次级按钮(方角,少圆多硬) */
-    html[data-theme="herdr"] .rules-save-btn {
-      border-radius: var(--r-sm);
-      letter-spacing: 0.03em;
-    }
-    html[data-theme="herdr"] .rules-add-btn {
-      color: var(--text);
-      border-color: rgba(31, 42, 90, 0.35);
-      border-radius: var(--r-sm);
-      letter-spacing: 0.03em;
-    }
-    html[data-theme="herdr"] .rules-add-btn:hover {
-      border-color: var(--text);
-      background: rgba(31, 42, 90, 0.06);
+    /* ---- 资产 4: 胶片颗粒(全图签名) —— 中立灰噪点 multiply 混合,让云面也有胶片质感 ----
+     * 云面接近纯白,overlay 几乎不起作用;multiply 才能读出暗点。全局极淡,不压可读性 */
+    html[data-theme="sky"] body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: var(--grain);
+      background-size: 160px 160px;
+      opacity: 0.16;
+      mix-blend-mode: multiply;
+      pointer-events: none;
+      z-index: 999;
     }
 
     /* 突出色圆点改为主题真实色值(与 ink 同惯例) */
-    html[data-theme="herdr"] .accent-swatch[data-accent="blue"]   { background: #3D5BC4; }
-    html[data-theme="herdr"] .accent-swatch[data-accent="cyan"]   { background: #1F7A8C; }
-    html[data-theme="herdr"] .accent-swatch[data-accent="green"]  { background: #3E7B4F; }
-    html[data-theme="herdr"] .accent-swatch[data-accent="orange"] { background: #C4762A; }
-    html[data-theme="herdr"] .accent-swatch[data-accent="rose"]   { background: #C24B58; }
+    html[data-theme="sky"] .accent-swatch[data-accent="blue"]   { background: #3D63BE; }
+    html[data-theme="sky"] .accent-swatch[data-accent="cyan"]   { background: #3E86B5; }
+    html[data-theme="sky"] .accent-swatch[data-accent="green"]  { background: #3E8A6B; }
+    html[data-theme="sky"] .accent-swatch[data-accent="orange"] { background: #C47A3C; }
+    html[data-theme="sky"] .accent-swatch[data-accent="rose"]   { background: #C05A78; }
   </style>
 </head>
 <body>
@@ -2771,7 +2816,7 @@
               <select id="optTheme">
                 <option value="linear">Linear</option>
                 <option value="ink">Ink</option>
-                <option value="herdr">Terminal</option>
+                <option value="sky">Sky</option>
               </select>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>
@@ -2786,7 +2831,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </span>
           </div>
-          <div class="srow"><span class="slabel">突出色</span>
+          <div class="srow" id="accentRow"><span class="slabel">突出色</span>
             <span class="accent-row">
               <button class="accent-swatch active" data-accent="blue" style="--sw:#387BE5" title="蓝"></button>
               <button class="accent-swatch" data-accent="cyan" style="--sw:#1BA39C" title="青"></button>

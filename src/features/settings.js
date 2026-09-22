@@ -99,20 +99,28 @@ function markActiveSwatch(el) {
   document.querySelectorAll('.accent-swatch').forEach(x => x.classList.toggle('active', x === el));
 }
 
+// 固定突出色: 只有 linear 允许用户自选, 其余主题各锁一个设计好的唯一色
+// (ink = 目前选的"玫红"档, sky = 天空蓝)
+const FIXED_ACCENT = { ink: 'rose', sky: 'blue' };
+
 function applyThemeAccent(theme) {
-  const isInk = theme === 'ink';
-  // 每主题独立键(ink 无 data-accent 兜底,其余主题回落全局旧键再回落 blue)
-  const savedAccent = localStorage.getItem(isInk ? 'tgs-accent-ink' : `tgs-accent-${theme}`) ||
-                      (isInk ? '' : (localStorage.getItem('tgs-accent') || 'blue'));
-  if (savedAccent) {
-    document.documentElement.dataset.accent = savedAccent;
-    const sw = [...document.querySelectorAll('.accent-swatch')].find(x => x.dataset.accent === savedAccent);
-    if (sw) markActiveSwatch(sw);
-  } else {
-    // 水墨风默认使用水墨朱砂红(--seal: #B23A2E), 不设 data-accent 避免覆盖
-    delete document.documentElement.dataset.accent;
+  const row = document.getElementById('accentRow');
+  if (theme !== 'linear') {
+    // 非 linear: 锁死设计色 + 隐藏整行"突出色"设置(本身只有一个色, 没有可选项)
+    if (row) row.style.display = 'none';
+    const fixed = FIXED_ACCENT[theme];
+    if (fixed) document.documentElement.dataset.accent = fixed;
+    else delete document.documentElement.dataset.accent;
     markActiveSwatch(null);
+    return;
   }
+  if (row) row.style.display = '';
+  // linear: 保留用户自选(回落全局旧键再回落 blue)
+  const savedAccent = localStorage.getItem('tgs-accent-linear') ||
+                      localStorage.getItem('tgs-accent') || 'blue';
+  document.documentElement.dataset.accent = savedAccent;
+  const sw = [...document.querySelectorAll('.accent-swatch')].find(x => x.dataset.accent === savedAccent);
+  if (sw) markActiveSwatch(sw);
 }
 
 async function loadAutoGroupSwitch() {
@@ -484,11 +492,11 @@ positionTabSlider(document.querySelector('.settings-tabs'));
 try {
   document.querySelectorAll('.accent-swatch').forEach(b => {
     b.addEventListener('click', () => {
-      const currentTheme = document.documentElement.dataset.theme || 'linear';
+      // 突出色只对 linear 开放(其余主题该行已隐藏), 因此只写 linear 的键
       document.documentElement.dataset.accent = b.dataset.accent;
       markActiveSwatch(b);
       try {
-        localStorage.setItem(currentTheme === 'ink' ? 'tgs-accent-ink' : `tgs-accent-${currentTheme}`, b.dataset.accent);
+        localStorage.setItem('tgs-accent-linear', b.dataset.accent);
         localStorage.setItem('tgs-accent', b.dataset.accent);
       } catch (e) {}
       actions.render();
@@ -498,7 +506,12 @@ try {
 // 多主题风格切换: 原有 Linear(极简现代) / 新增 ink(水墨古风新中式)
 const optTheme = document.getElementById('optTheme');
 try {
-  const currentTheme = localStorage.getItem('tgs-theme') || document.documentElement.dataset.theme || 'linear';
+  // 只认下拉里现存的 option: 已删主题(如已下线的终端蓝 herdr)的旧存档一律降级到 linear,
+  // 否则会落在一个没有 CSS 命名空间支撑的裸 data-theme 上(选择框空白 + 主题块全失效)
+  const KNOWN_THEMES = optTheme ? [...optTheme.options].map(o => o.value) : ['linear'];
+  const pickTheme = (t) => (KNOWN_THEMES.includes(t) ? t : null);
+  const currentTheme = pickTheme(localStorage.getItem('tgs-theme')) ||
+                       pickTheme(document.documentElement.dataset.theme) || 'linear';
   document.documentElement.dataset.theme = currentTheme;
   if (optTheme) {
     optTheme.value = currentTheme;
