@@ -17,7 +17,7 @@
 
 默认可覆盖装饰类属性(颜色/字体/背景/边框/遮罩),禁动布局骨架;动骨架的算特例资产,登记于此:
 
-共享纹理资产(基座 `:root` 中的非度量项, 需在此登记): `--grain` —— 主题无关的中立灰胶片噪点, sky/ink 共用; 放基座单点定义, 删任一主题都不影响其他(不构成"白嫖")。
+共享纹理资产(基座 `:root` 中的非度量项, 需在此登记): `--grain` —— 主题无关的中立灰胶片噪点, sky/ink 共用; 放基座单点定义, 删任一主题都不影响其他(不构成"白嫖")。铺法按底色亮度定: 中深底(sky 天空带)用 `background-blend-mode: overlay` 直接叠在天色上; 亮底(ink 纸)用 `mix-blend-mode: hard-light`(亮端增益≈1, 不压暗); pure multiply 只适合本就想要变深的场景。
 
 | 资产 | 主题 | 位置 | 为什么需要动骨架 |
 |---|---|---|---|
@@ -29,7 +29,7 @@
 | 天空顶栏带(渐变+颗粒+反白) | sky | `.search-plate` 背景 + `.view-tab`/`.view-tabs .tab-slider` 反白 | 顶栏要读成「天空」,文字/图标须在天空层局部反白;这是与另四主题的骨架级分野,不是配色差异 |
 | 天空自溶(色层 mask) | sky | `.search-plate`(透明底 + `padding-bottom:34px` 天际线余量) / `::before`(颗粒+柔光+渐变, 自身 mask 溶底) | 只有独立元素能单独上 mask(直接 mask 容器会把搜索框/Tab 一起淡掉);天空要在**没有分割线**的前提下溶进云里 |
 | 列表上提(收留白不收云) | sky | `#results { margin-top: -18px }` | 天际线留白要收, 但云层厚度不能减 —— 只能把列表拽进天空尾部; 天空带 z-index(6) 高于 sticky 组头(5), 但该高度已被 mask 成全透明, 不遮内容 |
-| 胶片噪点(共享 `--grain`) | ink | `body::after`(multiply 0.12) | 水墨是暖白纸底, 近白处 overlay 读不出, 必须 multiply; 与 `body::before` 的 3px 纸纹点阵分工(点阵=纸纤维, 本层=胶片颗粒) |
+| 胶片噪点(共享 `--grain`) | ink | `body::before`(hard-light 0.5) | 纸底很亮, overlay/multiply 在亮端增益极低(overlay 在 0.92 底上仅 0.16), 颗粒几乎看不出; hard-light 亮底增益≈1, 实测 std 2.4→6.8 且均值不被压暗(238→235)。**原 3px 纸纹点阵已删** —— 规则点阵会把细颗粒藏掉, 两层叠一起读成布纹 |
 | 手绘云缘分隔线 | sky | `.group-header::before` | linear 是 1px 两端渐隐直线,本主题是 2px 圆头手绘曲线,高度 +1px(绝对定位,不动布局) |
 | 胶片颗粒底纹 | sky | `body::before`(feTurbulence + overlay) | 颗粒是本主题签名资产;ink 已有 `body::before` 纹理先例 |
 

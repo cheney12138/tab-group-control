@@ -1956,27 +1956,21 @@
       font-family: "Noto Sans SC", sans-serif;
       position: relative;
     }
+    /* 纸底肌理 = 胶片噪点(与 sky 共用基座的 --grain)。
+     * 已去掉原来的 3px 纸纹点阵: 规则点阵会把细颗粒"藏"掉, 两层叠一起读起来像布纹
+     * 而不是颗粒 —— 与 sky 一样只留噪点。
+     * 混合用 hard-light: 纸底很亮(近白), overlay/multiply 在亮端灵敏度极低
+     * (overlay 在 0.92 底上只有 0.16 的增益), 颗粒几乎看不出; hard-light 在亮底
+     * 上增益接近 1, 实测 std 2.4 -> 6.8, 且用低不透明度就能做到, 均值不被压暗
+     * (纸底 238 -> 235)。0.5 是"看得出颗粒、又不脏"的档。 */
     html[data-theme="ink"] body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background-image: radial-gradient(rgba(43, 38, 34, 0.025) 1px, transparent 1px);
-      background-size: 3px 3px;
-      pointer-events: none;
-      mix-blend-mode: multiply;
-      z-index: 999;
-    }
-
-    /* 胶片噪点(与 sky 共用基座的 --grain): 水墨是暖白纸底, 近白处 overlay 读不出,
-     * 必须用 multiply 才见暗点。与上面的 3px 纸纹点阵分工: 点阵=纸纤维, 本层=胶片颗粒 */
-    html[data-theme="ink"] body::after {
       content: "";
       position: fixed;
       inset: 0;
       background-image: var(--grain);
       background-size: 160px 160px;
-      opacity: 0.12;
-      mix-blend-mode: multiply;
+      opacity: 0.5;
+      mix-blend-mode: hard-light;
       pointer-events: none;
       z-index: 999;
     }
