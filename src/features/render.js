@@ -13,7 +13,7 @@ import { setActive, navUnits, scrollPastSticky } from './nav.js';
 import { buildMediaControls } from './media.js';
 import { showUndo } from './undo.js';
 import { archiveGroupAction } from './settings.js';
-import { moveTabToGroupAction } from './dnd.js';
+import { moveTabToGroupAction, beginTabDrag, finishTabDrag } from './dnd.js';
 import { openTabMenu, openGroupMenu, closeContextMenu } from './contextmenu.js';
 
 let actions = null; // initRender 注入: { refreshData, getSettings }
@@ -449,8 +449,11 @@ function buildTabRow(item) {
   const isOtherWindow = !isVirtualItem
     && state.currentWindowId != null && t.windowId !== state.currentWindowId;
 
-  // 拖拽移动支持: 严格仅在 [分组] 视图下且针对真实存活 tab 开启 (最近使用与当前窗口窗口不支持)
-  const canDrag = state.view === 'grouped' && !isVirtualItem;
+  // 拖拽分两件事:
+  //   ① 拖动本身(→ 拖到面板外新建窗口) —— 三个视图、所有真实存活 tab 都支持;
+  //   ② 「落到行/组头 = 移入分组」 —— 只在 [分组] 视图成立(平铺视图根本没有分组落点)。
+  const canDrag = !isVirtualItem;
+  const canGroupDrop = state.view === 'grouped' && !isVirtualItem;
   if (canDrag) {
     row.setAttribute('draggable', 'true');
     row.addEventListener('dragstart', (e) => {
@@ -462,32 +465,38 @@ function buildTabRow(item) {
         title: t.title || t.url || '标签页'
       };
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(t.id));
+      // 自定义 MIME: 不用 text/plain —— 否则拖到面板外落到网页输入框时会把标签 id 当文字粘进去
+      e.dataTransfer.setData('application/x-tgs-tab', String(t.id));
+      beginTabDrag(); // 重置"离开窗口/内部落点"信号
       requestAnimationFrame(() => row.classList.add('dragging'));
     });
-    row.addEventListener('dragend', () => {
+    row.addEventListener('dragend', async (e) => {
       row.classList.remove('dragging');
       document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+      const info = state.draggedTabInfo; // finishTabDrag 需要它, 要在清空前交出
       state.draggedTabInfo = null;
+      await finishTabDrag(info, e); // 兜底: 面板正常存活时的拖出判定(主路径在 dnd 的 dragleave)
     });
-    // 拖拽落点: 目标组内的条目也可作为放置目标
-    row.addEventListener('dragover', (e) => {
-      if (!state.draggedTabInfo || state.draggedTabInfo.tabId <= 0 || state.draggedTabInfo.tabId === t.id) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      row.classList.add('drop-target');
-    });
-    row.addEventListener('dragleave', (e) => {
-      if (!row.contains(e.relatedTarget)) {
+    // 拖拽落点: 目标组内的条目也可作为放置目标 —— 仅分组视图(平铺视图里拖拽只为拖出面板)
+    if (canGroupDrop) {
+      row.addEventListener('dragover', (e) => {
+        if (!state.draggedTabInfo || state.draggedTabInfo.tabId <= 0 || state.draggedTabInfo.tabId === t.id) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drop-target');
+      });
+      row.addEventListener('dragleave', (e) => {
+        if (!row.contains(e.relatedTarget)) {
+          row.classList.remove('drop-target');
+        }
+      });
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault();
         row.classList.remove('drop-target');
-      }
-    });
-    row.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      row.classList.remove('drop-target');
-      if (!state.draggedTabInfo || state.draggedTabInfo.tabId <= 0 || state.draggedTabInfo.tabId === t.id) return;
-      await moveTabToGroupAction(state.draggedTabInfo, item.group);
-    });
+        if (!state.draggedTabInfo || state.draggedTabInfo.tabId <= 0 || state.draggedTabInfo.tabId === t.id) return;
+        await moveTabToGroupAction(state.draggedTabInfo, item.group);
+      });
+    }
   }
 
   // favicon + 重复合并角标: 同 URL 多份时 favicon 右上角迷你数字徽(深底白字,

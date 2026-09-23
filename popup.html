@@ -1509,9 +1509,34 @@
       cursor: grab;
     }
     .tab-item.dragging {
-      opacity: 0.35;
-      background: var(--hover);
+      opacity: 0.5;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      outline: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+      outline-offset: -2px;
       cursor: grabbing;
+    }
+    /* 拖拽提示条: 只要 body.dragging 就浮在底部, 告诉用户这个手势能干什么(确认感) */
+    .drag-hint {
+      position: fixed;
+      left: 50%;
+      bottom: 16px;
+      transform: translate(-50%, 10px);
+      padding: 6px 13px;
+      border-radius: var(--r-full);
+      background: var(--pop-bg);
+      border: 1px solid var(--hairline);
+      box-shadow: var(--shadow-pop);
+      color: var(--text-2);
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease, transform 0.16s cubic-bezier(0.34, 1.4, 0.64, 1);
+      z-index: 130;
+    }
+    body.dragging .drag-hint {
+      opacity: 1;
+      transform: translate(-50%, 0);
     }
     .group-header.drop-target {
       background: color-mix(in srgb, var(--group-c, var(--accent)) 16%, transparent) !important;
@@ -2940,6 +2965,7 @@
     </div>
   </div>
   <div id="results"></div>
+  <div id="dragHint" class="drag-hint" aria-hidden="true">拖到分组上移动 · 拖到面板外新建窗口</div>
   <div id="pushStack" class="push-stack"></div>
   <script src="pinyin-data.js"></script>
   <script src="rules-match.js"></script>

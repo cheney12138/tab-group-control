@@ -85,16 +85,134 @@ export async function moveTabToGroupAction(draggedInfo, targetGroup) {
   }
 }
 
-// 拖拽边缘自动滚动: 拖拽标签靠近列表上下边缘时, 自动平滑向上或向下滑动 (仅在分组视图下生效)
-resultsEl.addEventListener('dragover', (e) => {
-  if (!state.draggedTabInfo || !actions.isGroupedView()) return;
-  const rect = resultsEl.getBoundingClientRect();
-  const threshold = 45;
-  const speed = 12;
-  if (e.clientY < rect.top + threshold) {
-    resultsEl.scrollTop -= speed;
-  } else if (e.clientY > rect.bottom - threshold) {
-    resultsEl.scrollTop += speed;
+// ---- 拖到面板外 = 新建窗口(等价 Chrome 把标签页拖出来) ----
+// 这是**唯一**的"拖出面板"动作: 拖出面板只做"移到新窗口", 不附送关闭/归档/建组等其他语义。
+//
+// 为什么在**离开窗口的那一刻**就动手, 而不是等 dragend:
+//   ① 拖到面板外的 drop 发生在文档之外, 面板里根本收不到(浏览器约束, 不是选择);
+//   ② 更要命的是: 指针一离开面板, 这个 action popup 会被 Chrome 关掉 —— 文档连同 JS 一起销毁,
+//      后面根本不会有 dragend 送到。等 dragend = 等一个永远不来的事件(实测踩坑: 拖出去没反应)。
+//   所以用 document dragleave(relatedTarget === null = 离开窗口, 此时 popup 还活着)当**扳机**,
+//   把标签交给 chrome.windows.create({ tabId })。内部 drop 仍然优先:
+//   真在面板里落过就不建窗口(drop 会冒到 document, 置 droppedInside)。
+//
+// 两道防误触阈值(都要过):
+//   ① **离面板边缘的距离** DRAG_OUT_EDGE_MARGIN —— 离开窗口的那个 dragleave 事件带的是越界后的
+//      坐标, 用它量越界量: 只出界一点点(拖到靠边的分组/行时蹭出去)不算数, 要真拖出去;
+//   ② **在面板外停留的时长** DRAG_OUT_DWELL_MS —— 蹭一下就回来(dragenter)会取消计时。
+const DRAG_OUT_DWELL_MS = 200;
+const DRAG_OUT_EDGE_MARGIN = 50;
+let dragLeftWindow = false;
+let droppedInside = false;
+let externalHandled = false;
+let dwellTimer = null;
+
+function cancelDwell() {
+  if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
+}
+
+export function beginTabDrag() {
+  dragLeftWindow = false;
+  droppedInside = false;
+  externalHandled = false;
+  cancelDwell();
+  edgeRect = null; // 重新量一次列表矩形(拖拽期间不再量)
+  edgeDir = 0;
+  // 提示条按当前视图换文案: 平铺视图(最近使用/当前窗口)没有分组落点, 只说拖出去
+  const hint = document.getElementById('dragHint');
+  if (hint) {
+    hint.textContent = (actions && actions.isGroupedView())
+      ? '拖到分组上移动 · 拖到面板外新建窗口'
+      : '拖到面板外新建窗口';
   }
+  document.body.classList.add('dragging'); // 拖拽提示条 / 行样式靠它
+}
+
+// 指针是否离面板边缘**足够远**(越过四边各 DRAG_OUT_EDGE_MARGIN px 以上才算拖出去)。
+// 只贴边蹭出去(出界 1~2px)不算 —— popup 很小, 拖到靠边的分组/行极易发生。
+function beyondEdge(x, y, m = DRAG_OUT_EDGE_MARGIN) {
+  return x <= -m || y <= -m || x >= window.innerWidth + m || y >= window.innerHeight + m;
+}
+
+document.addEventListener('dragleave', (e) => {
+  // relatedTarget === null = 离开窗口; 再要求越界够远(内部元素间切换 relatedTarget 非 null, 不会误判)
+  if (!e.relatedTarget && beyondEdge(e.clientX, e.clientY)) {
+    dragLeftWindow = true;
+    armDragOut(e.clientX, e.clientY); // 离开窗口 → 开始计时(popup 可能很快被关, 所以不能等 dragend)
+  }
+}, true);
+document.addEventListener('dragenter', (e) => {
+  if (!e.relatedTarget) { dragLeftWindow = false; cancelDwell(); } // 蹭回面板里 → 取消, 不算拖出去
+}, true);
+document.addEventListener('drop', () => { droppedInside = true; cancelDwell(); }, true);
+
+// 在面板外待够 DRAG_OUT_DWELL_MS 才动手; 没待够就回来 = 误触, 自然被 cancelDwell 取消
+function armDragOut(x, y) {
+  if (externalHandled || droppedInside) return;
+  const info = state.draggedTabInfo;
+  if (!info || !(info.tabId > 0)) return;
+  if (!beyondEdge(x, y)) return; // 越界够远才算拖出去
+  cancelDwell();
+  dwellTimer = setTimeout(() => {
+    dwellTimer = null;
+    if (externalHandled || droppedInside) return;
+    externalHandled = true;
+    moveTabToNewWindow(info); // 不 await: popup 可能马上被关
+  }, DRAG_OUT_DWELL_MS);
+}
+
+// dragend 时调用(在 draggedTabInfo 被清掉前传入)。返回是否新建了窗口(便于回报/测试)
+export async function finishTabDrag(draggedInfo, endEvent) {
+  document.body.classList.remove('dragging');
+  cancelDwell();
+  const handled = externalHandled;
+  const evtOutside = endEvent && typeof endEvent.clientX === 'number'
+    && beyondEdge(endEvent.clientX, endEvent.clientY);
+  const external = !droppedInside && (dragLeftWindow || evtOutside);
+  dragLeftWindow = false;
+  droppedInside = false;
+  externalHandled = false;
+  if (handled || !external || !draggedInfo || !(draggedInfo.tabId > 0)) return false;
+  await moveTabToNewWindow(draggedInfo);
+  return true;
+}
+
+// 与 Chrome 原生"把标签拖出来"同一个动作: chrome.windows.create 传 tabId = 把该标签搬进新窗口
+async function moveTabToNewWindow(draggedInfo) {
+  try {
+    await chrome.windows.create({ tabId: draggedInfo.tabId, focused: true });
+  } catch (err) {
+    console.error('拖到面板外新建窗口失败:', err);
+    return;
+  }
+  // 标签已不在本窗口, 刷新列表。新窗口聚焦会让 popup 失焦关闭, 这里是尽力而为
+  await actions.refreshData({ forceFresh: true });
+  actions.render();
+}
+
+// 拖拽边缘自动滚动: 拖拽标签靠近列表上下边缘时自动滚动(仅分组视图)。
+// 两个性能点 —— 这是拖拽掉帧的真凶之一:
+//   ① 绝不在 dragover 里调 getBoundingClientRect(): dragover 每秒几十次, 每次都强制同步布局;
+//      而拖拽期间 DOM 一直在变(drop-target 增删), 于是每帧一次全量 reflow。矩形是滚动容器相对
+//      视口的, 拖拽期间不变 —— 缓一次就够。
+//   ② 滚动交给 rAF 驱动, 不跟着 dragover 的事件频率走(事件密得离谱时滚得也更匀)
+let edgeRect = null;
+let edgeDir = 0;     // -1 上 / 1 下 / 0 停
+let edgeRaf = null;
+
+function edgeTick() {
+  if (!state.draggedTabInfo) { edgeRaf = null; edgeDir = 0; return; } // 拖拽结束自停
+  if (edgeDir) resultsEl.scrollTop += edgeDir * 14;
+  edgeRaf = requestAnimationFrame(edgeTick);
+}
+
+resultsEl.addEventListener('dragover', (e) => {
+  if (!state.draggedTabInfo || !actions.isGroupedView()) { edgeDir = 0; return; }
+  if (!edgeRect) edgeRect = resultsEl.getBoundingClientRect();
+  const threshold = 45;
+  if (e.clientY < edgeRect.top + threshold) edgeDir = -1;
+  else if (e.clientY > edgeRect.bottom - threshold) edgeDir = 1;
+  else edgeDir = 0;
+  if (!edgeRaf) edgeRaf = requestAnimationFrame(edgeTick);
 });
 
