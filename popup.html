@@ -2485,7 +2485,8 @@
       background: var(--paper);
       border-top: 1px solid var(--line);
     }
-    /* 水墨中国风下: 归档卡片左侧点 → 100%照搬重复 tab 墨点晕染设计,按分组自身色彩渲染 */
+    /* 水墨中国风下: 归档卡片左侧点 → 100%照搬重复 tab 墨点晕染设计,按分组自身色彩渲染。
+     * 晕染图由主题自备(colors.js THEME_ASSETS.blotSvg), settings.js 落到 --archive-blot */
     html[data-theme="ink"] .archive-dot {
       width: 14px !important;
       height: 14px !important;
@@ -2498,7 +2499,7 @@
       content: "";
       position: absolute;
       inset: -6px -7px -7px -6px;
-      background-image: var(--dot-ink-bg);
+      background-image: var(--archive-blot);
       background-size: 100% 100%;
       background-repeat: no-repeat;
       background-position: center;
@@ -2772,6 +2773,37 @@
     html[data-theme="sky"] .accent-swatch[data-accent="green"]  { background: #3E8A6B; }
     html[data-theme="sky"] .accent-swatch[data-accent="orange"] { background: #C47A3C; }
     html[data-theme="sky"] .accent-swatch[data-accent="rose"]   { background: #C05A78; }
+
+    /* ---- 资产: 归档卡片左侧点 = 「云朵群」(按分组自身色彩渲染) --------
+     * 取自用户给的实拍参考(标准积云群): 多圆瓣叠成一团, 顶面受光近乎白、云底沉蓝灰影。
+     * 五瓣积云 + 逐瓣高光 + 顶部亮 + 底部影 ⇒ 体积感; 与 ink 的圆晕墨点是形状级分野。
+     * 废弃物: ① 圆斑 + 高光("还是太像墨点") ② 照 ☁️ emoji 画卡通轮廓("纯卡通太丑")
+     * ③ 风扫单云(被参考图否掉, 改回"云朵群")。
+     * 详见 colors.js buildSkyBleedSvg; 图来自资产表 blotSvg, settings.js 落到 --archive-blot
+     * (CSS 无主题判断)。注: 这是对 sky 纪律第 8 条"云只准在天空带"的**例外**,
+     * 由用户拍板(归档点用云形), 已登记于 docs/theming.md 与 docs/theme-sky-design.md */
+    /* 尺寸: 云比 ink 墨点小一号(用户反馈"有点大, 小一点更灵巧") —— 14→12px 本体,
+     * 画布 24px(inset -6), 云实际约 17.5px(云身占 viewBox ~73%) */
+    html[data-theme="sky"] .archive-dot {
+      width: 12px !important;
+      height: 12px !important;
+      background: transparent !important;
+      position: relative !important;
+      flex-shrink: 0;
+      margin-right: 3px;
+    }
+    html[data-theme="sky"] .archive-dot::before {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      background-image: var(--archive-blot);
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+      background-position: center;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.97;
+    }
   </style>
 </head>
 <body>

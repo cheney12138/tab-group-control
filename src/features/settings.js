@@ -5,7 +5,7 @@
 // initSettings,顶层只留纯函数定义
 import { showToast, positionTabSlider } from '../core/dom.js';
 import { relativeTime } from '../core/format.js';
-import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
+import { themeAssets } from '../core/colors.js';
 import { recentlyRestoredTabs } from '../core/store.js';
 import { loadRulesForEdit } from './rules.js';
 
@@ -242,8 +242,9 @@ async function renderArchivedList() {
 
     const dot = document.createElement('span');
     dot.className = 'archive-dot';
-    if (assets.inkBlot) {
-      dot.style.setProperty('--dot-ink-bg', `url("${buildInkBleedSvg(groupColor)}")`);
+    // 左侧点的"晕染"由主题自备(ink 墨点 / sky 晴空光晕); 没备的主题就是纯色圆点
+    if (assets.blotSvg) {
+      dot.style.setProperty('--archive-blot', `url("${assets.blotSvg(groupColor)}")`);
     } else {
       dot.style.background = groupColor;
     }

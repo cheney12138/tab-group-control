@@ -23,6 +23,7 @@
 | 资产 | 主题 | 位置 | 为什么需要动骨架 |
 |---|---|---|---|
 | 晕染墨团计数角标 | ink | `colors.js buildInkBleedSvg` + `.group-count::before` | 墨团需超出徽标本体的溢出画布 |
+| 归档卡左侧「晕染点」 | ink / sky | `THEME_ASSETS.<name>.blotSvg` + `.archive-dot::before` | 主题自备的溢出色斑要超出 7px 圆点本体的画布(点被放大到 14px);渲染分支由资产表 `blotSvg` 驱动,非主题判断。ink=墨点(`buildInkBleedSvg`: 圆晕 + 墨滴, multiply), sky=云朵群(`buildSkyBleedSvg`: 五瓣积云 + 逐瓣高光 + 顶亮/底影体积 + 柔霾);未备 `blotSvg` 的主题(linear)保持纯色圆点 |
 | 笔锋渐隐分组竖线 | ink | `.group-dot` mask-image | 笔锋渐隐靠 mask 裁切 |
 | 媒体蒙层整行宣纸羽化 | ink | `.tab-item.has-media .media-overlay` | linear 是中央浮钮,水墨是整行右起蒙层,定位模型不同 |
 | 顶部 Tab 滑块挑出 | ink | `tabSliderExtra`(dom.js) | 两端挑出文字营造舒展留白 |
