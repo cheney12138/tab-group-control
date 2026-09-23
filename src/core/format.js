@@ -45,40 +45,90 @@ export function displayUrl(url) {
 }
 
 // ---- URL 里的"业务标识"(撞车行的主标签) --------------------------------
-// 病例(2026-09-19,本机):11 个 Raptor 日志 tab 标题完全相同,用户要的是 path 里那个服务名
+// 病例一(2026-09-19,本机):11 个 Raptor 日志 tab 标题完全相同,用户要的是 path 里那个服务名
 // com.sankuai.hotel.train.active —— 不是 pageNum/pageSize 这类分页参数(那是噪声)。
+// 病例二(2026-09-21,本机):Lion 配置 tab 的 path 是一群路由词(/config/dync ×4),彼此一样,
+// 真正区分它们的是 query 里的 appKey=com.sankuai.train.train.honour ⇒ 于是把 query 也当候选,
+// "谁分高谁当身份"。
+// 病例三(2026-09-21,本机):tbms 订单详情的 path(/customerservice/orderdetail)本来就是对的,
+// 但 query 里 indexName=2026-09-21 是个日期,按"分高者胜"把身份抢走了 ⇒ 第二次过拟合,
+// 这次是拟合到"query 里有身份"这个新假设上。
+// 教训:身份既不"在 path 里"也不"在 query 里",它是**这批 tab 之间真正不同的那一部分**。
+// ⇒ 两种表述各算一遍,谁在这批 tab 里分得更开(distinct 更多)就用谁;一样开就守 path。
+//    "只有图标颜色/环境不同"的 tab 于是自然撞在一起 —— 不硬造区分。
 // 判据:通用段(log/topic/view/detail…)扣分;含点/连字符/下划线的段(包名、git 仓、业务标识)加分。
 const GENERIC_SEG = new Set(['log', 'logs', 'topic', 'view', 'detail', 'details', 'index', 'home',
   'list', 'page', 'pages', 'app', 'www', 'api', 'v1', 'v2', 'v3', 'search', 'result', 'results',
   'dashboard', 'console', 'admin', 'static', 'assets', 'html', 'en', 'zh', 'cn', 'issues', 'pull',
   'commit', 'tree', 'blob', 'wiki', 'settings', 'user', 'users', 'profile']);
 
+// query 里的"变化了也不算区分"的键:分页 / 展示 / 时间 / 埋点。这些键的值不进候选
+const NOISE_KEY = /^(page\w*|pageNum|pageSize|iSLimit|limit|offset|showType|viewType|timeType|startDate|endDate|date|range|globalCityId|cityId|searchType|searchGrammar|lang|locale|theme|utm_.*|spm|ref|referrer|from|_t|t|ts|v|ver)$/i;
+
+// "标识形状":被 . _ - 切成两段以上的裸 token(com.sankuai.hotel.train.active、tab-group-search、
+// x_supply-master)。空格/斜杠/百分号/中文都不算 —— 那是标题或参数串,不是标识;
+// 并且**必须含字母**:indexName=2026-09-21 这种"纯数字 + 分隔符"是日期/序号,不是标识
+const ID_SHAPE = /^[A-Za-z0-9_]+(?:[._-][A-Za-z0-9_]+)+$/;
+function looksLikeId(s) { return ID_SHAPE.test(s) && /[A-Za-z]/.test(s); }
+
+// 身份是不是"像标识"的(带 . _ - 的包名/仓名/业务名)。像 = path 已经说人话了,别让 query 抢
+const IDENT_SHAPED = /[.\-_]/;
+function isIdentityShaped(s) { return IDENT_SHAPED.test(s); }
+
+// 单个 token 有多像"身份" —— path 段与 query 值共用这一把尺子(不按来源分两套规则)
+function scoreIdentity(s) {
+  let score = 0;
+  if (/^[A-Za-z]/.test(s)) score += 1;
+  if (/\d/.test(s)) score -= 1;                       // 纯 ID/数字段:信息少
+  if (/[.\-_]/.test(s)) score += 3;                   // 包名/仓名/业务标识
+  if (s.length >= 16) score += 1;
+  if (GENERIC_SEG.has(s.toLowerCase())) score -= 5;    // 路由词:不是身份
+  return score;
+}
+
+// path/hash 段的身份:分最高的段当锚点,再把与它相邻、同样像标识的段接回来
+// (/application/business 这种分层路由),最多 3 段;说不出话就返回空串,由调用方兜底
+function pathIdentityOf(u) {
+  const segs = urlSegments(u);
+  const scored = segs.map((s, i) => ({ s, i, score: scoreIdentity(s) + i * 0.1 }))
+    .filter(x => x.score > 0);
+  if (!scored.length) return '';
+  const anchor = scored.reduce((a, b) => (b.score > a.score ? b : a));
+  let lo = anchor.i, hi = anchor.i;
+  while (hi + 1 < segs.length && hi - lo + 1 < 3 && scoreIdentity(segs[hi + 1]) > 0) hi++;
+  while (lo - 1 >= 0 && hi - lo + 1 < 3 && scoreIdentity(segs[lo - 1]) > 0) lo--;
+  let picked = segs.slice(lo, hi + 1);
+  let name = picked.join('/');
+  while (name.length > 48 && picked.length > 1) { picked = picked.slice(1); name = picked.join('/'); }
+  return shortenToken(name, 48);
+}
+
+// query 值的身份:"像名字"的才算 —— 带 . _ - 且含字母(com.sankuai.hotel.train.active、tab-group-search)。
+// 刻意**不**收数字。用户口径(2026-09-21):「tbms 展示订单号效率也不高,本质上搜索也支持匹配 url,
+// 用 orderid 能搜索出来。」⇒ 数字序号一律不当身份:
+//   ① 标签只回答"这是哪一类页面",定位到具体哪一条是**搜索**的活(search.js 对完整 URL
+//      做连续子串匹配,搜 orderId 就能命中并高亮)
+//   ② orderId=1789962338990001 和 _t=1789962338990 这种时间戳形状一致,收进来必然重演病例三
+//      (indexName=2026-09-21 抢走身份)。宁可让它们撞车。
+function queryIdentityOf(u) {
+  let best = '', top = 0;
+  for (const [k, v] of urlParams(u)) {
+    if (!v || NOISE_KEY.test(k) || !looksLikeId(v)) continue;
+    const score = scoreIdentity(v);
+    if (score > top) { best = v; top = score; }   // 同分保留先出现的(书写顺序稳定)
+  }
+  return best;
+}
+
+// 单个 URL 的身份(不分组时的兜底口径):path 优先,path 说不出话再看 query,都不行退域名。
+// 撞车行的群体判别在 distinguishingLabels —— 只有拿到整批 URL 才知道"够不够分得开"
 export function identityOf(url) {
   try {
     const u = new URL(url);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
-    const segs = urlSegments(u);   // pathname + hash(hash 路由的 SPA 同样能提取出业务标识)
-    const scored = segs.map((s, i) => {
-      let score = 0;
-      if (/^[A-Za-z]/.test(s)) score += 1;
-      if (/\d/.test(s)) score -= 1;                       // 纯 ID/数字段:信息少
-      if (/[.\-_]/.test(s)) score += 3;                   // 包名/仓名/业务标识
-      if (s.length >= 16) score += 1;
-      if (GENERIC_SEG.has(s.toLowerCase())) score -= 5;    // 路由词:不是身份
-      score += i * 0.1;                                    // 越靠后越具体
-      return { s, score };
-    }).filter(x => x.score > 0);
-    if (!scored.length) return u.host;
-    // 保留路径顺序,最多 3 段;超长时留尾部(最具体的部分)
-    let picked = scored.slice(-3).map(x => x.s);
-    let name = picked.join('/');
-    while (name.length > 48 && picked.length > 1) { picked = picked.slice(1); name = picked.join('/'); }
-    return shortenToken(name, 48);
+    return pathIdentityOf(u) || queryIdentityOf(u) || u.host;
   } catch { return ''; }
 }
-
-// query 里的"变化了也不算区分"的键:分页 / 展示 / 时间 / 埋点
-const NOISE_KEY = /^(page\w*|pageNum|pageSize|iSLimit|limit|offset|showType|viewType|timeType|startDate|endDate|date|range|globalCityId|cityId|searchType|searchGrammar|lang|locale|theme|utm_.*|spm|ref|referrer|from|_t|t|ts|v|ver)$/i;
 
 // URL 的"路径段":pathname + hash(hash 路由的 SPA 把路由写在 #/ 后面,只读 pathname 会什么都看不见)
 function urlSegments(u) {
@@ -104,7 +154,8 @@ function urlParams(u) {
 // displayUrl() 给出 286 字符(host 27 + path 46 + query 213),而能区分的 traceId 在第 138 字符
 // —— 正中间。行内一省略(text-overflow)就等于没显示 ⇒ "看不出是哪一个"。
 // 目标:只取"它们彼此不一样的那一小段"。
-// 层级:① query 里取值不全相同的键 ⇒ ② 该值内部 token 级 diff ⇒ ③ 路径段 diff ⇒ ④ 序号兜底
+// (曾经做过"query 值内部 token diff / 参数贪心"那一套,连续四轮产出噪声 —— 已删。
+//  现在的做法只比"两种身份的 distinct 数",不拼原始参数串。)
 function shortenToken(v, max = 24) {
   if (v.length <= max) return v;
   const head = Math.max(6, Math.ceil((max - 1) * 0.6));
@@ -112,26 +163,40 @@ function shortenToken(v, max = 24) {
   return `${v.slice(0, head)}…${v.slice(-tail)}`;
 }
 
-// 把 query 值里的 DSL 切成 token: condition=traceId__: "-1819674858102614175"
-//   ⇒ ['traceId__:', '-1819674858102614175']   (引号/AND/OR/顿号都当分隔)
-function valueTokens(v) {
-  return String(v).split(/[\s,()[\]"']+|\b(?:AND|OR)\b/i).filter(Boolean);
-}
-
 export function distinguishingLabels(urls) {
   // 口径(2026-09-19,用户最终定稿):
   //   「log、business 这种区分/分区是**常驻**的;后面只保留**简短的服务名**就行;
   //     后面怎么又跟了一堆乱糟糟的参数啊?」
-  // ⇒ 标签 = 第一段(类型位) · identityOf(服务名/分区)。**不追加任何 query 参数**。
-  // 之前的"差异 diff / 参数贪心"整套删掉了 —— 它连续四轮产出噪声与 bug,而用户要的从始至终是
-  // "一个稳定的类型 + 一个简短的名字"。
+  // ⇒ 标签 = 第一段(类型位) · 身份。**不追加任何 query 参数**(不吃原始参数串,
+  //   吃的是"query 里那个像标识的值"——病例二/三逼出来的)。
   const n = urls.length;
   if (n < 2) return new Array(n).fill('');
-  return urls.map(u => {
-    let parsed = null;
-    try { parsed = new URL(u); } catch { return ''; }
-    const id = identityOf(u);                        // 服务名 / 分区(短,来自 path/hash)
-    const type = urlSegments(parsed)[0] || '';        // 类型位:log / application
+  // 非 http(s)(chrome:// / file:// / about:)没有"身份"可言 —— 当作解析失败,整行返回空
+  const parsed = urls.map(u => {
+    try {
+      const x = new URL(u);
+      return (x.protocol === 'http:' || x.protocol === 'https:') ? x : null;
+    } catch { return null; }
+  });
+  // 每个 tab 的两种身份:① path/hash 里的 ② query 里的(rawPath 不含域名兜底 ——
+  // 兜底域名用来看"是哪台机器",但它不该参与"path 里有没有像名字的东西"这个判断)
+  const rawPath = parsed.map(u => (u ? pathIdentityOf(u) : ''));
+  const pathIds = rawPath.map((id, i) => id || (parsed[i] ? parsed[i].host : ''));
+  const queryIds = parsed.map(u => (u ? queryIdentityOf(u) : ''));
+  // 口径(2026-09-21,三次过拟合之后):
+  //   ① path 里有"像标识"的(带 . _ -:包名/仓名/业务名)⇒ 用 path。Raptor 的服务名不能被 traceId 顶掉。
+  //   ② 否则 query 里有"像标识"的 ⇒ 用 query。Lion 的 /config/dync 是路由词,说不了人话;
+  //      就算同一 appKey 的 tab 有好几个(只是环境/泳道不同),显示 appKey 也比显示 dync 有用。
+  //   ③ 都没有 ⇒ 用 path。tbms 的 /customerservice/orderdetail 属于这种:它是路径,
+  //      但没有"名字形状",而 query 里只有 orderId 这类数字序号 —— 不收。
+  // **为什么不比 distinct(谁分得更开)**:那是上一版的写法,在我手上那 2 个 Lion tab 的样本里
+  // 碰巧成立,换成"4 个 tab 同 appKey 不同环境"就退回 config/dync。“谁分得更开”本身就是从样本反推规则 ——
+  // 第三次过拟合。现在这三条只看"这条身份像不像个名字",不依赖这批数据分得开不开。
+  const shapedPath = rawPath.some(isIdentityShaped);
+  const lines = shapedPath ? pathIds
+    : (queryIds.some(isIdentityShaped) ? queryIds.map((id, i) => id || pathIds[i]) : pathIds);
+  return lines.map((id, i) => {
+    const type = parsed[i] ? (urlSegments(parsed[i])[0] || '') : '';   // 类型位:log / application / config
     let s = id || '';
     // 第一段已经在名字里就不重复(如 /application/business ⇒ application/business)
     if (type && !s.includes(type)) s = s ? `${type} · ${s}` : type;
