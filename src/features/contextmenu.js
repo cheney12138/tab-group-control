@@ -7,7 +7,10 @@
 //   不放「关闭此标签页」—— ✕ 就在同一行右手边
 //   不放「折叠 / 展开本组」—— 左键点组头就是它
 // 唯一的例外是「归档此分组」: 它另有入口(组头 hover 浮现的归档按钮),但那个入口
-// 太隐秘 —— 留它反而是为了把"暂存"摆到"丢弃"旁边。
+// 太隐秘 —— 留它反而是为了把"暂存"摆到"丢弃"旁边。行菜单与组头菜单都放它:
+// 标签行的关闭类动作旁边就是最自然的取用处,不该逼用户先找到组头再右键。
+// 归档是**组级管理动作**(需要分组身份, CONTEXT.md): 行没有所属组(未分组散标签)
+// 就不给这一项, 与组头菜单的"未分组分区没有归档"同一条边界。
 //
 // 防呆(全部来自 docs/adr/0005): 数量按数据源算并内嵌进文案; 靶子为空则禁用置灰
 // 而不是隐藏(菜单结构不随上下文变形); 危险项排最下、隔一条分隔线、走各主题自己的
@@ -123,7 +126,9 @@ export async function openTabMenu(tabId, x, y) {
     : `关闭「${displayName(scope)}」全部标签`;
 
   const spec = [];
-  for (const [kind, label] of [['rest', '关闭本组其余标签'], ['below', '关闭本组下方标签']]) {
+  // 文案口径: 「其余」= 本组除本行外的全部;「下方」= **本组里、本行之后**的标签
+  // (不是"组下面那一组", 也不是跨组的下方) —— 靶子见 ADR-0005 轴三
+  for (const [kind, label] of [['rest', '关闭本组其余标签'], ['below', '关闭本组此标签下方标签']]) {
     const { ids, count } = computeTargets(scope, kind, tabId);
     spec.push({
       label: `${label} (${count})`,
@@ -138,6 +143,13 @@ export async function openTabMenu(tabId, x, y) {
     danger: true,
     run: () => runCloseBatch(scope, all.ids),
   });
+  // 组级管理动作: 行有分组身份才给。靶子是该行所属的**整组**(运行时实例),
+  // 与组头菜单/hover 按钮是同一个 archiveGroupAction —— 不分叉、不新增逻辑。
+  // 排最下: 归档顺带关闭标签, 但承诺是"留存", 不与上面的"丢弃"混色
+  if (scope.group) {
+    spec.push({ sep: true });
+    spec.push({ label: `归档「${displayName(scope)}」分组`, run: () => archiveGroupAction(scope.group) });
+  }
   renderMenu(spec, x, y);
 }
 

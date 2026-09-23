@@ -1,5 +1,7 @@
 // features/nav.js: 键盘光标与滚动原语(组件)
-// setActive/navUnits/clearActiveUnit 统一编址(仅标签行),←→/↑↓/Enter 共用。
+// setActive/navUnits/clearActiveUnit 统一编址,←→/↑↓/Enter 共用。
+// setActive 的 idx 仍是**标签行序号**(state.activeIndex 语义不变);navUnits 比它多收
+// "折叠的分组头"作为可选中单元 —— 见 navUnits() 注释。
 import { resultsEl } from '../core/dom.js';
 import { groupKey } from '../core/format.js';
 import { state } from '../core/store.js';
@@ -55,9 +57,13 @@ export function focusCurrentTab() {
   setActive(currentRow ? rows.indexOf(currentRow) : 0);
 }
 
-// 可聚焦单元 = 仅标签行,统一编址,上下移动/Enter/快捷键共用,越过分组头
+// 可聚焦单元 = 标签行 + 折叠的分组头。
+// 为什么把折叠头放进来: 折叠组内的行根本不渲染, 分组头就是该组**唯一**的键盘入口;
+// 只收标签行的话, 光标永远落在别的组上, 折叠的组再也展不开(真实踩到)。
+// 分组头只是**触发器**: 被 ↑↓ 选中就展开, 光标随即下沉到组内第一行 —— 头不驻留光标,
+// 所以展开的分组头(含刚展开的)永远不会出现在这个序列里(旧的"分组 cell 不允许选中"约定不变)。
 export function navUnits() {
-  return [...resultsEl.querySelectorAll('.tab-item')];
+  return [...resultsEl.querySelectorAll('.tab-item, .group-header.collapsed')];
 }
 export function clearActiveUnit() {
   resultsEl.querySelectorAll('.tab-item, .group-header').forEach(u => u.classList.remove('active'));

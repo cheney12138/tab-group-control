@@ -15,7 +15,7 @@
 // 关闭次序: **先把快照写进 session,最后才 remove** —— 靶子含激活标签时
 // Chrome 会当场杀掉 popup(settings.js 的归档路径同款前车之鉴),慢一步就没撤销了。
 
-import { tabItemByTabId } from '../core/store.js';
+import { tabItemByTabId, recentlyRestoredTabs } from '../core/store.js';
 import { pushUndo, renderUndoBanner, persistUndoBatch } from './undo.js';
 
 let actions = null; // initCloseBatch 注入: { refreshData, render, dropTabs }
@@ -36,9 +36,23 @@ export async function loadScopeByKey(windowId, groupId, anchor = null) {
   ]);
   if (!members || !members.length) return null;
   const order = [...members].sort(
-    (a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0) || (a.index || 0) - (b.index || 0)
+    (a, b) => lastAccessedOf(b) - lastAccessedOf(a) || (a.index || 0) - (b.index || 0)
   );
   return { anchor, windowId, groupId, group, members, order, ids: new Set(members.map(t => t.id)) };
+}
+
+// 参与组内时间序的 lastAccessed —— 必须与面板同一把尺子。
+// 病例(2026-09-22, 本机): 批量关闭后点「撤销」, 不重开弹窗直接右键, 「下方」数量是错的
+// (选的是第 3 行, 却报整组-1)。根因是撤销恢复出来的标签在 Chrome 里 lastAccessed=now,
+// 而 main.js loadTabs 会用 recentlyRestoredTabs 里那个"压回原位"的值排序 —— 只看 Chrome
+// 真实值, 菜单的组内序就与屏幕相反。重开弹窗后该 Map 清空、两边同时回落到真实值, 所以"重开一次就对"。
+// 两级取数: 先恢复表(最新真源), 再面板里的 state.allTabs —— 后者可能已被 loadTabs 写成
+// 同一个"压回原位"值(即便 Map 已过 10s 被清), 以面板为准才能一直与屏幕一致。
+function lastAccessedOf(t) {
+  const restored = recentlyRestoredTabs.get(t.id);
+  if (restored && restored.lastAccessed != null) return restored.lastAccessed;
+  const panelItem = tabItemByTabId(t.id);
+  return (panelItem?.tab?.lastAccessed ?? t.lastAccessed) || 0;
 }
 
 // 锚点标签所在的作用域(行菜单用)
@@ -60,7 +74,7 @@ export function rowMemberIds(anchorTabId, scope) {
   return new Set(candidates.filter(id => scope.ids.has(id)));
 }
 
-// kind: 'rest'(本组其余) | 'below'(本组下方) | 'all'(本组全部)
+// kind: 'rest'(本组其余) | 'below'(本组内、本行之后) | 'all'(本组全部)
 // 返回 { ids, count }, count 是**标签**数 —— 它就是菜单里那个 (n), 也是唯一的预告
 export function computeTargets(scope, kind, anchorTabId) {
   if (!scope) return { ids: [], count: 0 };

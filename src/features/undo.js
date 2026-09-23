@@ -83,10 +83,13 @@ export function renderUndoBanner(opts = {}) {
     btn.addEventListener('click', doUndo);
     banner.appendChild(msg);
     banner.appendChild(btn);
-    // 倒计时进度条: 剩余可撤销时间(条目相对定位收窄置底)
+    // 倒计时进度条: 剩余可撤销时间(条目相对定位收窄置底)。
+    // 时长必须跟本次的 ms 走 —— CSS 里的 6s 是首次关闭的满格值; 跨 popup 恢复时
+    // ms 只剩一段余额, 若沿用 6s 进度条会从头跑(表现: 每次开弹窗都重新读秒)。
     banner.style.position = 'relative';
     const progress = document.createElement('span');
     progress.className = 'push-progress';
+    progress.style.animationDuration = `${ms}ms`;
     banner.appendChild(progress);
   }, { autoDismiss: ms });
   clearTimeout(undoTimer);

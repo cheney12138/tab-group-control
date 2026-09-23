@@ -294,6 +294,33 @@ document.addEventListener('click', (e) => {
 
 // 双击退格删除模式的上次按下时间(顶层: 跨按键持久,函数内声明会每次清零)
 let lastBsTime = 0;
+
+// 展开一个被 ↑↓ 选中的折叠分组头, 并把光标送进组内**第一行**。
+// 分组头只是展开的触发器, 不驻留光标 —— 展开后用户能立刻在组内继续 ↑↓,
+// 而不是停在一个已经没动作的分组 cell 上。
+// 返回是否处理了这次移动(false = 调用方当普通单元处理)
+function expandCollapsedGroupHeader(headerEl) {
+  const key = headerEl.dataset.groupKey;
+  const set = activeCollapsed();
+  if (!set.has(key)) return false; // 已经展开: 交给调用方按普通单元处理
+  set.delete(key);
+  if (!state.searching) saveCollapsed();
+  render();
+  // 展开后这个分组的行才存在 —— 按身份(key)找它下面的第一行
+  const rows = [...resultsEl.querySelectorAll('.tab-item')];
+  const firstRow = rows.find(r => {
+    const f = state.filtered.find(x => x.tab.id === Number(r.dataset.tabId));
+    return f && (f.group ? groupKey(f.group) : '__ungrouped__') === key;
+  });
+  if (firstRow) {
+    setActive(rows.indexOf(firstRow));
+  } else {
+    clearActiveUnit();
+    state.activeIndex = -1;
+  }
+  return true;
+}
+
 function handleShortcuts(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
@@ -328,7 +355,7 @@ function handleShortcuts(e) {
   }
   const units = navUnits();
   if (!units.length) return;
-  // 当前焦点单元: 优先取带 active 的标签行(分组头不参与焦点)
+  // 当前焦点单元: 优先取带 active 的标签行(分组头只是触发器, 不驻留焦点)
   const focusedUnit = units.find(u => u.classList.contains('active')) || units[0];
   const focusIdx = units.indexOf(focusedUnit);
 
@@ -337,6 +364,10 @@ function handleShortcuts(e) {
     const next = focusIdx + (e.key === 'ArrowDown' ? 1 : -1);
     if (next < 0 || next >= units.length) return;
     const el = units[next];
+    // 折叠的分组头: 选中即展开, 光标下沉到组内第一行(头只是触发器, 不驻留)
+    if (el.classList.contains('group-header') && expandCollapsedGroupHeader(el)) {
+      return;
+    }
     clearActiveUnit();
     el.classList.add('active');
     scrollPastSticky(el);
