@@ -27,6 +27,12 @@ src/
 
 **依赖规则**：`features/*` 只依赖 `core/*`；feature 之间不互相 import，经 store 共享状态——杜绝循环依赖。
 
+> ⚠️ **现实修正(2026-09-23)**：上面这条"feature 之间不互相 import"**从来没被遵守**，也不该按它读代码：`render → search/nav/media/undo/settings/dnd/contextmenu`、`contextmenu → close-batch/settings/group-edit` 等共有十几处 feature 间 import。真正在跑的两条约束是：
+> 1. **feature → feature 只能单向**，不准成环（读代码时按这个查）；
+> 2. **模块求值期不准取用 main 的能力** —— 元素引用与监听注册一律收进 `initXxx(actions)`，顶层只留纯函数（这条才是踩过坑的，见下文任务 8 的"时序陷阱"）。
+>
+> 保留原文是因为它记录了当时的意图；错的是把它当成现状。
+
 **语法检查**（node v18 的 `--check` 不认 .js 里的 ESM）：
 `cp src/xxx.js /tmp/check.mjs && node --check /tmp/check.mjs`
 

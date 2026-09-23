@@ -185,6 +185,78 @@ async function attachTabToGroup(tab, groupName) {
   }
 }
 
+// ---- 手动建组/并入: 唯一性只在"落库"层保证 (docs/group-uniqueness.md) ----
+// Chrome 允许同窗口并存同名组(没有删组 API, 重复组只能靠 tidy 兜底), 所以任何
+// "新建组"的动作都必须先查同窗口同名组: 有则并入, 无则新建。建组动作一律走
+// enqueueGroupOp 串行队列 —— 与事件驱动的 autoGroupTab 互斥, 消除
+// "双 query 双 miss 各建一个" 的竞态(重复组正是 tidy 合并竞态的原料)。
+// 返回值: { merged, groupId }。merged = 命中已有同名组(颜色保持原样, 不打扰用户
+// 正在用的组), 与 restore-group 恢复归档时同一口径。
+async function createOrMergeGroup({ title, color, tabIds, windowId }) {
+  const safeColor = GROUP_COLORS.includes(color) ? color : colorForGroup(title);
+  const q = { title };
+  if (windowId) q.windowId = windowId;
+  const dup = await chrome.tabGroups.query(q).catch(() => []);
+  if (dup.length) {
+    await chrome.tabs.group({ tabIds, groupId: dup[0].id });
+    return { merged: true, groupId: dup[0].id };
+  }
+  const groupId = await chrome.tabs.group({
+    tabIds,
+    ...(windowId ? { createProperties: { windowId } } : {}),
+  });
+  await chrome.tabGroups.update(groupId, { title, color: safeColor });
+  return { merged: false, groupId };
+}
+
+// 改名/改色 (ADR-0007)。两条边界:
+//   ① 目标名在本窗口已有**别的**同名组 ⇒ 拒绝(抛 code='dup')。改名不是合并: 静默并组
+//      会让用户以为只换了个名字, 实际整组标签被搬去别处。唯一性靠"拒绝"保住,
+//      而不是靠 tidy 事后兜底。
+//   ② 规则组的名字是规则键 ⇒ renameRule 时同步改键。不改的后果不是"组不受管", 而是
+//      规则与新名脱钩: 下一次自动分组照旧建一个旧名组(重复组的经典来源,
+//      正是 docs/group-uniqueness.md 全篇在防的东西)。写 storage 即够了 ——
+//      onChanged 会重建匹配索引并跑存量归组, 这里不再自己动一遍。
+async function renameOrRecolorGroup({ groupId, title, color, renameRule }) {
+  const group = await chrome.tabGroups.get(groupId);
+  const oldTitle = group.title || '';
+  const dup = await chrome.tabGroups.query({ title, windowId: group.windowId }).catch(() => []);
+  if (dup.some(g => g.id !== groupId)) {
+    const err = new Error('同名分组已存在');
+    err.code = 'dup';
+    throw err;
+  }
+
+  const patch = { title };
+  if (GROUP_COLORS.includes(color)) patch.color = color;
+  await chrome.tabGroups.update(groupId, patch);
+
+  let ruleRenamed = false;
+  if (renameRule && oldTitle && oldTitle !== title) {
+    const stored = await chrome.storage.local.get('groupRules');
+    const rules = stored?.groupRules;
+    if (rules && Object.prototype.hasOwnProperty.call(rules, oldTitle)) {
+      const next = {};
+      for (const [k, v] of Object.entries(rules)) {
+        if (k === oldTitle) next[title] = v;        // 键换新名, 域名原样搬过去
+        else if (k !== title) next[k] = v;          // 新名已是别人的键: 不该发生(上面已拒), 保险丢弃
+      }
+      await chrome.storage.local.set({ groupRules: next });
+      ruleRenamed = true;
+    }
+  }
+  return { ruleRenamed };
+}
+
+// 解散: 成员退回未分组, 空组由 Chrome 回收(没有删组 API)。Chrome 的 onUpdated
+// 会把它们计入手动白名单(changeInfo.groupId === -1 分支) ⇒ 规则组解散后不会被
+// 自动分组立刻重组, 这正是"解散"该有的语义: 用户的显式动作优先于引擎
+async function dissolveGroup(groupId) {
+  const members = await chrome.tabs.query({ groupId });
+  if (members.length) await chrome.tabs.ungroup(members.map(t => t.id));
+  return { count: members.length };
+}
+
 async function doAutoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
   if (!autoGroupEnabled) return;
@@ -566,6 +638,8 @@ chrome.commands.onCommand.addListener((command) => {
 
 // popup 消息: 快照 / 整理触发
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const reply = (result) => sendResponse({ ok: true, ...result });
+  const fail = (err) => sendResponse({ ok: false, error: err?.code || String(err?.message || err) });
   // content script 心跳: 消息到达本身已重置休眠计时器,显式应答让
   // sendMessage 正常收尾(不应答会让 content 侧 promise 悬挂到超时)
   if (msg?.type === 'keepalive') {
@@ -606,28 +680,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: '参数无效' });
       return;
     }
-    enqueueGroupOp(async () => {
-      const q = { title };
-      if (windowId) q.windowId = windowId;
-      const dup = await chrome.tabGroups.query(q).catch(() => []);
-      if (dup.length) {
-        // 同窗口已有同名组: 并入(已有多个重复组时取第一个,其余交 tidy);
-        // 保留现有组颜色,不打扰用户正在用的组
-        await chrome.tabs.group({ tabIds, groupId: dup[0].id });
-        return { merged: true };
-      }
-      const groupId = await chrome.tabs.group({
-        tabIds,
-        ...(windowId ? { createProperties: { windowId } } : {}),
-      });
-      const safeColor = GROUP_COLORS.includes(color) ? color : 'grey';
-      await chrome.tabGroups.update(groupId, { title, color: safeColor });
-      return { merged: false };
-    }).then(
-      (result) => sendResponse({ ok: true, ...result }),
-      (err) => sendResponse({ ok: false, error: String(err?.message || err) }),
-    );
+    // 归档卡的颜色不可信(历史数据/导入), 认不出就退回 grey —— 旧行为不变
+    enqueueGroupOp(() => createOrMergeGroup({
+      title, color: GROUP_COLORS.includes(color) ? color : 'grey', tabIds, windowId,
+    })).then(reply, fail);
     return true; // 队列异步完成后再 sendResponse,保持消息通道开放
+  }
+
+  // 手动建组: 与 restore-group 同一条队列、同一唯一性口径(见 createOrMergeGroup)
+  if (msg?.type === 'create-group') {
+    const { title, color, tabIds, windowId } = msg || {};
+    if (!title || !Array.isArray(tabIds) || !tabIds.length) {
+      sendResponse({ ok: false, error: '参数无效' });
+      return;
+    }
+    enqueueGroupOp(() => createOrMergeGroup({ title, color, tabIds, windowId })).then(reply, fail);
+    return true;
+  }
+
+  // 手动改名/改色(分组编辑, ADR-0007): 实现与两条边界见 renameOrRecolorGroup
+  if (msg?.type === 'edit-group') {
+    const { groupId, title, color, renameRule } = msg || {};
+    if (!(groupId > 0) || !title) {
+      sendResponse({ ok: false, error: '参数无效' });
+      return;
+    }
+    enqueueGroupOp(() =>
+      renameOrRecolorGroup({ groupId, title, color, renameRule })).then(reply, fail);
+    return true;
+  }
+
+  // 解散分组: 成员全部移出, 空组由 Chrome 回收(没有删组 API)
+  if (msg?.type === 'dissolve-group') {
+    const { groupId } = msg || {};
+    if (!(groupId > 0)) {
+      sendResponse({ ok: false, error: '参数无效' });
+      return;
+    }
+    enqueueGroupOp(() => dissolveGroup(groupId)).then(reply, fail);
+    return true;
   }
 });
 

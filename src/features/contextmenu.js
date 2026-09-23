@@ -20,8 +20,9 @@
 // 菜单可以直接继续打字; 只响应 Esc, 菜单内的方向键选择与快捷键一律不做。
 
 import { state } from '../core/store.js';
-import { loadCloseScope, loadScopeByKey, computeTargets, runCloseBatch } from './close-batch.js';
+import { loadCloseScope, loadScopeByKey, computeTargets, rowMemberIds, runCloseBatch } from './close-batch.js';
 import { archiveGroupAction } from './settings.js';
+import { openNewGroupCard, openEditGroupCard, dissolveGroupAction, removeFromGroupAction } from './group-edit.js';
 
 // 菜单自己不碰数据: 靶子算完直接交给 close-batch 的 runCloseBatch(它负责撤销条与刷新)。
 // 所以本模块**没有 initX 接线**, 不存在"忘了初始化"这种失灵模式。
@@ -126,6 +127,22 @@ export async function openTabMenu(tabId, x, y) {
     : `关闭「${displayName(scope)}」全部标签`;
 
   const spec = [];
+  // 分组编辑入口(手动给标签一个身份): 行菜单里的动作以**行**为单位 —— 代表 + 同组副本
+  // 一起动(ADR-0005 轴一的“行要么整体留下、要么整体关掉”, 这里只是从"关"变成"搬")。
+  // 单个标签的移出另有拖拽, 但拖拽只能拖进组, 没有拖出去的手势 —— 这个缺口归菜单补
+  const rowIds = [...rowMemberIds(tabId, scope)];
+  spec.push({
+    label: '新建分组…',
+    run: () => openNewGroupCard({
+      tabIds: rowIds,
+      windowId: scope.windowId,
+      rowTitle: state.filtered.find(f => f.tab.id === tabId)?.tab.title || '',
+    }),
+  });
+  if (!ungrouped) {
+    spec.push({ label: '移出分组', run: () => removeFromGroupAction(rowIds) });
+  }
+  spec.push({ sep: true });
   // 文案口径: 「其余」= 本组除本行外的全部;「下方」= **本组里、本行之后**的标签
   // (不是"组下面那一组", 也不是跨组的下方) —— 靶子见 ADR-0005 轴三
   for (const [kind, label] of [['rest', '关闭本组其余标签'], ['below', '关闭本组此标签下方标签']]) {
@@ -169,6 +186,15 @@ export async function openGroupMenu(group, scopeWindowId, x, y) {
     : `关闭本窗口未分组标签 (${all.count})`;
   const spec = [{ label, danger: true, run: () => runCloseBatch(scope, all.ids) }];
   if (group) {
+    spec.push({ sep: true });
+    // 分组编辑(手动): 与规则引擎发身份的路径平行 —— 名字/颜色是"身份"本身,
+    // 改名撞车由 background 拒绝(改名不是合并), 规则组的名字连着规则键
+    // 卡片要用**刚查到的**组(scope.group)预填名字与颜色 —— 传给本函数的 group 是
+    // 渲染那一刻的快照, 中间若在别处改过名/改过色, 卡片会预填一个过期值
+    spec.push({ label: '编辑分组…', run: () => openEditGroupCard(scope.group || group) });
+    // 解散: 标签不丢, 只是把"身份"还回去(退回未分组)。不标红 ——
+    // 红在这个面板里留给"丢弃"(关闭/删除), 见文件头
+    spec.push({ label: '解散分组', run: () => dissolveGroupAction(group) });
     spec.push({ sep: true });
     // 与组头 hover 浮现的归档按钮是**同一个** archiveGroupAction: 不分叉、不新增逻辑
     // (归档 = 拍归档卡 + 关闭组内全部标签, 它是"暂存", 与上面的"丢弃"成对出现)

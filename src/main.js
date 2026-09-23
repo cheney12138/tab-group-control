@@ -16,6 +16,7 @@ import { initClean, cleanStaleTabs } from './features/clean.js';
 import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollPastSticky, findGroupOfTab } from './features/nav.js';
 import { initDnd, moveTabToGroupAction } from './features/dnd.js';
 import { initCloseBatch } from './features/close-batch.js';
+import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
@@ -251,6 +252,14 @@ document.addEventListener('keydown', (e) => {
       closeGroupPop();
       return;
     }
+    // 分组编辑卡: 与分组弹层同理提前于 isOtherInput —— 否则焦点在卡片输入框上时
+    // 这一下 Esc 会落到浏览器默认行为上(popup 直接被关掉)。卡片自己也会吃掉 Esc,
+    // 这里是焦点跑出卡片时的兼底
+    if (isGroupEditOpen()) {
+      e.preventDefault();
+      closeGroupEdit();
+      return;
+    }
     if (isSettingsOpen()) {
       e.preventDefault();
       closeSettingsPanel();
@@ -289,6 +298,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.rules-import-layer')) return;
   // 添加域名弹层: 新建分组输入框需要保持焦点,否则点击就丢焦点无法输入
   if (e.target.closest('.group-pop')) return;
+  // 分组编辑卡: 名字输入框同理(卡片自己也在 mousedown 上挡了一层)
+  if (e.target.closest('.ge-layer')) return;
   input.focus();
 });
 
@@ -486,6 +497,20 @@ function afterRestore(group, tabIds) {
   }
 }
 
+// 分组身份(key = 组名|颜色)改了 —— 收起记忆挂在身份上, 键要跟着搬。不搬的后果:
+// 用户已经收起来的分组, 改个名字就自己弹开了(group-edit.js 经 initGroupEdit 注入)
+function remapGroupKey(oldKey, newKey) {
+  let changed = false;
+  for (const set of [collapsed, searchCollapsed]) {
+    if (set.has(oldKey)) {
+      set.delete(oldKey);
+      set.add(newKey);
+      changed = true;
+    }
+  }
+  if (changed) saveCollapsed();
+}
+
 // 设置面板组件初始化: 注入 main 侧能力(refreshData=数据层刷新,render=渲染层)
 //
 // ★ 接线义务: features/ 下每个导出了 initXxx 的模块都**必须**在这里被调用一次。
@@ -521,6 +546,14 @@ initCloseBatch({
   refreshData,
   render,
   dropTabs: (ids) => { state.allTabs = state.allTabs.filter(x => !ids.has(x.tab.id)); },
+});
+// 分组编辑(建组/改名改色/解散): 菜单只放入口, 输入收进卡片(见 group-edit.js 文件头)
+initGroupEdit({
+  refreshData,
+  render,
+  focusInput: () => input.focus(),
+  getAllTabs: () => state.allTabs,
+  remapGroupKey,
 });
 initSearch({ render });
 initRender({ refreshData, getSettings: () => settings });

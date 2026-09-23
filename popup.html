@@ -924,6 +924,119 @@
     /* 靶子为空 → 禁用置灰而不是隐藏: 让“这里本来有这个能力”看得见 */
     .ctx-item.disabled { color: var(--text-3); opacity: 0.5; }
     .ctx-sep { height: 1px; margin: 4px 6px; background: var(--hairline); }
+    /* ---- 分组编辑卡 (features/group-edit.js) ----------------------------------
+     * 建组 / 改名改色 / 解散 的输入壳。为什么不就地改、为什么合成一张卡，
+     * 见 group-edit.js 文件头(菜单不夺焦点 + Chrome 原生分组编辑器的形态)。
+     * 全部值取自系统 token，不新增任何主题资产(ADR-0003)：遮罩=文字色的淡调，
+     * 卡片=--surface + --hairline + --r-lg + --shadow-pop，色块用主题自己的 9 色
+     * (行内 --sw，由 themeAssets().groupColors 落值)。
+     * 其他主题(ink 的纸纹、sky 的胶片颗粒都是 `body::before` + z-index 999):
+     * 卡片必须坐在**颗粒下面**(900) —— 那层纹理是这两个主题的签名, 是盖住全页的;
+     * 爬到它上面等于凭空多出一块“没有纹理的面板”, 一眼就是外来的(设置面板 25、
+     * 右键菜单 120 都在颗粒下面, 同一条纪律)。900 只要高过设置面板与菜单就够。 */
+    .ge-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--text) 30%, transparent);
+    }
+    .ge-card {
+      width: min(320px, 92vw);
+      box-sizing: border-box;
+      padding: 14px 16px 12px;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-pop);
+      color: var(--text);
+      font-size: var(--fs-md);
+    }
+    .ge-head { font-weight: 600; font-size: var(--fs-lg); letter-spacing: -0.01em; }
+    .ge-sub { margin-top: 2px; color: var(--text-3); font-size: var(--fs-sm); line-height: 1.5; }
+    .ge-input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 10px;
+      padding: 7px 9px;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-sm);
+      outline: none;
+    }
+    .ge-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+    .ge-input::placeholder { color: var(--placeholder); }
+    .ge-swatches { display: flex; gap: 7px; margin-top: 10px; }
+    .ge-swatch {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 1px solid var(--dot-ring);
+      border-radius: var(--r-full);
+      background: var(--sw);
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .ge-swatch:hover { transform: scale(1.12); }
+    /* 选中态不能靠颜色表达(色块本身就是颜色): 外圈光环 = 一圈底色 + 一圈强调色 */
+    .ge-swatch.active {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+      transform: scale(1.06);
+    }
+    .ge-hint, .ge-ruletip {
+      margin-top: 9px;
+      color: var(--text-3);
+      font-size: var(--fs-sm);
+      line-height: 1.55;
+    }
+    .ge-hint:empty { display: none; }
+    /* 规则组提醒: 用强调色而不是 --danger —— 红在这个面板里是“丢弃”的颜色
+     * (关闭/删除)，而“与规则脱钩”只是需要知情，不是危险动作 */
+    .ge-ruletip { color: var(--accent); }
+    .ge-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 7px;
+      font-size: var(--fs-sm);
+      color: var(--text-2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .ge-check input { accent-color: var(--accent); margin: 0; cursor: pointer; }
+    /* 就地报错(空名/同名撞车): 留在卡里改，不关卡片、不用 toast ——
+     * 错误信息和它的输入框必须待在一起 */
+    .ge-error {
+      margin-top: 8px;
+      min-height: 0;
+      color: var(--danger);
+      font-size: var(--fs-sm);
+      line-height: 1.45;
+    }
+    .ge-error:empty { display: none; }
+    .ge-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .ge-actions button {
+      padding: 5px 14px;
+      font: inherit;
+      font-size: var(--fs-md);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+    }
+    .ge-cancel { background: var(--surface); color: var(--text-2); border: 1px solid var(--hairline); }
+    .ge-cancel:hover { background: var(--hover); color: var(--text); }
+    /* 确定 = 主按钮: 实心强调色 + 反白(三主题都有自己的 --accent)
+     * 覆盖用 var(--text) 当更深的底: 暗色主题下 --accent 已经很亮，加深是错的方向，
+     * 所以 hover 不加深底色，只做一点点位移反馈 */
+    .ge-ok { background: var(--accent); color: #fff; border: 1px solid var(--accent); font-weight: 600; }
+    .ge-ok:hover { border-color: var(--accent-hi); box-shadow: var(--card-shadow-hover); }
+    /* ink 的体质层: 宋体只上标题，输入框留在信息层(与设置面板同惯例) */
+    html[data-theme="ink"] .ge-head { font-family: "Songti SC", "STSong", "SimSun", "宋体", serif; letter-spacing: 0.03em; }
+    html[data-theme="ink"] .ge-card { border-radius: 12px; }
+    html[data-theme="ink"] .ge-ok { background: var(--seal); border-color: var(--seal); color: var(--seal-ink); }
     /* 整站通配开关: 视觉规格与设置页 .srow toggle 同一套(34×20/白knob),类名独立 */
     .group-pop-zone {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
