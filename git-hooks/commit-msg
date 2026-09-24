@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# 铁律第一层: 提交写下的那一刻删掉 AI 署名尾注(docs/adr/0008)。
+# 由 git-hooks/install.sh 装到 ~/.githooks/commit-msg, 经 core.hooksPath 全局生效。
+set -u
+msg_file="${1:-}"
+[ -n "$msg_file" ] && [ -f "$msg_file" ] || exit 0
+
+self_dir="$(cd "$(dirname "$0")" && pwd -P)"
+
+# 链回仓库自己的 commit-msg 钩子。设了 core.hooksPath 之后 .git/hooks 里的钩子会被
+# 整体绕过 —— 不链回来会静默吃掉 husky / 团队自建钩子
+common_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+if [ -n "$common_dir" ]; then
+  repo_hook="$(cd "$common_dir" 2>/dev/null && pwd -P)/hooks/commit-msg"
+  if [ -x "$repo_hook" ] && [ "$(dirname "$repo_hook")" != "$self_dir" ]; then
+    "$repo_hook" "$@" || exit $?
+  fi
+fi
+
+exec python3 "$self_dir/ai-trailer-guard.py" strip "$msg_file"

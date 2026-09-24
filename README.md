@@ -99,3 +99,5 @@ Windows 下 `⌘` 对应 `Ctrl`,`⌥` 对应 `Alt`。
 原生 JavaScript + DOM,无框架无依赖,Manifest V3。
 代码按 `src/core`(基础设施)/ `src/features`(功能组件)分层,后台自动分组与弹窗规则编辑器共用同一份 `rules-match.js`。
 权限:`tabs` / `tabGroups` / `sessions` / `favicon` / `bookmarks` / `history` / `storage` / `activeTab` / `scripting`。
+
+**仓库约定**:提交信息里禁止出现 AI 助手的署名尾注 —— 执行手段与原因(一次真实的删库病例)见 `docs/adr/0008`,钩子在 `git-hooks/`(换机器后跑一次 `./git-hooks/install.sh`)。
