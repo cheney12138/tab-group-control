@@ -651,6 +651,9 @@
     .sbtn { width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-family: inherit; color: var(--text-2); }
     /* 设置行右侧的"值/状态"文字: 与左边加粗的 .slabel 区分(如备份时间) */
     .svalue { color: var(--text-2); font-weight: 500; }
+    /* 备份行右侧: 值 + 一两个小药丸(位置可能很长, 让它自己省略) */
+    .backup-pos { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .backup-pos .svalue { max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sbtn:hover { background: var(--hover); color: var(--text); }
     /* iOS toggle 开关: 扁平纯净 */
     .srow input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -3055,8 +3058,8 @@
         </div>
         <div class="sbox">
           <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>
-          <div class="srow"><span class="slabel">备份文件</span><button id="backupRevealBtn" class="rules-io-link" title="在访达中显示这个文件">文件位置</button></div>
-          <div class="srow"><span class="svalue" id="backupStateLabel">尚未备份</span><button id="backupNowBtn" class="rules-io-link" title="现在就写一份">立即备份</button></div>
+          <div class="srow"><span class="slabel">备份位置</span><span class="backup-pos"><span class="svalue" id="backupLocationLabel">下载目录</span><button id="backupResetBtn" class="rules-io-link" title="改回写到系统下载目录" hidden>用回默认</button><button id="backupPickBtn" class="rules-io-link" title="自己挑一个文件放备份(系统保存框)">更改位置…</button></span></div>
+          <div class="srow"><span class="svalue" id="backupStateLabel">尚未备份</span><span class="backup-pos"><button id="backupRevealBtn" class="rules-io-link" title="在访达 / 资源管理器中显示这个文件">文件位置</button><button id="backupNowBtn" class="rules-io-link" title="现在就写一份">立即备份</button></span></div>
           <div class="srow"><span class="slabel">从备份恢复</span><button id="backupRestoreBtn" class="rules-io-link" title="选一份之前备份的 JSON">选择文件…</button><input id="backupFileInput" type="file" accept=".json,application/json" hidden></div>
         </div>
         <div class="help-card">

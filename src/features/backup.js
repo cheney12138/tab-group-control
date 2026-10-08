@@ -47,6 +47,63 @@ const PREF_KEYS = [
 
 const WRITE_DEBOUNCE_MS = 1200;
 
+// 自选位置的文件句柄存在 IndexedDB 里(FileSystemFileHandle 可以结构化克隆, localStorage 存不了)。
+// 注意: IndexedDB 也随卸载一起消失 —— 但**文件本身不会**, 所以重装后重新选一次(或用「从备份恢复」)就回来了。
+const IDB_NAME = 'tgs-backup';
+const IDB_STORE = 'handles';
+const HANDLE_KEY = 'file';
+
+function idb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbOp(mode, fn) {
+  return idb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, mode);
+    const req = fn(tx.objectStore(IDB_STORE));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
+}
+const getHandle = () => idbOp('readonly', (st) => st.get(HANDLE_KEY)).catch(() => null);
+const setHandle = (h) => idbOp('readwrite', (st) => st.put(h, HANDLE_KEY)).catch(() => {});
+const clearHandle = () => idbOp('readwrite', (st) => st.delete(HANDLE_KEY)).catch(() => {});
+
+// 句柄的写权限: 授权过就一直是 granted; 掉回 prompt 时必须借一次用户手势重新申请
+// (所以只有「立即备份 / 更改位置」这类点击才带 request=true; 自动备份没有手势, 只能退回下载目录并在 UI 上吱一声)
+async function handleWritable(handle, { request = false } = {}) {
+  if (!handle) return false;
+  const opts = { mode: 'readwrite' };
+  try {
+    if (typeof handle.queryPermission !== 'function') return true;   // 没有权限 API(如 OPFS 句柄) → 直接试, 写失败自会报错
+    if (await handle.queryPermission(opts) === 'granted') return true;
+    if (request && await handle.requestPermission(opts) === 'granted') return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+// 让用户自己挑备份文件放哪(两端都是系统原生的保存框: macOS 访达 / Windows 资源管理器)
+export async function pickBackupFile() {
+  if (typeof window.showSaveFilePicker !== 'function') throw new Error('这个浏览器/版本不支持自选位置');
+  const handle = await window.showSaveFilePicker({
+    suggestedName: BACKUP_FILE,
+    types: [{ description: 'Tab Group Search 备份', accept: { 'application/json': ['.json'] } }],
+  });
+  await setHandle(handle);
+  return handle;
+}
+
+// 改回"系统下载目录"
+export async function useDefaultLocation() {
+  await clearHandle();
+}
+
 // 内容指纹: 只比对 data 部分(exportedAt 每次都不同, 不能进指纹)。
 // djb2 够用 —— 这里只需要"变没变", 不需要抗碰撞。
 function fingerprint(obj) {
@@ -160,15 +217,39 @@ export async function writeBackup(reason = 'manual') {
   const prev = await readBackupState();   // 上一次那条下载记录, 写完就把它摘掉
   const snap = await snapshot();
   const text = JSON.stringify(snap, null, 2) + '\n';
+  const base = {
+    at: Date.now(), reason, sig: fingerprint(snap.data), bytes: text.length,
+    groups: snap.counts.groups, hosts: snap.counts.hosts,
+  };
+
+  // ① 用户自己选过位置 → 直接写那个文件。这条路不经过下载管线:
+  //    没有下载记录、不会出现"已删除"、下载管理器也插不进手
+  const handle = await getHandle();
+  let hint = null;
+  if (handle) {
+    if (await handleWritable(handle, { request: reason === 'manual' })) {
+      try {
+        const w = await handle.createWritable();
+        await w.write(text);
+        await w.close();
+        const state = { ...base, mode: 'file', name: handle.name };
+        await chrome.storage.local.set({ [STATE_KEY]: state });
+        return state;
+      } catch (e) {
+        hint = `写自选文件失败(${e.message}), 这次先写到下载目录`;
+      }
+    } else {
+      hint = '自选位置的写入权限需要重新确认(点一下「立即备份」或「更改位置…」授权), 这次先写到下载目录';
+    }
+  }
+
+  // ② 默认: 系统下载目录。filename 用**相对名** ⇒ macOS 落 ~/Downloads、
+  //    Windows 落 C:\Users\<你>\Downloads, 不用各自判平台
   const url = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
   const id = await download(url);
   const keepId = (await settleOwnItem(id, url))?.id ?? id;
   await pruneOlder(prev?.id, keepId, url);
-  const state = {
-    id: keepId, at: Date.now(), reason,
-    sig: fingerprint(snap.data), bytes: text.length,
-    groups: snap.counts.groups, hosts: snap.counts.hosts,
-  };
+  const state = { ...base, id: keepId, mode: 'downloads', name: BACKUP_FILE, hint };
   await chrome.storage.local.set({ [STATE_KEY]: state });
   return state;
 }
@@ -190,6 +271,9 @@ export async function maybeAutoBackup() {
 // 「文件位置」: 在访达里选中备份文件。下载记录被清过/从没备份过 → 退化成打开下载文件夹
 export async function revealBackupFile() {
   const state = await readBackupState();
+  // 自选位置定位不了: 浏览器**不把完整路径**交给扩展(句柄只有文件名), 所以没有 show 的余地 ——
+  // 位置是用户自己挑的, 由调用方给一句人话, 不要假装能定位
+  if (state?.mode === 'file') return 'noreveal';
   // 现查一遍(下载管理器重下的那条也算), 查不到才退回记录里的 id —— 后者可能已被拦截至失效
   const id = (await ownDownloadItems())[0]?.id ?? state?.id;
   if (id != null) {
@@ -235,21 +319,39 @@ export async function restoreFromText(text) {
 export function initBackup() {
   const optAuto = document.getElementById('optAutoBackup');
   const revealBtn = document.getElementById('backupRevealBtn');
+  const locationLabel = document.getElementById('backupLocationLabel');
+  const pickBtn = document.getElementById('backupPickBtn');
+  const resetBtn = document.getElementById('backupResetBtn');
   const stateLabel = document.getElementById('backupStateLabel');
   const nowBtn = document.getElementById('backupNowBtn');
   const restoreBtn = document.getElementById('backupRestoreBtn');
   const fileInput = document.getElementById('backupFileInput');
-  if (!optAuto || !revealBtn || !stateLabel || !nowBtn || !restoreBtn || !fileInput) return;
+  if (!optAuto || !revealBtn || !locationLabel || !pickBtn || !resetBtn
+      || !stateLabel || !nowBtn || !restoreBtn || !fileInput) return;
 
+  // 一次渲染交代两件事: 上次备份的时间/规模, 以及"这份东西写到哪去了"。
+  // 「文件位置」只在下载目录模式下有意义 —— 自选位置的完整路径浏览器不给扩展,
+  // 所以那边把按钮换成「用回默认」, 不摆一个点了没用的按钮
   const render = (state) => {
     stateLabel.textContent = state?.at
       ? `上次备份 ${relativeTime(state.at)} · ${state.groups} 组 / ${state.hosts} 域名`
       : '尚未备份';
+    const custom = state?.mode === 'file';
+    // 下载目录模式下只写"下载目录" —— 名字太长会被省略号切掉一半, 反而看不清;
+    // 完整名字放 tooltip, 真正落地时 toast 里也会报一次全名
+    locationLabel.textContent = custom ? state.name : '下载目录';
+    locationLabel.title = custom ? state.name : `系统下载目录 / ${BACKUP_FILE}`;
+    locationLabel.dataset.mode = custom ? 'file' : 'downloads';
+    revealBtn.hidden = custom;
+    resetBtn.hidden = !custom;
   };
 
   // 默认开(未设置视为开): 关掉只停自动写入, 手动「立即备份」照旧可用
   chrome.storage.local.get(OPT_KEY).then((s) => { optAuto.checked = s[OPT_KEY] !== false; });
-  readBackupState().then(render);
+  readBackupState().then((state) => {
+    render(state);
+    if (state?.hint) showToast(state.hint);   // 比如"权限掉了, 这次先写到下载目录"
+  });
 
   optAuto.addEventListener('change', async () => {
     await chrome.storage.local.set({ [OPT_KEY]: optAuto.checked });
@@ -264,8 +366,32 @@ export function initBackup() {
     try {
       const how = await revealBackupFile();
       if (how === 'folder') showToast('还没有备份文件, 已打开下载文件夹');
+      else if (how === 'noreveal') showToast('这个位置是你自己选的, 浏览器不把完整路径给扩展, 所以定位不了');
     } catch (e) {
       showToast('打不开位置: ' + e.message);
+    }
+  });
+
+  // 自选位置: 系统原生保存框(两端都是), 选完立刻写一份进去
+  pickBtn.addEventListener('click', async () => {
+    try {
+      await pickBackupFile();
+      const state = await writeBackup('manual');
+      render(state);
+      showToast(`备份位置已改为 ${state.name}, 并已写入`);
+    } catch (e) {
+      if (e?.name !== 'AbortError') showToast('没改成: ' + e.message);   // 用户点取消不算错
+    }
+  });
+
+  resetBtn.addEventListener('click', async () => {
+    await useDefaultLocation();
+    try {
+      const state = await writeBackup('manual');
+      render(state);
+      showToast(`已改回系统下载目录 → ${BACKUP_FILE}`);
+    } catch (e) {
+      showToast('写备份失败: ' + e.message);
     }
   });
 
@@ -274,7 +400,9 @@ export function initBackup() {
     try {
       const state = await writeBackup('manual');
       render(state);
-      showToast(`已备份 ${state.groups} 组 / ${state.hosts} 域名 → 下载/${BACKUP_FILE}`);
+      const where = state.mode === 'file' ? state.name : `下载目录/${BACKUP_FILE}`;
+      showToast(`已备份 ${state.groups} 组 / ${state.hosts} 域名 → ${where}`);
+      if (state.hint) showToast(state.hint);
     } catch (e) {
       showToast('备份失败: ' + e.message);
     } finally {
