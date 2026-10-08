@@ -1596,16 +1596,29 @@
       flex-shrink: 0;
     }
     /* 列表行 stagger 入场: 逐行淡入+上浮,每行延迟 8ms(Raycast 式质感)。
-     * 只动 opacity/transform,不触发布局;**只在弹窗首次渲染生效,搜索重渲染不播** */
+     * 只动 opacity/translate(只合成、不触发布局),**只在弹窗首次渲染生效, 搜索重渲染不播** */
     /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 420ms 后摘掉。
      * ⚠️ 2026-09-18 病例(本机):强行动效打开后,每次敲搜索键整套列表都重新上浮 = 闪烁 ✗。
      * 病因:入场动画挂在**常态选择器**上 ⇒ 每次重渲染都会重放。结构上把"入场"与"重渲染"分开。 */
     body.entrance .tab-item, body.entrance .group-header {
       animation: row-enter 0.16s ease-out backwards;
     }
+    /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
+     * ⚠️ 2026-10-08 病例(本机): 用户报"唤起面板后, 选中的那行才慢慢上浮, 看着像延迟"。
+     * 逐帧实测(getAnimations + 计算样式采样): active 在 60ms 就加上了, 但入场动画用 `backwards`
+     * 先把它按在 from(opacity 0 / translateY 3px)里等到 ~205ms(stagger 延迟)才开播, 播 160ms;
+     * 而**动画结束那一刻, transform 交还给 .active 的 scale(1.02)** ⇒ 面板早就可见了, 选中行才
+     * "啪"地膨胀到位(实测 365ms 之后某个采样帧才变成 matrix(1.02…))。看起来就是"慢半拍"。
+     * 两处治: ① 入场帧改用 `translate`(独立属性), 它再也压不住 .active 的 transform: scale(1.02);
+     * ② 选中行干脆不加入场 —— 首帧直接就是浮好的样子。
+     *    (折叠的分组头也能被选中, 所以 :not 里带上 .group-header.active —— 当 focusCurrentTab
+     *     找不到当前标签行时会退到 setActive(0), 那一下的 0 号单元可能就是折叠头)
+     * (副作用: 入场那 420ms 内按 ↑↓ 换选中行, 新选中行会立刻全显出来。这是想要的: 键盘焦点就该即时。) */
+    body.entrance .tab-item.active,
+    body.entrance .group-header.active { animation: none; }
     @keyframes row-enter {
-      from { opacity: 0; transform: translateY(3px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; translate: 0 3px; }
+      to { opacity: 1; translate: 0 0; }
     }
     .tab-item {
       display: flex;
