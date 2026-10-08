@@ -91,6 +91,45 @@ function download(url) {
   });
 }
 
+// 反查"我们自己那条下载记录"。为什么不能直接用 download() 回调给的 id ——
+// 装了下载管理器(NeatDM 之类)时, 它会把我们这条 cancel + erase 掉再按 URL 重下一遍,
+// 于是真正落盘的是**另一条 id**; 名字虽然已被 background.js 的 onDeterminingFilename 抢回来了,
+// 但记着旧 id 会让「文件位置」点不开。所以按"同名记录里最新的一条"来找。
+async function ownDownloadItems(url) {
+  const hit = new Map();
+  try {
+    const byName = await chrome.downloads.search({
+      filenameRegex: BACKUP_FILE.replace(/\./g, '\\.'),
+    });
+    for (const i of byName) hit.set(i.id, i);
+    // 再按 URL 捞一遍: 名字可能被别人改掉(--> 见 docs/adr/0009 病例三), URL 不会。
+    // 两条都查、按 id 去重, 谁先谁后无所谓
+    if (url) {
+      const byUrl = await chrome.downloads.search({ url });
+      for (const i of byUrl) hit.set(i.id, i);
+    }
+  } catch { /* 查不到就当没有 */ }
+  return [...hit.values()].sort((a, b) => b.id - a.id);
+}
+
+// 等"真正落盘的那条"出现。下载管理器(NeatDM 之类)会把我们这条 cancel + erase 掉,
+// 再按 URL 重下一遍 —— 那条记录的 id 才是真正落盘的。这里给它一小会儿:
+//   正常环境: 250ms 后查到的仍是自己那条, 这点延迟可以忽略(写备份本来就在防抖之后跑);
+//   被接管环境: 等到"另一条同名记录"出现就用它(名字已由 background.js 的
+//               onDeterminingFilename 抢回来, 两条会同名, 所以认得出来)。
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function settleOwnItem(fallbackId, url) {
+  const taken = async () => (await ownDownloadItems(url)).find((it) => it.id !== fallbackId) || null;
+  await sleep(250);
+  let other = await taken();
+  for (let i = 0; !other && i < 5; i++) {
+    if ((await ownDownloadItems(url)).some((it) => it.id === fallbackId)) break;   // 自己那条还在 ⇒ 没被接管
+    await sleep(200);
+    other = await taken();
+  }
+  return other;
+}
+
 // 只留最新那一条下载记录: 否则每改一次规则, 下载列表里就多一行同名记录。
 // 主力是"精确删掉上一次那个 id" —— 靠文件名正则会看走眼(文件被改名/被移到别处就找不到),
 // 正则那趟只当扫残渣的兜底。
@@ -100,18 +139,15 @@ function download(url) {
 // 而这条又被外面的 catch 吞了, 表现成"清理悄悄失效"(下载列表里越堆越多), 一点动静都没有。
 // 所以现在逐个 id 删。教训: 这种"失败也不出声"的清理逻辑, 必须有测试盯着结果(见测试 ③)。
 // 另外用的是 erase 而不是 removeFile: erase 只摘历史记录, **不动磁盘上的文件**(实测确认)
-async function pruneOlder(keepId, prevId) {
+async function pruneOlder(prevId, keepId, url) {
+  const items = await ownDownloadItems(url);
   const stale = [];
   if (prevId != null && prevId !== keepId) stale.push(prevId);
-  try {
-    const items = await chrome.downloads.search({
-      filenameRegex: BACKUP_FILE.replace(/\./g, '\\.'),
-    });
-    for (const i of items) if (i.id !== keepId && !stale.includes(i.id)) stale.push(i.id);
-  } catch { /* 扫不到就算了, 不影响备份本身 */ }
+  for (const i of items) if (i.id !== keepId && !stale.includes(i.id)) stale.push(i.id);
   for (const id of stale) {
-    try { await chrome.downloads.erase({ id }); } catch { /* 同理 */ }
+    try { await chrome.downloads.erase({ id }); } catch { /* 扫不到就算了, 不影响备份本身 */ }
   }
+  return keepId;
 }
 
 export async function readBackupState() {
@@ -126,9 +162,10 @@ export async function writeBackup(reason = 'manual') {
   const text = JSON.stringify(snap, null, 2) + '\n';
   const url = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
   const id = await download(url);
-  await pruneOlder(id, prev?.id);
+  const keepId = (await settleOwnItem(id, url))?.id ?? id;
+  await pruneOlder(prev?.id, keepId, url);
   const state = {
-    id, at: Date.now(), reason,
+    id: keepId, at: Date.now(), reason,
     sig: fingerprint(snap.data), bytes: text.length,
     groups: snap.counts.groups, hosts: snap.counts.hosts,
   };
@@ -153,9 +190,11 @@ export async function maybeAutoBackup() {
 // 「文件位置」: 在访达里选中备份文件。下载记录被清过/从没备份过 → 退化成打开下载文件夹
 export async function revealBackupFile() {
   const state = await readBackupState();
-  if (state?.id != null) {
+  // 现查一遍(下载管理器重下的那条也算), 查不到才退回记录里的 id —— 后者可能已被拦截至失效
+  const id = (await ownDownloadItems())[0]?.id ?? state?.id;
+  if (id != null) {
     try {
-      await chrome.downloads.show(state.id);
+      await chrome.downloads.show(id);
       return 'shown';
     } catch { /* 记录没了, 走下面的兜底 */ }
   }

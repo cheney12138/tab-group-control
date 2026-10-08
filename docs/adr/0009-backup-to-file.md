@@ -71,6 +71,45 @@ Invalid type: expected integer, found array.
 
 另外用的是 `erase` 而不是 `removeFile`:`erase` 只摘历史记录,**不动磁盘上的文件** —— 这点单独实测过(同名写两次 → 删掉前一条 → 文件还在,内容是第二次的),否则"清理下载记录"会把备份本身删掉。
 
+## 病例三(2026-10-08):装了下载管理器,文件名被抢走
+
+**症状**:用户每次 `⌘E` 唤起面板,下载目录就多一个 `下载.json` / `下载 (1).json` / `下载 (2).json`……
+
+查的顺序(每一步都是实测,不是推断):
+
+1. **文件内容是我们的**(`format: tgs-backup`,18 组 / 47 域名)⇒ 确实是备份写出来的,不是别的东西在下载。
+2. **Chrome 的下载历史**(拷一份 `History` 库读 `downloads` 表):那一条 `state=1`(完成)、目标路径就是
+   `~/Downloads/下载 (2).json` ⇒ **是 Chrome 自己写的**这个文件,不是外部 App 落盘的。
+3. **用户的下载偏好是默认值**(`Preferences` 里没有 `download.*`、没有 `prompt_for_download`)⇒ 排除"另存为对话框"一类解释。
+4. **用户的 `Secure Preferences` 里有 NeatDownloadManager**(`cpcifbdmkopohnofedkjghjiclmhdah`,带 `downloads` + `webRequest` + `<all_urls>`)。
+5. **直接读它的源码**(`Extensions/<id>/1.9.92_0/bg.js`)—— 关键两行:
+
+   ```js
+   chrome.downloads.cancel(a.id), chrome.downloads.erase({ id: a.id })   // onCreated: 取消 + 抹掉记录
+   b.fileName = b.K || b.l || ""                                        // 名字只认 Content-Disposition / URL 末段
+   ```
+
+   它把每一次下载都取消掉、抹掉记录,然后**按 URL 自己重下一遍**;而重下的那一次**没有 filename**
+   —— `data:` URL 既没有 Content-Disposition 也没有路径末段。于是 Chrome 用本地化的兜底名
+   「下载」+ MIME 后缀 `.json`,并且 `conflictAction: 'overwrite'` 也一起丢了 ⇒ 每备份一次堆一个 `(1)/(2)`。
+6. **本地复现**:写一个"复刻 NeatDM 行为"的假拦截者(只做 cancel + erase + 重下不带文件名),
+   与 Chrome 155 一起跑 ⇒ 得到一模一样的 `下载.json`。同一个 Chrome 版本、干净环境 ⇒ 文件名正确。
+   (顺带确认:这**不是** Chrome 版本行为变化 —— 用和用户同版本的 155 在干净环境里是对的。)
+
+**修法(两层,都不重写下载管线)**:
+
+| 层的 | 文件 | 做什么 |
+|---|---|---|
+| 抢回名字 | `background.js` 的 `onDeterminingFilename` | 只对"URL 是我们的备份载荷"那一条 `suggest({filename, conflictAction:'overwrite'})` —— 这样**不管是谁发起**的那次落盘,名字与覆盖语义都在。别人的下载**不调 suggest()**,不干扰下载管理器自己的命名 |
+| 认准记录 | `features/backup.js` 的 `settleOwnItem` / `ownDownloadItems` | 被接管时真正落盘的是**另一条 id**。所以写完等一小会儿反查"最新的同名记录",用它去清理旧记录、去指向「文件位置」;`revealBackupFile` 每次现查,不迷信存下来的 id |
+
+抢回名字这件事必须在**下载那一刻**做(所以放 `background.js`,它在下载事件上);而"哪条记录才算数"
+是弹窗侧的账(所以放 `backup.js`)。文件名常量因此在两个文件里各有一份 —— **用测试钉住两者必须相等**。
+
+**教训**:下载管线不是扩展的地盘 —— 任何装了下载管理器的用户,`filename` / `conflictAction` 都可能
+被第三方改写或丢弃。所以别把"文件名对不对"当成理所当然,也别试图跟下载管理器抢控制权(只对自己那条表态)。
+更不能像最初那样,把"清理旧记录"这种**失败也不出声**的逻辑写成一把 `erase({id:[...]})`(见病例二)。
+
 ## 「文件位置」这个口子
 
 设置页「功能」里一行:**备份文件 → 〔文件位置〕**,点一下 `chrome.downloads.show(id)` 在访达里选中该文件。

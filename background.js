@@ -637,6 +637,29 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 // popup 消息: 快照 / 整理触发
+// ---------------------------------------------------------------------------
+// 备份文件的落盘名: 抢回被下载管理器改掉的名字
+//
+// 病例(2026-10-08, 用户机器上): 每次 ⌘E 唤起面板, 下载目录就多一个「下载.json / 下载 (1).json / (2)…」。
+// 真因不在我们这边: 用户装了 NeatDownloadManager, 它的 bg.js 在 onCreated 里做的是
+//     chrome.downloads.cancel(id) + chrome.downloads.erase({id})
+// 然后把 URL 重新下一遍 —— 而重下的那一次**不带 filename**(它取名字只认 Content-Disposition /
+// URL 路径末段, data: URL 两者都没有)。于是 Chrome 用本地化的兜底名「下载」+ MIME 后缀 .json,
+// 同时 conflictAction:'overwrite' 也一起丢了 ⇒ 每备份一次就堆一个 (1)/(2)。
+// (已用"复刻 NeatDM 行为的假拦截者 + Chrome 155"在本地完整复现, 见 docs/adr/0009)
+//
+// 修法: 下载的最终名字是可以被扩展"建议"的 —— onDeterminingFilename 在**每次**下载(不管谁发起的)
+// 落盘前都会问一遍。这里只对"我们自己的备份载荷"表态, 把名字与覆盖语义要回来; 别人的下载
+// **不调 suggest()**, 免得干扰下载管理器自己的命名。
+const BACKUP_FILENAME = 'tab_group_rule_bak.json';   // 必须与 features/backup.js 的 BACKUP_FILE 一致
+const BACKUP_URL_MARK = 'tgs-backup';                // 载荷里的 "format": "tgs-backup"(encodeURIComponent 不会转义它)
+chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+  const isOurs = typeof item.url === 'string'
+    && item.url.startsWith('data:')
+    && item.url.includes(BACKUP_URL_MARK);
+  if (isOurs) suggest({ filename: BACKUP_FILENAME, conflictAction: 'overwrite' });
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const reply = (result) => sendResponse({ ok: true, ...result });
   const fail = (err) => sendResponse({ ok: false, error: err?.code || String(err?.message || err) });
