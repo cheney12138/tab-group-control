@@ -17,6 +17,7 @@ import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollP
 import { initDnd, moveTabToGroupAction } from './features/dnd.js';
 import { initCloseBatch } from './features/close-batch.js';
 import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
+import { initBackup } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
@@ -555,6 +556,8 @@ initGroupEdit({
   getAllTabs: () => state.allTabs,
   remapGroupKey,
 });
+// 配置备份: 写在弹窗侧而不是 background —— service worker 里没有 localStorage(见 backup.js 文件头)
+initBackup();
 initSearch({ render });
 initRender({ refreshData, getSettings: () => settings });
 

@@ -649,6 +649,8 @@
     label.srow { cursor: pointer; user-select: none; }
     .slabel { font-weight: 600; color: var(--text); }
     .sbtn { width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-family: inherit; color: var(--text-2); }
+    /* 设置行右侧的"值/状态"文字: 与左边加粗的 .slabel 区分(如备份时间) */
+    .svalue { color: var(--text-2); font-weight: 500; }
     .sbtn:hover { background: var(--hover); color: var(--text); }
     /* iOS toggle 开关: 扁平纯净 */
     .srow input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -3050,6 +3052,12 @@
             </span>
           </div>
           <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="keycap"><span class="k-cmd"></span>⇧K</span></button>
+        </div>
+        <div class="sbox">
+          <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>
+          <div class="srow"><span class="slabel">备份文件</span><button id="backupRevealBtn" class="rules-io-link" title="在访达中显示这个文件">文件位置</button></div>
+          <div class="srow"><span class="svalue" id="backupStateLabel">尚未备份</span><button id="backupNowBtn" class="rules-io-link" title="现在就写一份">立即备份</button></div>
+          <div class="srow"><span class="slabel">从备份恢复</span><button id="backupRestoreBtn" class="rules-io-link" title="选一份之前备份的 JSON">选择文件…</button><input id="backupFileInput" type="file" accept=".json,application/json" hidden></div>
         </div>
         <div class="help-card">
           <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 <span id="appVersion">v—</span></div>
