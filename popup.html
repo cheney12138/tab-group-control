@@ -32,8 +32,57 @@
      * linear(0.98, -0.22) 把偏亮的均值拉回灰 0.5(overlay 对灰 0.5 是恒等变换,
      * 均值不变只加方差; multiply 则表现为中性压暗)。 */
     :root {
+      /* 按下回弹用的过冲曲线: 与选中行上浮(scale 1→1.02 的弹性过冲)同一条 feel */
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
       --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/><feComponentTransfer><feFuncR type='linear' slope='0.98' intercept='-0.22'/><feFuncG type='linear' slope='0.98' intercept='-0.22'/><feFuncB type='linear' slope='0.98' intercept='-0.22'/></feComponentTransfer></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
     }
+    /* ============================================================
+     * 共享交互层: 按下回弹(全主题共享, 主题覆盖层不得禁用)
+     * ------------------------------------------------------------
+     * 所有可点控件: 按下缩一点(快), 松开弹回来(过冲)。曲线与选中行上浮同一套 feel。
+     *
+     * ⚠️ 为什么用 `scale` 这个独立属性, 而不是 transform: scale(…):
+     *   不少控件自己就有 transform(色块 .accent-swatch.active / .ge-swatch.active 的
+     *   scale(1.06)、滑块 .tab-slider 的位移等), 写 transform 会互相覆盖 —— 上面 375e771
+     *   那笔"选中行晚半拍上浮"就是同一个病(入场动画的 transform 压住了 .active 的)。独立属性
+     *   会**相乘**, 不打架。
+     * ⚠️ **不要把 scale 写进任何 transition 列表**: 按下要"瞬时到位"(点按只有几十毫秒, 带过渡
+     *   连一半都走不到), 而松开那一下必须是**动画**(见下面的 tap-bounce)。CSS 级联里
+     *   **过渡的优先级高于动画** —— 一旦同时也有一条 scale 过渡在跑, tap-bounce 的过冲会被它盖掉
+     *   (实测: 齿轮钮只弹到 1.005, 到不了 1.035)。所以两条路分工: :active 管"按住时的下沉",
+     *   click 触发的一次性动画管"松开时的回弹", 互不重叠。
+     * ⚠️ 刻意**不**作用在 .tab-item 上: 行要能被拖拽, 拖拽中 :active 会一直命中, 边拖边缩很怪;
+     *   而且行自己有 scale(1.02) 的选中态。分组头同理(整行缩看着像坏了)。
+     * ============================================================ */
+    button, [role="menuitem"] {
+      /* 没自带 transition 的按钮走这条(松开的弹跳 + 常见的 hover 渐隐) */
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.15s ease, opacity 0.12s ease;
+    }
+    button:active, [role="menuitem"]:active, .sbtn:active {
+      scale: 0.93;
+      /* 按下**瞬时**到位(0 秒): 点按只有几十毫秒, 带过渡的话连一半都走不到、看着像没反应 */
+      transition-duration: 0s;
+    }
+    /* 点按回弹: 光靠 :active 交代不了"点按" —— 逐帧实测(2026-10-08 用户报"点按没有, 只有按住
+     * 触摸板才有"): 快点点按(mousedown/mouseup 落在同一帧)整段采样里**0 帧**出现过缩小, 而按住
+     * 不放有 39 帧 —— 因为 :active 加了又立刻没了, 浏览器根本来不及把它画出来。
+     * 所以点按另给一次**显式动画**(由 main.js 的委派监听在 click 时挂 .tapped): 一次 0.26s 的
+     * 下沉+过冲, 与手速无关, 一定看得见; 按住那条路仍由 :active 管着(即时下沉 + 松开过渡回弹)。 */
+    @keyframes tap-bounce {
+      0% { scale: 0.9; }
+      55% { scale: 1.035; }
+      100% { scale: 1; }
+    }
+    /* 动画挂在"真正要动的那个元素"上: 普通控件是自己; 开关是它里面的道轨
+     * (main.js 那里也是把 .tapped 加到道轨上 —— 之前写成 label.srow.tapped .toggle-track,
+     *  而类加在道轨上, 选择器永远匹配不到, 开关就一直没有回弹: 实测抓出来的) */
+    button.tapped, [role="menuitem"].tapped, .accent-swatch.tapped, .ge-swatch.tapped,
+    .toggle-track.tapped {
+      animation: tap-bounce 0.26s var(--ease-spring);
+    }
+    /* 开关: 缩的是道轨而不是整行(48px 的行缩 6% 看着像坏了) */
+    label.srow:active .toggle-track { scale: 0.92; }
+
     @media (prefers-color-scheme: dark) {
 
       /* 深色模式图标对比度与清晰度优化: 仅作用于极简主题的深色模式, 固定亮色主题(水墨/云天)绝对不动不反色 */

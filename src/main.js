@@ -512,6 +512,22 @@ function remapGroupKey(oldKey, newKey) {
   if (changed) saveCollapsed();
 }
 
+// 点按回弹: 快点点按(mousedown/mouseup 落在同一帧)时 :active 还没被画出来就没了 ——
+// 逐帧实测: 点按 0 帧出现缩小, 按住 39 帧都有。所以点按这一步交给 click 事件来补一次显式动画。
+// 只挂一个委派监听, 不在每个控件上接线: 与"公共交互层"同一口径, 以后新增按钮自动就有。
+// 选 closest 而不是 target: 点到的常是按钮里的 svg/span; label.srow 那种整行开关则弹它的道轨。
+const TAP_TARGETS = 'button, [role="menuitem"], .accent-swatch, .ge-swatch, label.srow';
+document.addEventListener('click', (e) => {
+  const hit = e.target instanceof Element ? e.target.closest(TAP_TARGETS) : null;
+  if (!hit || hit.disabled) return;
+  const el = hit.matches('label.srow') ? hit.querySelector('.toggle-track') : hit;
+  if (!el) return;
+  el.classList.remove('tapped');
+  void el.offsetWidth;                    // 强制回流: 连点两次也要能重播
+  el.classList.add('tapped');
+  el.addEventListener('animationend', () => el.classList.remove('tapped'), { once: true });
+}, true);
+
 // 设置面板组件初始化: 注入 main 侧能力(refreshData=数据层刷新,render=渲染层)
 //
 // ★ 接线义务: features/ 下每个导出了 initXxx 的模块都**必须**在这里被调用一次。
