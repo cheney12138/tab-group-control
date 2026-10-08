@@ -569,6 +569,10 @@ initRender({ refreshData, getSettings: () => settings });
   // 上一次若是"靶子含激活标签"的批量关闭(关完 popup 就死了), 撤销承诺在 session 里 ——
   // 这里把它接回来, 让 ⌘Z 跨 popup 生死依然有效
   restoreUndoBatch();
+  // 帮助卡里的版本号从 manifest 现读 —— 之前是手抄在 popup.html 里的字符串,
+  // 升了 manifest 忘了改它, 面板就会一直显示旧版本(1.2.0 就是这么攒下来的)
+  const appVersionEl = document.getElementById('appVersion');
+  if (appVersionEl) appVersionEl.textContent = 'v' + chrome.runtime.getManifest().version;
   console.log(`[TGS] 首帧完成, JS 侧总耗时 ${(performance.now() - bootT0).toFixed(1)}ms`);
   console.log('[TGS] BUILD 2026-09-03 v4 (fade-band) — 看不到这行=Chrome 缓存了旧 popup');
   // 首帧不阻塞: 媒体 tab 探测异步跑,命中一个补一个按钮
