@@ -34,6 +34,11 @@ const BACKUP_FILE = 'tab_group_rule_bak.json';
 const BACKUP_FORMAT = 'tgs-backup';
 const BACKUP_VERSION = 1;
 const STATE_KEY = 'backupState';
+// 用户选的是"往哪写": 'downloads'(默认) | 'file'(自选位置)。
+// 为什么把**意图**和**能力**分开存: 句柄(能力)住 IndexedDB, 而权限随时可能被浏览器收回;
+// 意图放 chrome.storage.local, 这样"权限掉了"和"从没选过位置"能被区分开 —— 前者不该悄悄
+// 改往下载目录写(真实病例 2026-10-09, 见文件末尾), 后者才是默认行为。
+const STRATEGY_KEY = 'backupStrategy';
 const OPT_KEY = 'autoBackupEnabled';
 
 // 进备份的 chrome.storage.local 键(白名单 —— 恢复时也按它过滤,
@@ -96,12 +101,14 @@ export async function pickBackupFile() {
     types: [{ description: 'Tab Group Search 备份', accept: { 'application/json': ['.json'] } }],
   });
   await setHandle(handle);
+  await chrome.storage.local.set({ [STRATEGY_KEY]: 'file' });
   return handle;
 }
 
 // 改回"系统下载目录"
 export async function useDefaultLocation() {
   await clearHandle();
+  await chrome.storage.local.set({ [STRATEGY_KEY]: 'downloads' });
 }
 
 // 内容指纹: 只比对 data 部分(exportedAt 每次都不同, 不能进指纹)。
@@ -222,25 +229,44 @@ export async function writeBackup(reason = 'manual') {
     groups: snap.counts.groups, hosts: snap.counts.hosts,
   };
 
-  // ① 用户自己选过位置 → 直接写那个文件。这条路不经过下载管线:
+  // ① 用户选过位置(意图) → 只往那个文件写。这条路不经过下载管线:
   //    没有下载记录、不会出现"已删除"、下载管理器也插不进手
+  const { [STRATEGY_KEY]: savedStrategy } = await chrome.storage.local.get(STRATEGY_KEY);
   const handle = await getHandle();
-  let hint = null;
-  if (handle) {
-    if (await handleWritable(handle, { request: reason === 'manual' })) {
+  // 迁移: 加这个键之前的版本没记"意图", 只能从现场推断 —— 有句柄、或上次备份确实是自选模式,
+  // 就认定意图是自选位置。**不这么认的话, 老用户的意图会被默认值('downloads')顶掉, 下次自动备份
+  // 又往下载目录丢一个文件**(正是 2026-10-09 那个病例的翻版)。
+  const strategy = savedStrategy || ((handle || prev?.mode === 'file') ? 'file' : 'downloads');
+  if (!savedStrategy && strategy === 'file') await chrome.storage.local.set({ [STRATEGY_KEY]: 'file' });
+  if (strategy === 'file') {
+    let fail = null;
+    if (!handle) fail = '自选位置记不清了(浏览器把句柄清掉了), 点「更改位置…」重新选一次';
+    else if (await handleWritable(handle, { request: reason === 'manual' })) {
       try {
         const w = await handle.createWritable();
         await w.write(text);
         await w.close();
-        const state = { ...base, mode: 'file', name: handle.name };
+        const state = { ...base, mode: 'file', name: handle.name, needAuth: false };
         await chrome.storage.local.set({ [STATE_KEY]: state });
         return state;
       } catch (e) {
-        hint = `写自选文件失败(${e.message}), 这次先写到下载目录`;
+        fail = `写自选文件失败: ${e.message}`;
       }
     } else {
-      hint = '自选位置的写入权限需要重新确认(点一下「立即备份」或「更改位置…」授权), 这次先写到下载目录';
+      // 浏览器会把 File System Access 的写权限收回去(重启/过一段时间), 而自动备份**没有用户手势**,
+      // 弹不出授权框 —— 这时**绝不能**改往下载目录写: 用户看到下载目录里冒出新文件, 会以为
+      // "备份位置设置被覆盖了"(真实病例 2026-10-09)。所以什么都不写, 只把状态记下来让 UI 报出来。
+      fail = '自选位置的写入权限被浏览器收回了, 点「重新授权并备份」点一下就好';
     }
+    // 保留上一次成功备份的 at/sig/统计: 于是"上次备份 …"显示的还是真有备份的那次,
+    // 而 sig 不变 ⇒ 下次开面板会再试一次(授权恢复后自动补上)
+    const state = {
+      ...(prev || {}),
+      mode: 'file', name: handle?.name || prev?.name || '自选文件',
+      needAuth: true, hint: fail,
+    };
+    await chrome.storage.local.set({ [STATE_KEY]: state });
+    return state;
   }
 
   // ② 默认: 系统下载目录。filename 用**相对名** ⇒ macOS 落 ~/Downloads、
@@ -249,7 +275,7 @@ export async function writeBackup(reason = 'manual') {
   const id = await download(url);
   const keepId = (await settleOwnItem(id, url))?.id ?? id;
   await pruneOlder(prev?.id, keepId, url);
-  const state = { ...base, id: keepId, mode: 'downloads', name: BACKUP_FILE, hint };
+  const state = { ...base, id: keepId, mode: 'downloads', name: BACKUP_FILE, needAuth: false };
   await chrome.storage.local.set({ [STATE_KEY]: state });
   return state;
 }
@@ -342,6 +368,12 @@ export function initBackup() {
     locationLabel.textContent = custom ? state.name : '下载目录';
     locationLabel.title = custom ? state.name : `系统下载目录 / ${BACKUP_FILE}`;
     locationLabel.dataset.mode = custom ? 'file' : 'downloads';
+    // 权限被收回时必须**看得见**(不能只弹一条 2 秒的 toast —— 上次就是这么被错过的):
+    // 位置值标红 + 把「立即备份」改成「重新授权并备份」(点一下带手势, 正好是重新授权的时机)
+    const needAuth = !!state?.needAuth;
+    locationLabel.classList.toggle('warn', needAuth);
+    locationLabel.title = needAuth ? `${state.name} —— 写入权限需要重新确认` : locationLabel.title;
+    nowBtn.textContent = needAuth ? '重新授权并备份' : '立即备份';
     revealBtn.hidden = custom;
     resetBtn.hidden = !custom;
   };

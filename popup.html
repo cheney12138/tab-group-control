@@ -654,6 +654,8 @@
     /* 备份行右侧: 值 + 一两个小药丸(位置可能很长, 让它自己省略) */
     .backup-pos { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
     .backup-pos .svalue { max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 备份位置权限被浏览器收回时: 把这个值标出来(不能只靠一条 2 秒就飘走的 toast) */
+    .backup-pos .svalue.warn { color: var(--danger); }
     .sbtn:hover { background: var(--hover); color: var(--text); }
     /* iOS toggle 开关: 扁平纯净 */
     .srow input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
