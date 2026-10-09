@@ -62,7 +62,7 @@ export function showToast(text) {
 
 // 面板内确认条: 系统确认(confirm)会被设置的覆盖层遮挡,导致流程无声卡死。
 // 推送形态的确认/取消条,返回 Promise<boolean>,8s 超时视为取消
-export function confirmInPanel(text) {
+export function confirmInPanel(text, okLabel = '确认清理') {
   return new Promise((resolve) => {
     let banner;
     const settle = (val) => {
@@ -79,7 +79,7 @@ export function confirmInPanel(text) {
       cancelBtn.textContent = '取消';
       const okBtn = document.createElement('button');
       okBtn.className = 'push-action';
-      okBtn.textContent = '确认清理';
+      okBtn.textContent = okLabel;
       cancelBtn.addEventListener('click', () => settle(false));
       okBtn.addEventListener('click', () => settle(true));
       b.appendChild(msg);

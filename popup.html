@@ -670,6 +670,31 @@
     .srow input[type="checkbox"]:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
     .srow input[type="checkbox"]:checked + .toggle-track::after { transform: translateX(14px); }
     .srow input[type="checkbox"]:focus-visible + .toggle-track { box-shadow: 0 0 0 3px var(--ring); }
+    /* 备份位置的内联小输入框(与规则编辑器里的 chip 输入同一路数: 基座样式, 主题只调 token) */
+    .sinput {
+      width: 150px; text-align: right; border: 1px solid transparent; background: var(--fill);
+      border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px;
+      color: var(--text-2); outline: none;
+    }
+    .sinput::placeholder { color: var(--text-3); }
+    .sinput:hover { border-color: var(--hairline); }
+    .sinput:focus { border-color: var(--accent); background: var(--surface); color: var(--text); }
+    /* 行内"点一下展开说明"的小圆钮 + 说明行。
+     * ⚠️ 2026-10-09 病例(本机): 一开始复用规则头那个 .hint-icon(靠 :hover/:focus-visible 弹气泡),
+     * 用户点它**什么都不发生**。实测两点: ① 鼠标点击不匹配 :focus-visible(那条只在键盘聚焦时生效);
+     * ② 更根本的是气泡 position:absolute 挂在行下方, 而这一行在弹窗底部 —— 气泡 y=520、高 167,
+     *    底边 687 早已越过弹窗(520 高), 又被 .sbox 的 overflow:hidden 剪掉 ⇒ 怎么触发都看不见。
+     * 所以改成"点一下在同位置展开一行说明": 内容在**流内**, 不会被裁、也不会跑出屏幕。 */
+    .s-hint-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 17px; height: 17px; margin-left: 3px; padding: 0;
+      border: none; background: none; color: var(--text-3); cursor: pointer;
+      vertical-align: middle; border-radius: 5px;
+    }
+    .s-hint-btn:hover, .s-hint-btn[aria-expanded="true"] { color: var(--accent); }
+    .s-hint-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; }
+    .s-hint-line { padding: 0 14px 10px; margin-top: -4px; font-size: 11px; line-height: 1.6; color: var(--text-3); }
+    .s-hint-line b { color: var(--text-2); font-weight: 600; }
     /* 删除按键: 去边框灰底,与文字一体(带小箭头) */
     .sselect { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-weight: 500; }
     .sselect select {
@@ -1208,7 +1233,7 @@
       30%, 80% { border-color: color-mix(in srgb, var(--danger) 65%, transparent); }
       55% { border-color: var(--danger); }
     }
-    .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2; }
+    .host-add-input.invalid-flash, .sinput.invalid-flash { animation: invalid-flash 0.6s ease 2; }
     /* 组名重名拦截: 同名闪烁(与无效输入同一视觉语言)。
        组名框常态 border:none,闪烁时补 transparent border 让动画可见,
        padding 同步减 1px 补偿占位,防布局抖动 */
@@ -2035,7 +2060,8 @@
       /* 重复域名定位提示: 保留闪烁(否则被冻结到不可见) */
       html:not([data-force-motion="on"]) .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
       /* 无效输入拦截提示: 同上,提示信号不能被冻结 */
-      html:not([data-force-motion="on"]) .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      html:not([data-force-motion="on"]) .host-add-input.invalid-flash,
+      html:not([data-force-motion="on"]) .sinput.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       html:not([data-force-motion="on"]) .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       /* Tab 滑块与设置面板抽屉: 保留动画 */
       html:not([data-force-motion="on"]) .view-tabs .tab-slider,
@@ -3058,7 +3084,8 @@
         </div>
         <div class="sbox">
           <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>
-          <div class="srow"><span class="slabel">备份位置</span><span class="backup-pos"><span class="svalue" id="backupLocationLabel">下载目录</span><button id="backupResetBtn" class="rules-io-link" title="改回写到系统下载目录" hidden>用回默认</button><button id="backupPickBtn" class="rules-io-link" title="自己挑一个文件放备份(系统保存框)">更改位置…</button></span></div>
+          <div class="srow"><span class="slabel">备份位置<button type="button" id="backupHintBtn" class="s-hint-btn" aria-expanded="false" aria-controls="backupHintLine" title="点一下看说明"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.4" r="0.4" fill="currentColor" stroke="none"/></svg></button></span><span class="backup-pos"><input id="backupFolderInput" class="sinput" type="text" placeholder="下载目录" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="下载目录下的子文件夹" title="填下载目录下的子文件夹(可多层, 如 TGS/自动备份); 留空就放在下载目录根"><button id="backupOpenFolderBtn" class="rules-io-link" title="用系统文件管理器打开“下载”目录, 看看里面有什么/新建一个子文件夹">打开目录</button></span></div>
+          <div class="s-hint-line" id="backupHintLine" hidden>备份只能落在系统<b>“下载”目录</b>里 —— 浏览器不给扩展“写到别处”的长期权限（自己挑任意路径会变成每次备份都弹一次授权框）。这里只填 <b>“下载”下的子文件夹名</b>（如 TGS/自动备份，最多三层；留空 = 下载目录根），旁边<b>「打开目录」</b>用来看清 / 新建文件夹。Chrome 的文件夹选择器对家目录、文稿、下载这些位置本身是拒绝打开的，所以这里没摆“选择”按钮。</div>
           <div class="srow"><span class="svalue" id="backupStateLabel">尚未备份</span><span class="backup-pos"><button id="backupRevealBtn" class="rules-io-link" title="在访达 / 资源管理器中显示这个文件">文件位置</button><button id="backupNowBtn" class="rules-io-link" title="现在就写一份">立即备份</button></span></div>
           <div class="srow"><span class="slabel">从备份恢复</span><button id="backupRestoreBtn" class="rules-io-link" title="选一份之前备份的 JSON">选择文件…</button><input id="backupFileInput" type="file" accept=".json,application/json" hidden></div>
         </div>

@@ -653,11 +653,18 @@ chrome.commands.onCommand.addListener((command) => {
 // **不调 suggest()**, 免得干扰下载管理器自己的命名。
 const BACKUP_FILENAME = 'tab_group_rule_bak.json';   // 必须与 features/backup.js 的 BACKUP_FILE 一致
 const BACKUP_URL_MARK = 'tgs-backup';                // 载荷里的 "format": "tgs-backup"(encodeURIComponent 不会转义它)
+const BACKUP_FOLDER_KEY = 'backupFolder';            // 下载目录下的相对子文件夹(空 = 根)
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   const isOurs = typeof item.url === 'string'
     && item.url.startsWith('data:')
     && item.url.includes(BACKUP_URL_MARK);
-  if (isOurs) suggest({ filename: BACKUP_FILENAME, conflictAction: 'overwrite' });
+  if (!isOurs) return;   // 别人的下载一句话都不说, 免得干扰下载管理器自己的命名
+  // 名字要连子文件夹一起建议 —— 只给文件名的话, 用户在设置里填的子文件夹会被建议回根目录
+  chrome.storage.local.get(BACKUP_FOLDER_KEY).then((s) => {
+    const raw = s[BACKUP_FOLDER_KEY];
+    const folder = typeof raw === 'string' ? raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+    suggest({ filename: folder ? `${folder}/${BACKUP_FILENAME}` : BACKUP_FILENAME, conflictAction: 'overwrite' });
+  }).catch(() => suggest({ filename: BACKUP_FILENAME, conflictAction: 'overwrite' }));
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
