@@ -1411,18 +1411,32 @@
       border-collapse: collapse;
       width: 100%;
     }
+    /* 帮助卡(使用帮助 · 关于插件)这张速查表。
+     * ⚠️ 2026-10-14 用户反馈"这部分字体有点丑" —— 病根: 一张小卡里挤了三种字体
+     * (宋体标题 + 无衬线正文 + 加粗等宽键位), 且键位只是粗字、没有形状, 整列读成一堵字墙。
+     * 现在: 键位统一套 .kbd, **每套主题给它自己的形状与字面**(见各主题块); 正文降到常规字重。 */
     .shortcut-table td {
-      padding: 3px 0;
-      font-size: 12px;
+      padding: 3.5px 0;
+      font-size: 11.5px;
+      line-height: 1.55;
       color: var(--text-2);
     }
-    .shortcut-table td:first-child {
-      width: 60px;
+    /* 键帽(linear 基准形态: 方角 + 等宽 + 浅灰底) */
+    .kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: var(--fill-2);
       color: var(--text);
-      font-weight: 600;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 11px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.5;
+    }
+    .help-card-head .app-ver { font-variant-numeric: tabular-nums; }
+    .shortcut-table td:first-child {
+      width: 74px;
+      padding-right: 10px;
       white-space: nowrap;
+      vertical-align: top;
     }
     /* 细滚动条: 全局 5px 半透明,浮在边缘,不抢视觉焦点 */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -2293,6 +2307,18 @@
       font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
 
+    /* 帮助卡在 ink 下: 键位改**宋体**、去掉键帽 —— 墨纸上的一块等宽灰底键帽是"外来件";
+       行间给一条极淡的分隔线, 像账本。正文仍留在信息层(无衬线, 保证小字号可读)。
+       这是对"宋体只上气质层"的一处**有意例外**: 键位是短符号(↑↓/Tab/⌘C), 宋体不费力。 */
+    html[data-theme="ink"] .help-card .kbd {
+      background: none; padding: 0; border-radius: 0;
+      font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+    }
+    html[data-theme="ink"] .help-card .shortcut-table tr + tr td {
+      border-top: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
+    }
+
     /* 结构性符号 1: 水墨主题专属分组数量角标 → 还原真水墨画墨团(按分组色动态晕染,白字反差) */
     html[data-theme="ink"] .group-count {
       min-width: 14px;
@@ -2833,6 +2859,15 @@
       opacity: 0.98;
     }
 
+    /* 帮助卡在 sky 下: 键帽走本主题的圆语言(全圆角药丸), 字面用它的等宽 + 宋体兜底组合 */
+    html[data-theme="sky"] .help-card .kbd {
+      border-radius: 999px;
+      padding: 1px 7px;
+      background: var(--fill-2);
+      font-family: ui-monospace, SFMono-Regular, "Noto Serif SC", serif;
+      letter-spacing: 0.01em;
+    }
+
     /* ============================================================
      * 新增主题: 蓝天颗粒 (data-theme="sky")
      * 纯视觉换肤,严格限定在 [data-theme="sky"] 命名空间下,不影响其他主题
@@ -3159,20 +3194,20 @@
           <div class="srow"><span class="slabel">从备份恢复</span><button id="backupRestoreBtn" class="rules-io-link" title="选一份之前备份的 JSON">选择文件…</button><input id="backupFileInput" type="file" accept=".json,application/json" hidden></div>
         </div>
         <div class="help-card">
-          <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 <span id="appVersion">v—</span></div>
+          <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 <span id="appVersion" class="app-ver">v—</span></div>
           <table class="shortcut-table">
             <tbody>
-              <tr><td>↑ ↓</td><td>上下选择(跨分组)</td></tr>
-              <tr><td>← →</td><td>收起 / 展开分组</td></tr>
-              <tr><td>Tab</td><td>切换视图</td></tr>
-              <tr><td>Enter</td><td>切换到选中标签</td></tr>
-              <tr><td><span class="k-c"></span>C</td><td>复制选中标签的 URL</td></tr>
-              <tr><td><span class="k-c"></span>⌫</td><td>删除选中项(有重复时先逐份删副本)</td></tr>
-              <tr><td><span class="k-c"></span>Z</td><td>撤销刚才的关闭</td></tr>
-              <tr><td><span class="k-c"></span>⇧K</td><td>清理 7 天未用的标签</td></tr>
-              <tr><td>Esc</td><td>清空搜索词 / 关闭</td></tr>
-              <tr><td><span class="k-c"></span>E</td><td>呼出本弹窗(全局)</td></tr>
-              <tr><td>/b /h /r</td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
+              <tr><td><span class="kbd">↑ ↓</span></td><td>上下选择(跨分组)</td></tr>
+              <tr><td><span class="kbd">← →</span></td><td>收起 / 展开分组</td></tr>
+              <tr><td><span class="kbd">Tab</span></td><td>切换视图</td></tr>
+              <tr><td><span class="kbd">Enter</span></td><td>切换到选中标签</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span>C</span></td><td>复制选中标签的 URL</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span>⌫</span></td><td>删除选中项(有重复时先逐份删副本)</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span>Z</span></td><td>撤销刚才的关闭</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span>⇧K</span></td><td>清理 7 天未用的标签</td></tr>
+              <tr><td><span class="kbd">Esc</span></td><td>清空搜索词 / 关闭</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span>E</span></td><td>呼出本弹窗(全局)</td></tr>
+              <tr><td><span class="kbd">/b /h /r</span></td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
             </tbody>
           </table>
           <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="k-cmd"></span>E</div>
