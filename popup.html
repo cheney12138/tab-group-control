@@ -59,9 +59,15 @@
       transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.15s ease, opacity 0.12s ease;
     }
     button:active, [role="menuitem"]:active, .sbtn:active {
-      scale: 0.93;
-      /* 按下**瞬时**到位(0 秒): 点按只有几十毫秒, 带过渡的话连一半都走不到、看着像没反应 */
-      transition-duration: 0s;
+      /* ⚠️ 2026-10-09 病例(本机): 这里原本是 `scale: 0.93`(把盒子缩小)。用户报"点这个按钮,
+       * 底部会有一条细线"。实测(1x 屏 + ink 主题, 贴着按钮底边逐行取色):
+       *     缩到 0.93 的盒子停在**小数尺寸**上 ⇒ 圆角边缘的抗锯齿铺成**两行**, 多出那一行是
+       *     ~11% 的按钮色 (204,127,117), 夹在按钮和纸色之间 —— **静态按住**时最明显(静止的边缘
+       *     最容易被看成一条线)。2x 屏上这行只有半个物理像素, 所以一开始没看出来。
+       * 改成**只动涂色、不动几何**: 按下压暗一档(边缘始终落在原像素上 ⇒ 没有那条柔边)。
+       * 松开那一下的回弹(tap-bounce 动画)仍保留缩放 —— 那是**运动**中的边, 同一帧的柔边看不出来。 */
+      filter: brightness(0.93);
+      transition-duration: 0s;   /* 按下瞬时到位: 点按只有几十毫秒, 带过渡连一半都走不到 */
     }
     /* 点按回弹: 光靠 :active 交代不了"点按" —— 逐帧实测(2026-10-08 用户报"点按没有, 只有按住
      * 触摸板才有"): 快点点按(mousedown/mouseup 落在同一帧)整段采样里**0 帧**出现过缩小, 而按住
@@ -81,7 +87,8 @@
       animation: tap-bounce 0.26s var(--ease-spring);
     }
     /* 开关: 缩的是道轨而不是整行(48px 的行缩 6% 看着像坏了) */
-    label.srow:active .toggle-track { scale: 0.92; }
+    /* 开关道轨同理: 缩它也会在小数尺寸上多一行柔边, 改成压暗一档 */
+    label.srow:active .toggle-track { filter: brightness(0.94); }
 
     @media (prefers-color-scheme: dark) {
 
