@@ -2321,6 +2321,16 @@
       font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
     }
     html[data-theme="ink"] .help-card .kbd + .kbd { margin-left: 7px; }
+    /* 帮助卡里 ⌘ 不带小方帽(2026-10-14 用户圈红"⌘ 的白底突兀"): 这一列别的键都是裸宋体,
+       唯独 ⌘ 套着白底描边盒, 就它"穿外套"。只剥盒, 字面仍留等宽(符号用衬线渲染没把握);
+       .keycap(设置行按钮上的键帽)不动 —— 那是"按钮上的键位标注", 盒子在那是有意的。 */
+    html[data-theme="ink"] .help-card .k-c,
+    html[data-theme="ink"] .help-card .k-cmd {
+      background: none;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+    }
     html[data-theme="ink"] .help-card .shortcut-table tr + tr td {
       border-top: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
     }
