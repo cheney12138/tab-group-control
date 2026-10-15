@@ -1431,9 +1431,14 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.5;
     }
+    /* 组合键 = **一键一帽**(2026-10-14 用户圈红"组合键太挤"): ⌘ 与字母各自成帽,
+     * 帽间不留 HTML 空白(inline-block 的空白格会叠加在间距上), 距离全由这条 margin 给。 */
+    .help-card .kbd + .kbd { margin-left: 4px; }
+    /* 页脚空间窄: "默认 ⌘ E" 作为整体换行, 别把 E 单独甩到下一行(sky 的药丸最宽, 必踩) */
+    .help-card-sub .nw { white-space: nowrap; }
     .help-card-head .app-ver { font-variant-numeric: tabular-nums; }
     .shortcut-table td:first-child {
-      width: 74px;
+      width: 88px; /* 三枚键帽(/b /h /r)并排的宽度; 74px 装不下最宽行 */
       padding-right: 10px;
       white-space: nowrap;
       vertical-align: top;
@@ -2315,6 +2320,7 @@
       font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif;
       font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
     }
+    html[data-theme="ink"] .help-card .kbd + .kbd { margin-left: 7px; }
     html[data-theme="ink"] .help-card .shortcut-table tr + tr td {
       border-top: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
     }
@@ -3197,20 +3203,20 @@
           <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 <span id="appVersion" class="app-ver">v—</span></div>
           <table class="shortcut-table">
             <tbody>
-              <tr><td><span class="kbd">↑ ↓</span></td><td>上下选择(跨分组)</td></tr>
-              <tr><td><span class="kbd">← →</span></td><td>收起 / 展开分组</td></tr>
+              <tr><td><span class="kbd">↑</span><span class="kbd">↓</span></td><td>上下选择(跨分组)</td></tr>
+              <tr><td><span class="kbd">←</span><span class="kbd">→</span></td><td>收起 / 展开分组</td></tr>
               <tr><td><span class="kbd">Tab</span></td><td>切换视图</td></tr>
               <tr><td><span class="kbd">Enter</span></td><td>切换到选中标签</td></tr>
-              <tr><td><span class="kbd"><span class="k-c"></span>C</span></td><td>复制选中标签的 URL</td></tr>
-              <tr><td><span class="kbd"><span class="k-c"></span>⌫</span></td><td>删除选中项(有重复时先逐份删副本)</td></tr>
-              <tr><td><span class="kbd"><span class="k-c"></span>Z</span></td><td>撤销刚才的关闭</td></tr>
-              <tr><td><span class="kbd"><span class="k-c"></span>⇧K</span></td><td>清理 7 天未用的标签</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">C</span></td><td>复制选中标签的 URL</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">⌫</span></td><td>删除选中项(有重复时先逐份删副本)</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">Z</span></td><td>撤销刚才的关闭</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></td><td>清理 7 天未用的标签</td></tr>
               <tr><td><span class="kbd">Esc</span></td><td>清空搜索词 / 关闭</td></tr>
-              <tr><td><span class="kbd"><span class="k-c"></span>E</span></td><td>呼出本弹窗(全局)</td></tr>
-              <tr><td><span class="kbd">/b /h /r</span></td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
+              <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">E</span></td><td>呼出本弹窗(全局)</td></tr>
+              <tr><td><span class="kbd">/b</span><span class="kbd">/h</span><span class="kbd">/r</span></td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
             </tbody>
           </table>
-          <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="k-cmd"></span>E</div>
+          <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="nw"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">E</span></span></div>
         </div>
       </div>
     </div>
