@@ -1709,11 +1709,24 @@
      *    (折叠的分组头也能被选中, 所以 :not 里带上 .group-header.active —— 当 focusCurrentTab
      *     找不到当前标签行时会退到 setActive(0), 那一下的 0 号单元可能就是折叠头)
      * (副作用: 入场那 420ms 内按 ↑↓ 换选中行, 新选中行会立刻全显出来。这是想要的: 键盘焦点就该即时。) */
+    /* 选中行: 位置仍是一睁眼就浮好(**不参与 translate**), 但从"完全不入场"改为"只淡入" ——
+     * 2026-10-14 病例: animation:none 让它第一帧孤零零全显, 周围全是空的, 内容涌入时整段读成"闪一下"。
+     * 改为 0 延迟的 opacity-only 入场: 选中行第一个亮相, 上下文随后展开; 位置分毫未动, 不违 10-08 病例。 */
     body.entrance .tab-item.active,
-    body.entrance .group-header.active { animation: none; }
+    body.entrance .group-header.active {
+      animation: active-enter 0.16s ease-out backwards;
+      animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
+    }
     @keyframes row-enter {
-      from { opacity: 0; translate: 0 3px; }
+      /* 2026-10-14 用户口径: "给分组加个向下展开的入场" —— 行从上方 -5px 落定, 配合
+       * 分组头多走两拍的 stagger(render.js staggerDelay(3)), 整列读成一组接一组向下展开,
+       * 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的 scale 打架。 */
+      from { opacity: 0; translate: 0 -5px; }
       to { opacity: 1; translate: 0 0; }
+    }
+    @keyframes active-enter {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     .tab-item {
       display: flex;

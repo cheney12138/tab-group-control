@@ -110,8 +110,9 @@ let staggerIdx = 0; // stagger 入场: render 内每行取号
 // 计时:最长 stagger 96ms(12 行 × 8ms) + 动画 160ms ⇒ 420ms 足够走完。
 let entrancePlayed = false;
 let entranceTimer = 0;
-function staggerDelay() {
-  const i = Math.min(staggerIdx++, 12); // 封顶 12 行,后面同时入场
+function staggerDelay(step = 1) {
+  staggerIdx += step;
+  const i = Math.min(staggerIdx, 12); // 封顶 12 拍,后面的同时入场(总延迟仍 ≤96ms, 窗口 420ms 装得下)
   return `${i * 8}ms`;
 }
 // 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
@@ -304,7 +305,8 @@ function restoreFocus(prevTabId) {
 function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWindowId = null) {
   const header = document.createElement('div');
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
-  header.style.animationDelay = staggerDelay();
+  // 分组头多走两拍: 组与组之间留出呼吸, 组内行紧跟着连续入场 ⇒ 整段读成"分组逐个向下展开"
+  header.style.animationDelay = staggerDelay(3);
   header.dataset.groupKey = groupKey(group);
   const assets = themeAssets();
   const groupColor = assets.groupColors[(group && group.color) || 'grey'] || assets.groupColors.grey;
