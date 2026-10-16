@@ -2285,6 +2285,17 @@
       z-index: 999;
     }
 
+    /* 病例(2026-10-14, 用户极限截图): 唤起入场时列表区整块闪出"非主题灰", 展开完又恢复纸色。
+     * 病根: ink 的纸纹是 body::before 上 0.22 透明度的灰噪点 + mix-blend-mode: hard-light
+     * **浮在内容之上**, 它依赖"身后有实色米纸"才能混出纸色。真机 GPU 路径上, 入场动画
+     * (行的 opacity/translate)让 #results 滚动容器被提升为独立合成层, 混合层在该区域的
+     * 取样退化 ⇒ 裸灰噪点直接透出(无头/软件渲染复现不了, 故探针一直抓不到)。
+     * 修法: 给 #results 上**不透明纸底** —— 混合层永远有实色可依。sky 把纹理烤进不透明
+     * 背景天然免疫, 这条算 ink 补课。健康路径下视觉零变化(身后本来就是同一张纸)。 */
+    html[data-theme="ink"] #results {
+      background: var(--paper);
+    }
+
     /* 字体分层: 气质层(衬线宋体,优先匹配 macOS 原生宋体 Songti SC 及 Windows SimSun/STSong) */
     html[data-theme="ink"] .group-title,
     html[data-theme="ink"] .view-tab,
