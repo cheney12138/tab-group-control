@@ -580,6 +580,13 @@ initBackup();
 initSearch({ render });
 initRender({ refreshData, getSettings: () => settings });
 
+// 入场动效**允许打断**(2026-10-14 用户口径: "不要强迫用户看完"): 任何主动输入
+// (按键/滚轮/按下/触摸)第一次出现就立即收场入场并冲掉排队的补渲染。
+// mousemove 不算 —— 手搭在鼠标上的微动不该杀掉动画。endEntrance 幂等, 重复触发无害。
+for (const ev of ['keydown', 'wheel', 'mousedown', 'touchstart']) {
+  document.addEventListener(ev, () => endEntrance(true), { capture: true, passive: true });
+}
+
 (async () => {
   const bootT0 = performance.now();
   await loadTabs();

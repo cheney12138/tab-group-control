@@ -113,7 +113,7 @@ let entranceTimer = 0;
 let queuedDuringEntrance = false;
 function staggerDelay(step = 1) {
   staggerIdx += step;
-  const i = Math.min(staggerIdx, 14); // 封顶 14 拍,后面的同时入场(总延迟 ≤280ms + 动画 400ms, 窗口 900ms 装得下)
+  const i = Math.min(staggerIdx, 14); // 封顶 14 拍,后面的同时入场(总延迟 ≤280ms + 动画 220ms, 窗口 600ms 装得下)
   return `${i * 20}ms`;
 }
 // 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
@@ -152,7 +152,7 @@ export function render() {
       entranceTimer = 0;
       document.body.classList.remove('entrance');
       if (queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
-    }, 900);
+    }, 600);
   } else if (document.body.classList.contains('entrance')) {
     // 2026-10-14 病例(用户报"像是整体刷新了一下, 然后做了个非常短暂的展开"):
     // 启动期追帧渲染(归组刷新的 400ms 防抖/快照追帧)落在入场窗口内, 原来直接摘

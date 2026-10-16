@@ -1697,17 +1697,19 @@
     }
     /* 列表行 stagger 入场: 逐行淡入+上浮,每行延迟 8ms(Raycast 式质感)。
      * 只动 opacity/translate(只合成、不触发布局),**只在弹窗首次渲染生效, 搜索重渲染不播** */
-    /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 900ms 后摘掉
-     * (0.4s 动画 + 最长 280ms stagger;窗口内非搜索重渲染排队补播,见 render.js)。
+    /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 600ms 后摘掉
+     * (0.22s 动画 + 最长 280ms stagger;窗口内非搜索重渲染排队补播,见 render.js)。
      * ⚠️ 2026-09-18 病例(本机):强行动效打开后,每次敲搜索键整套列表都重新上浮 = 闪烁 ✗。
      * 病因:入场动画挂在**常态选择器**上 ⇒ 每次重渲染都会重放。结构上把"入场"与"重渲染"分开。 */
     /* 组头是**锚**(2026-10-14 用户口径: "一上来分组是锚定的"): 不参与入场, 第一帧就在。
        入场只属于组内的 tab 行 —— 配合组头处的节拍空隙(render.js), 每组读成"箭头刚展开,
        tab 向下露出"。 */
     body.entrance .tab-item {
-      /* 0.4s + 两段式 opacity(前 40% 只到 0.3): 消除"蹦出来"的闪现感 ——
-       * ease-out 单段曲线上 opacity 起步极快, 头 80ms 就冲到六七成, 体感即闪。 */
-      animation: row-enter 0.4s cubic-bezier(0.3, 0, 0.3, 1) backwards;
+      /* 2026-10-14 用户口径: "线性, 丝滑, 帧率高一点, 允许打断" ——
+       * 花哨的两段式 bezier 撤掉换 linear(短时长下线性最不花, 也最少帧抖动),
+       * 0.22s 收短一半, 配 20ms 行距整个入场 ~0.5s 走完; 任何主动输入立即打断
+       * (main.js 的 endEntrance 监听), 不强迫看完。 */
+      animation: row-enter 0.22s linear backwards;
     }
     /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
      * ⚠️ 2026-10-08 病例(本机): 用户报"唤起面板后, 选中的那行才慢慢上浮, 看着像延迟"。
@@ -1724,15 +1726,14 @@
      * 2026-10-14 病例: animation:none 让它第一帧孤零零全显, 周围全是空的, 内容涌入时整段读成"闪一下"。
      * 改为 0 延迟的 opacity-only 入场: 选中行第一个亮相, 上下文随后展开; 位置分毫未动, 不违 10-08 病例。 */
     body.entrance .tab-item.active {
-      animation: active-enter 0.4s cubic-bezier(0.3, 0, 0.3, 1) backwards;
+      animation: active-enter 0.22s linear backwards;
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
     @keyframes row-enter {
       /* 2026-10-14 用户口径: "给分组加个向下展开的入场" —— 行从上方 -5px 落定, 配合
        * 分组头多走两拍的 stagger(render.js staggerDelay(3)), 整列读成一组接一组向下展开,
        * 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的 scale 打架。 */
-      from { opacity: 0; translate: 0 -12px; }
-      40% { opacity: 0.3; } /* 前段慢速显形, 后段到位 —— 闪现感的解药 */
+      from { opacity: 0; translate: 0 -10px; }
       to { opacity: 1; translate: 0 0; }
     }
     @keyframes active-enter {
