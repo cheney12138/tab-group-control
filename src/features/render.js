@@ -109,9 +109,19 @@ let staggerIdx = 0; // stagger 入场: render 内每行取号
 // 病例(本机 2026-09-18):强行动效打开后每次输入整套列表重新上浮 = 闪烁。
 // 计时:最长 stagger 96ms(12 行 × 8ms) + 动画 160ms ⇒ 420ms 足够走完。
 let entrancePlayed = false;
+let entranceTimer = 0;
 function staggerDelay() {
   const i = Math.min(staggerIdx++, 12); // 封顶 12 行,后面同时入场
   return `${i * 8}ms`;
+}
+// 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
+// 病例(本机 2026-10-14, 用户报"⌘E 唤起按 ⬇️ 时 tab 闪烁, 只闪前几个就正常"):
+// 420ms 入场窗口内换选中, 旧 active 行摘掉 .active 后重新命中 body.entrance 的
+// row-enter —— 动画**从头重播**(backwards 先把它按回 opacity:0 再淡入)= 闪一下;
+// 窗口一过没动画可重播, 所以"只闪前几个"。与敲搜索立即停入场同一语义: 用户介入, 动效让路。
+export function endEntrance() {
+  if (entranceTimer) { clearTimeout(entranceTimer); entranceTimer = 0; }
+  document.body.classList.remove('entrance');
 }
 
 // 空态文案按数据源区分(纯机器文案的认知成本小优化)
@@ -135,7 +145,7 @@ export function render() {
   if (!entrancePlayed) {
     entrancePlayed = true;
     document.body.classList.add('entrance');
-    setTimeout(() => document.body.classList.remove('entrance'), 420);
+    entranceTimer = setTimeout(() => { entranceTimer = 0; document.body.classList.remove('entrance'); }, 420);
   } else if (document.body.classList.contains('entrance')) {
     // 首帧还没走完就又重渲染了:立刻停掉入场,否则新行会再从头开始上浮(闪第二次)
     document.body.classList.remove('entrance');

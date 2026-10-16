@@ -19,7 +19,7 @@ import { initCloseBatch } from './features/close-batch.js';
 import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
 import { initBackup } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
-import { initRender, render, closeTab, switchTo, copyTabUrl } from './features/render.js';
+import { initRender, render, closeTab, switchTo, copyTabUrl, endEntrance } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
 
 // 性能埋点(无条件输出): 脚本开始执行的时刻。
@@ -373,6 +373,9 @@ function handleShortcuts(e) {
 
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
+    // ⚠️ 必须先于任何 .active 增删: 入场窗口内换选中, 旧行会重播 row-enter 而闪烁
+    // (病例与机理见 render.js endEntrance 注释)
+    endEntrance();
     const next = focusIdx + (e.key === 'ArrowDown' ? 1 : -1);
     if (next < 0 || next >= units.length) return;
     const el = units[next];
