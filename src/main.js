@@ -374,8 +374,8 @@ function handleShortcuts(e) {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
     // ⚠️ 必须先于任何 .active 增删: 入场窗口内换选中, 旧行会重播 row-enter 而闪烁
-    // (病例与机理见 render.js endEntrance 注释)
-    endEntrance();
+    // (病例与机理见 render.js endEntrance 注释); flush=冲掉窗口内排队的追帧补渲染
+    endEntrance(true);
     const next = focusIdx + (e.key === 'ArrowDown' ? 1 : -1);
     if (next < 0 || next >= units.length) return;
     const el = units[next];

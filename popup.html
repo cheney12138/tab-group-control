@@ -1692,11 +1692,12 @@
     }
     /* 列表行 stagger 入场: 逐行淡入+上浮,每行延迟 8ms(Raycast 式质感)。
      * 只动 opacity/translate(只合成、不触发布局),**只在弹窗首次渲染生效, 搜索重渲染不播** */
-    /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 420ms 后摘掉。
+    /* 入场动效**只**在弹窗首次渲染时播:body.entrance 由 render.js 挂 700ms 后摘掉
+     * (0.24s 动画 + 最长 160ms stagger;窗口内非搜索重渲染排队补播,见 render.js)。
      * ⚠️ 2026-09-18 病例(本机):强行动效打开后,每次敲搜索键整套列表都重新上浮 = 闪烁 ✗。
      * 病因:入场动画挂在**常态选择器**上 ⇒ 每次重渲染都会重放。结构上把"入场"与"重渲染"分开。 */
     body.entrance .tab-item, body.entrance .group-header {
-      animation: row-enter 0.16s ease-out backwards;
+      animation: row-enter 0.24s ease-out backwards;
     }
     /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
      * ⚠️ 2026-10-08 病例(本机): 用户报"唤起面板后, 选中的那行才慢慢上浮, 看着像延迟"。
@@ -1714,14 +1715,14 @@
      * 改为 0 延迟的 opacity-only 入场: 选中行第一个亮相, 上下文随后展开; 位置分毫未动, 不违 10-08 病例。 */
     body.entrance .tab-item.active,
     body.entrance .group-header.active {
-      animation: active-enter 0.16s ease-out backwards;
+      animation: active-enter 0.24s ease-out backwards;
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
     @keyframes row-enter {
       /* 2026-10-14 用户口径: "给分组加个向下展开的入场" —— 行从上方 -5px 落定, 配合
        * 分组头多走两拍的 stagger(render.js staggerDelay(3)), 整列读成一组接一组向下展开,
        * 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的 scale 打架。 */
-      from { opacity: 0; translate: 0 -5px; }
+      from { opacity: 0; translate: 0 -10px; }
       to { opacity: 1; translate: 0 0; }
     }
     @keyframes active-enter {

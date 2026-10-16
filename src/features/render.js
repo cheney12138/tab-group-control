@@ -110,19 +110,21 @@ let staggerIdx = 0; // stagger 入场: render 内每行取号
 // 计时:最长 stagger 96ms(12 行 × 8ms) + 动画 160ms ⇒ 420ms 足够走完。
 let entrancePlayed = false;
 let entranceTimer = 0;
+let queuedDuringEntrance = false;
 function staggerDelay(step = 1) {
   staggerIdx += step;
-  const i = Math.min(staggerIdx, 12); // 封顶 12 拍,后面的同时入场(总延迟仍 ≤96ms, 窗口 420ms 装得下)
-  return `${i * 8}ms`;
+  const i = Math.min(staggerIdx, 16); // 封顶 16 拍,后面的同时入场(总延迟 ≤160ms + 动画 240ms, 窗口 700ms 装得下)
+  return `${i * 10}ms`;
 }
 // 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
 // 病例(本机 2026-10-14, 用户报"⌘E 唤起按 ⬇️ 时 tab 闪烁, 只闪前几个就正常"):
 // 420ms 入场窗口内换选中, 旧 active 行摘掉 .active 后重新命中 body.entrance 的
 // row-enter —— 动画**从头重播**(backwards 先把它按回 opacity:0 再淡入)= 闪一下;
 // 窗口一过没动画可重播, 所以"只闪前几个"。与敲搜索立即停入场同一语义: 用户介入, 动效让路。
-export function endEntrance() {
+export function endEntrance(flush = false) {
   if (entranceTimer) { clearTimeout(entranceTimer); entranceTimer = 0; }
   document.body.classList.remove('entrance');
+  if (flush && queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
 }
 
 // 空态文案按数据源区分(纯机器文案的认知成本小优化)
@@ -146,10 +148,23 @@ export function render() {
   if (!entrancePlayed) {
     entrancePlayed = true;
     document.body.classList.add('entrance');
-    entranceTimer = setTimeout(() => { entranceTimer = 0; document.body.classList.remove('entrance'); }, 420);
+    entranceTimer = setTimeout(() => {
+      entranceTimer = 0;
+      document.body.classList.remove('entrance');
+      if (queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
+    }, 700);
   } else if (document.body.classList.contains('entrance')) {
-    // 首帧还没走完就又重渲染了:立刻停掉入场,否则新行会再从头开始上浮(闪第二次)
-    document.body.classList.remove('entrance');
+    // 2026-10-14 病例(用户报"像是整体刷新了一下, 然后做了个非常短暂的展开"):
+    // 启动期追帧渲染(归组刷新的 400ms 防抖/快照追帧)落在入场窗口内, 原来直接摘
+    // entrance ⇒ 动画中的行被瞬间钉到终态 = 整体刷新感, 级联被拦腰斩断。
+    // 现在排队: 入场播完后一次性补渲染(内容更新不丢, 动效播完整)。
+    // 打字不受此限(state.searching ⇒ 立即摘, 09-18 病例的老语义不变)。
+    if (state.searching) {
+      document.body.classList.remove('entrance');
+    } else {
+      queuedDuringEntrance = true;
+      return;
+    }
   }
   if (!state.filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
