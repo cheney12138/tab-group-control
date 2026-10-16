@@ -320,8 +320,10 @@ function restoreFocus(prevTabId) {
 function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWindowId = null) {
   const header = document.createElement('div');
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
-  // 分组头多走两拍: 组与组之间留出呼吸, 组内行紧跟着连续入场 ⇒ 整段读成"分组逐个向下展开"
-  header.style.animationDelay = staggerDelay(3);
+  // 组头本身不入场(锚定, 见 popup.html), 但它仍是"一次展开"的节拍边界:
+  // 在这里多走两拍不加延迟, 组与组之间留出呼吸, 组内行紧跟着连续入场
+  // ⇒ 每组读成"箭头刚展开, tab 向下露出", 而不是全列表一锅粥地浮现
+  staggerDelay(2);
   header.dataset.groupKey = groupKey(group);
   const assets = themeAssets();
   const groupColor = assets.groupColors[(group && group.color) || 'grey'] || assets.groupColors.grey;

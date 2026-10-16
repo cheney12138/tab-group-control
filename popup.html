@@ -1696,7 +1696,10 @@
      * (0.24s 动画 + 最长 160ms stagger;窗口内非搜索重渲染排队补播,见 render.js)。
      * ⚠️ 2026-09-18 病例(本机):强行动效打开后,每次敲搜索键整套列表都重新上浮 = 闪烁 ✗。
      * 病因:入场动画挂在**常态选择器**上 ⇒ 每次重渲染都会重放。结构上把"入场"与"重渲染"分开。 */
-    body.entrance .tab-item, body.entrance .group-header {
+    /* 组头是**锚**(2026-10-14 用户口径: "一上来分组是锚定的"): 不参与入场, 第一帧就在。
+       入场只属于组内的 tab 行 —— 配合组头处的节拍空隙(render.js), 每组读成"箭头刚展开,
+       tab 向下露出"。 */
+    body.entrance .tab-item {
       animation: row-enter 0.24s ease-out backwards;
     }
     /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
@@ -1707,14 +1710,13 @@
      * "啪"地膨胀到位(实测 365ms 之后某个采样帧才变成 matrix(1.02…))。看起来就是"慢半拍"。
      * 两处治: ① 入场帧改用 `translate`(独立属性), 它再也压不住 .active 的 transform: scale(1.02);
      * ② 选中行干脆不加入场 —— 首帧直接就是浮好的样子。
-     *    (折叠的分组头也能被选中, 所以 :not 里带上 .group-header.active —— 当 focusCurrentTab
+     *    (2026-10-14 起组头整体退出入场 —— "分组锚定"; 折叠头被选中时随锚静态出现。当 focusCurrentTab
      *     找不到当前标签行时会退到 setActive(0), 那一下的 0 号单元可能就是折叠头)
      * (副作用: 入场那 420ms 内按 ↑↓ 换选中行, 新选中行会立刻全显出来。这是想要的: 键盘焦点就该即时。) */
     /* 选中行: 位置仍是一睁眼就浮好(**不参与 translate**), 但从"完全不入场"改为"只淡入" ——
      * 2026-10-14 病例: animation:none 让它第一帧孤零零全显, 周围全是空的, 内容涌入时整段读成"闪一下"。
      * 改为 0 延迟的 opacity-only 入场: 选中行第一个亮相, 上下文随后展开; 位置分毫未动, 不违 10-08 病例。 */
-    body.entrance .tab-item.active,
-    body.entrance .group-header.active {
+    body.entrance .tab-item.active {
       animation: active-enter 0.24s ease-out backwards;
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
