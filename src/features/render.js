@@ -113,7 +113,9 @@ let entranceTimer = 0;
 let queuedDuringEntrance = false;
 function staggerDelay(step = 1) {
   staggerIdx += step;
-  const i = Math.min(staggerIdx, 14); // 封顶 14 拍,后面的同时入场(总延迟 ≤280ms + 动画 220ms, 窗口 600ms 装得下)
+  const i = Math.min(staggerIdx, 200); // 不再封顶 —— 2026-10-14 用户口径"按分组 cell 顺序加载, 不要并行":
+  // 组头 2 拍 + 每行 1 拍, 18 组 × 47 行 ≈ 83 拍 ≈ 1.7s 串行走完(窗口按实际级联总长计算,
+  // 见 scheduleEntranceEnd); 超出一屏的部分在视口外播完, 可见区仍是前几组先出。允许打断。
   return `${i * 20}ms`;
 }
 // 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
@@ -121,6 +123,19 @@ function staggerDelay(step = 1) {
 // 420ms 入场窗口内换选中, 旧 active 行摘掉 .active 后重新命中 body.entrance 的
 // row-enter —— 动画**从头重播**(backwards 先把它按回 opacity:0 再淡入)= 闪一下;
 // 窗口一过没动画可重播, 所以"只闪前几个"。与敲搜索立即停入场同一语义: 用户介入, 动效让路。
+// 按实际级联总长挂收场定时器: staggerIdx 在 build 完成后即总拍数。
+// 必须在每个 build 出口调用(空态/搜索态/浏览态), 否则串行级联没有终点。
+function scheduleEntranceEnd() {
+  if (!document.body.classList.contains('entrance')) return;
+  clearTimeout(entranceTimer);
+  const total = staggerIdx * 20 + 220 + 150; // 全部级联 + 单行动画 + 余量
+  entranceTimer = setTimeout(() => {
+    entranceTimer = 0;
+    document.body.classList.remove('entrance');
+    if (queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
+  }, total);
+}
+
 export function endEntrance(flush = false) {
   if (entranceTimer) { clearTimeout(entranceTimer); entranceTimer = 0; }
   document.body.classList.remove('entrance');
@@ -148,11 +163,8 @@ export function render() {
   if (!entrancePlayed) {
     entrancePlayed = true;
     document.body.classList.add('entrance');
-    entranceTimer = setTimeout(() => {
-      entranceTimer = 0;
-      document.body.classList.remove('entrance');
-      if (queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
-    }, 600);
+    // 收场定时器改到 build 完成后按**实际级联总长**挂(scheduleEntranceEnd) ——
+    // 组数/行数不定的串行级联, 写死窗口必然掐尾巴或白等
   } else if (document.body.classList.contains('entrance')) {
     // 2026-10-14 病例(用户报"像是整体刷新了一下, 然后做了个非常短暂的展开"):
     // 启动期追帧渲染(归组刷新的 400ms 防抖/快照追帧)落在入场窗口内, 原来直接摘
@@ -168,6 +180,7 @@ export function render() {
   }
   if (!state.filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
+    scheduleEntranceEnd();
     return;
   }
 
@@ -247,6 +260,7 @@ export function render() {
     resultsEl.appendChild(frag);
     restoreFocus(prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
+    scheduleEntranceEnd();
     return;
   }
 
@@ -298,6 +312,7 @@ export function render() {
   }
   restoreFocus(prevTabId);
   if (DEBUG) console.log(`[TGS] render 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
+  scheduleEntranceEnd();
 }
 
 // 重渲染后恢复焦点: 优先同 tabId 的行,找不到则不聚焦
