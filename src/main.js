@@ -10,7 +10,7 @@ import { IS_MAC, MOD, DEBUG } from './core/platform.js';
 // features
 import { loadRulesForEdit, isGroupPopOpen, closeGroupPop } from './features/rules.js';
 import { initSettings, updateSettingsBadge, isSettingsOpen, closeSettingsPanel, toggleSettingsPane } from './features/settings.js';
-import { initMedia, applyMediaRowState, setMediaBtnState, SVG_MUTE, SVG_UNMUTE, probeMediaTabs } from './features/media.js';
+import { initMedia, applyMediaRowState, setMediaBtnState, SVG_MUTE, SVG_UNMUTE, probeMediaTabs, probeOneTab } from './features/media.js';
 import { initUndo, isUndoAvailable, doUndo, restoreUndoBatch } from './features/undo.js';
 import { initClean, cleanStaleTabs } from './features/clean.js';
 import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollPastSticky, findGroupOfTab } from './features/nav.js';
@@ -57,7 +57,7 @@ if (!IS_MAC) {
 // 全拼模式——"dingdan" 匹配「订单管理」;首字母 "dd" 也兼容(前缀命中)。
 // ---- tabs.onUpdated 事件路由(main 侧) ----
 // 媒体状态分支委托 features/media;归组分支做列表新鲜度刷新
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // 外部变化(页面内直接暂停/播完)的同步路径。注意: 弹窗按钮点击已由
   // applyMediaRowState 乐观更新过,这里到达时状态一致,幂等无害
   if (changeInfo.audible !== undefined && tabId > 0) {
@@ -76,6 +76,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   // background 快照不含 groupId 变化(它只刷 title/url/audible/muted),
   // 必须 forceFresh 直查;签名比对无变化不渲染,不打断用户正在进行的操作
   if (changeInfo.groupId !== undefined) scheduleGroupRefresh();
+  // 页面加载完成单点补探(与 media.js 的 loading 跳过配套): 重启/换机后全量
+  // 探针会漏掉当时还在 loading 的 tab, 在这里各自加载完各自补, 一次一个
+  if (changeInfo.status === 'complete' && tabId > 0 && tab &&
+      !tab.discarded && /^https?:/.test(tab.url || '')) {
+    probeOneTab(tabId);
+  }
 });
 let groupRefreshTimer = null;
 function scheduleGroupRefresh() {
@@ -139,7 +145,10 @@ async function loadTabs(opts = {}) {
       return t;
     })
     .filter(t => t.url && !t.url.startsWith('chrome-extension://'))
-    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))
+    // tie-break: 重启/换机后恢复的 tab lastAccessed 全部近似相等, 排序退化为
+    // 任意序 —— 当前活动 tab 必须赢平局(代表行、组序都靠它)
+    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0) ||
+                    Number(!!b.active) - Number(!!a.active))
     .map(t => ({ tab: t, group: groupById.get(t.groupId) || null }));
   // 重复合并(QuicKey 同款): 同 URL 多个标签合成一条,保留最近使用的代表,
   // duplicates 记全部副本 id(右上角角标显示份数)。tabs 已按 lastAccessed

@@ -96,20 +96,28 @@ export function applyMediaRowState(tabId, playing) {
 export function probeMediaTabs() {
   // 只探测 http(s) 且未被 Chrome discard 的页面(注入 discarded 页会
   // 把它唤醒重载,不可接受);chrome:// 等不可注入页本来就没有媒体
+  // 2026-10-14 病例(用户口径"重启+换机后加载 tab 内容非常卡顿"): 重启/换机后
+  // 几十个 tab 都在 loading, content.js 还没就绪 → 全量探针逐个 executeScript
+  // 兜底注入 = 给正在加载的页面整批打脚本, 页面加载和弹窗双双卡顿。
+  // → loading 中的 tab 跳过, 等各自 status=complete 时由 onUpdated 单点补探。
   const ids = actions.getAllTabs().map(x => x.tab).filter(t =>
-    t.id > 0 && !t.discarded &&
+    t.id > 0 && !t.discarded && t.status !== 'loading' &&
     (t.url?.startsWith('http://') || t.url?.startsWith('https://'))
   ).map(t => t.id);
-  if (!ids.length) return;
+  for (const id of ids) probeTab(id);
+}
+
+function probeTab(id) {
   // 优先走 manifest content_scripts 已注入的 content.js——sendMessage
   // 成本远低于 executeScript(无新注入开销、不占注入配额)。失败
   // (扩展装/重载前就开着的页面没有 content script)再 executeScript 兜底
-  for (const id of ids) {
-    chrome.tabs.sendMessage(id, { type: 'probe-media' }, () => {
-      if (chrome.runtime.lastError) probeMediaViaScripting(id);
-    });
-  }
+  chrome.tabs.sendMessage(id, { type: 'probe-media' }, () => {
+    if (chrome.runtime.lastError) probeMediaViaScripting(id);
+  });
 }
+
+// onUpdated(status=complete) 单点补探: 页面加载完成才探, 一次一个, 不整批
+export function probeOneTab(id) { probeTab(id); }
 
 // 兜底:content.js 不在的页面(扩展安装/重载前就开着的)动态注入探测。
 // API 守卫: chrome.scripting 只在 manifest 声明 scripting 权限且

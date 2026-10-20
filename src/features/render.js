@@ -278,12 +278,21 @@ export function render() {
     sectionIndex.get(key).items.push(item);
   }
 
+  // 2026-10-14 用户口径: "当前停留的 tab 的素材分组没有排在第一位, 而是排在
+  // 最后一位了"(重启+换机后)。病根: 恢复的 tab lastAccessed 全部近似相等,
+  // 分区序(依赖 filtered 序)退化成任意序。确定钉顶: 含当前窗口活动 tab 的
+  // 分区恒排第一, 不依赖 lastAccessed。
+  const curIdx = sections.findIndex(s2 =>
+    s2.items.some(it => it.tab.active && it.tab.windowId === state.currentWindowId));
+  if (curIdx > 0) sections.unshift(sections.splice(curIdx, 1)[0]);
+
   // 分区只包含 state.filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
   const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
   sections.forEach(section => {
     // 组内排序: 严格按最近使用时间倒排(相对时间显示为升序: 4小时 -> 7小时 -> 9小时)
-    section.items.sort((a, b) => (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0));
+    section.items.sort((a, b) => (b.tab.lastAccessed || 0) - (a.tab.lastAccessed || 0) ||
+                                  Number(!!b.tab.active) - Number(!!a.tab.active)); // 平局时活动 tab 领先
     const key = groupKey(section.group);
     // 搜索模式下强制全部展开,只有空查询浏览时才应用收起状态
     const isCollapsed = collapsed.has(key);
