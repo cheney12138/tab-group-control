@@ -655,7 +655,30 @@ async function findStandaloneWindow() {
   }
 }
 
+// 问活动标签页的 content.js 要指针屏幕坐标(面板锚点只是兜底 —— 面板永远
+// 开在图标附近, 而"跟随指针"要的是真鼠标位置; chrome:// 页没脚本 → 150ms 超时)
+async function queryMousePos() {
+  try {
+    const actives = await chrome.tabs.query({ active: true });
+    // 弹出面板可能算 lastFocusedWindow(无标签页), 挑普通窗口里的活动 tab
+    const tab = actives.find(t => t.windowId > 0 && /^https?:/.test(t.url || ''));
+    if (!tab) return null;
+    return await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 150);
+      chrome.tabs.sendMessage(tab.id, { type: 'get-mouse-pos' }, (r) => {
+        clearTimeout(timer);
+        if (chrome.runtime.lastError || !r?.ok) return resolve(null);
+        resolve({ x: r.x, y: r.y });
+      });
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 async function openStandalone(anchor) {
+  const mouse = await queryMousePos();
+  anchor = mouse || anchor;
   const existing = await findStandaloneWindow();
   if (existing) {
     standaloneWinId = existing.id;
