@@ -676,9 +676,8 @@ async function queryMousePos() {
   }
 }
 
-async function openStandalone(anchor) {
+async function openStandalone() {
   const mouse = await queryMousePos();
-  anchor = mouse || anchor;
   const existing = await findStandaloneWindow();
   if (existing) {
     standaloneWinId = existing.id;
@@ -692,21 +691,33 @@ async function openStandalone(anchor) {
     }
   }
   const { standaloneBounds: b = {} } = await chrome.storage.local.get('standaloneBounds');
-  // 2026-10-14 用户口径: "尺寸跟插件唤起的窗口期望一样, 跟随指针位置唤起"。
-  // 默认尺寸 = 弹窗固有 480×520(此后尊重用户拖拽后的记忆宽高);
-  // 位置: 面板转发来的锚点(面板就开在指针/图标旁) > 记忆位置 > Chrome 默认。
-  // SW 拿不到全局鼠标坐标, 锚点是唯一可靠的"指针位置"来源。
+  const w = Math.max(480, b.width || 480);   // 尺寸 = 弹窗固有 480×520, 尊重拖拽记忆
+  const h = Math.max(520, b.height || 520);
+  // 2026-10-14 用户口径: "尺寸跟插件唤起的窗口期望一样"、"跟随指针位置唤起,
+  // 更方便选中"、"拿不到鼠标就默认放居中, 至少离两边都近"。
+  // 位置优先级: 真指针(content.js 查询) > 聚焦普通窗口的几何中心 > Chrome 默认。
+  // 位置不再记忆 —— 指针/居中都是动态的, 只有宽高值得记。
+  let left, top;
+  if (mouse) {
+    left = Math.round(mouse.x);
+    top = Math.round(mouse.y);
+  } else {
+    try {
+      const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
+      const fw = wins.find(x => x.focused) || wins[wins.length - 1];
+      if (fw) {
+        left = Math.round(fw.left + (fw.width - w) / 2);
+        top = Math.round(fw.top + (fw.height - h) / 2);
+      }
+    } catch (e) {}
+  }
   const createOpts = {
     url: STANDALONE_URL,
     type: 'popup',
     focused: true,
-    width: Math.max(480, b.width || 480),
-    height: Math.max(520, b.height || 520),
-    ...(Number.isFinite(anchor?.x) && Number.isFinite(anchor?.y)
-      ? { left: Math.round(anchor.x), top: Math.round(anchor.y) }
-      : Number.isFinite(b.left) && Number.isFinite(b.top)
-        ? { left: b.left, top: b.top }
-        : {}),
+    width: w,
+    height: h,
+    ...(Number.isFinite(left) && Number.isFinite(top) ? { left, top } : {}),
   };
   let win;
   try {
@@ -786,9 +797,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
   if (msg?.type === 'open-standalone') {
-    // ⌘E 转发(设置"唤起为独立窗口"): 弹出面板自关前请我们开窗, 顺带把
-    // 自己的屏幕位置(anchor)带来 —— 面板就开在指针旁, 窗口原地接管
-    openStandalone(msg?.anchor).then(() => sendResponse({ ok: true })).catch((e) => fail(e));
+    // ⌘E 转发(设置"唤起为独立窗口"): 弹出面板自关前请我们开窗;
+    // 位置由 openStandalone 自行决定(真指针 > 居中), 面板锚点已弃用
+    openStandalone().then(() => sendResponse({ ok: true })).catch((e) => fail(e));
     return true; // 异步应答, 保持通道(等应答再自关, 消息不会丢)
   }
   if (msg?.type === 'get-snapshot') {

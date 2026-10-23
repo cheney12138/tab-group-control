@@ -24,7 +24,7 @@ const keepaliveTimer = setInterval(() => {
 // 最后一次鼠标位置(视口坐标) —— ⌘E 唤起独立窗口时, background 来问,
 // 换算成屏幕坐标后把窗口开在指针旁(2026-10-14 用户口径"跟随指针位置唤起,
 // 更方便选中")。passive 监听, 只存数字, 零开销。
-let lastMouse = { cx: 0, cy: 0 };
+let lastMouse = null; // 没动过就没有位置 —— (0,0) 是假位置, 不如不报
 window.addEventListener('mousemove', (e) => {
   lastMouse = { cx: e.clientX, cy: e.clientY };
 }, { passive: true });
@@ -33,6 +33,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 鼠标位置查询: screenX/Y 是内容区在屏幕上的原点, 加视口内偏移 = 指针的
   // 屏幕坐标(background 据此放独立窗口; chrome:// 页没有本脚本, 查询方超时兜底)
   if (msg?.type === 'get-mouse-pos') {
+    if (!lastMouse) { sendResponse({ ok: false, reason: 'no-move' }); return; }
     sendResponse({ ok: true, x: window.screenX + lastMouse.cx, y: window.screenY + lastMouse.cy });
     return;
   }

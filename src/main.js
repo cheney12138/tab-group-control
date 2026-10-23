@@ -628,16 +628,15 @@ if (IS_STANDALONE) {
 
 (async () => {
   const bootT0 = performance.now();
-  // ⌘E 唤起为独立窗口(设置"唤起为独立窗口"): 弹出面板只当"锚点+转发器" ——
-  // 面板本来就开在指针/图标旁, 把自己的屏幕位置交给 background, 窗口原地
-  // 接管后自关。await 应答确保消息送达(此前"秒发秒关"丢消息+窗口不到台前);
+  // ⌘E 唤起为独立窗口(设置"唤起为独立窗口"): 弹出面板只当"转发器" ——
+  // 请 background 开窗(位置由那边定: 真指针 > 居中)后自关。
+  // await 应答确保消息送达(此前"秒发秒关"丢消息+窗口不到台前);
   // 转发失败则退回正常弹窗渲染。独立窗口自身(?win=1)不转发, 防自开死循环。
   if (!IS_STANDALONE) {
     try {
       const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
       if (openAsWindowEnabled) {
-        await chrome.runtime.sendMessage({ type: 'open-standalone',
-          anchor: { x: window.screenX, y: window.screenY } });
+        await chrome.runtime.sendMessage({ type: 'open-standalone' });
         window.close();
         return;
       }
