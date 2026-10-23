@@ -608,6 +608,24 @@ for (const ev of ['keydown', 'wheel', 'mousedown', 'touchstart']) {
   document.addEventListener(ev, () => endEntrance(true), { capture: true, passive: true });
 }
 
+// 独立窗口的"面板感"(2026-10-14 用户: 不希望 Mission Control / ⌘Tab 里
+// 常驻第二个窗口): 失焦即自关, 用完即走 —— 只有面板聚焦期间才存在于窗口
+// 列表, 点回浏览器它就消失。悬浮面板本质是个窗口, 这个计数避免不了
+// (QuicKey 同样如此), 能做的是把生命周期压到最短。
+// 不关的情况: 刚打开 600ms 内(唤起瞬间的焦点抖动); 设置面板开着(备份选
+// 文件等原生对话框会让窗口失焦, 关了会打断备份); 分组弹层/编辑卡开着。
+if (IS_STANDALONE) {
+  const panelOpenedAt = Date.now();
+  window.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (document.hasFocus()) return;                 // 又聚焦回来了
+      if (Date.now() - panelOpenedAt < 600) return;    // 唤起瞬间抖动
+      if (isSettingsOpen() || isGroupPopOpen() || isGroupEditOpen()) return;
+      window.close();
+    }, 120);
+  });
+}
+
 (async () => {
   const bootT0 = performance.now();
   // ⌘E 唤起为独立窗口(设置"唤起为独立窗口"): 弹出面板只当"锚点+转发器" ——
