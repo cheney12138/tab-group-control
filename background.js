@@ -655,22 +655,47 @@ async function findStandaloneWindow() {
   }
 }
 
-async function openStandalone() {
+async function openStandalone(anchor) {
   const existing = await findStandaloneWindow();
   if (existing) {
     standaloneWinId = existing.id;
-    await chrome.windows.update(existing.id, { focused: true });
-    return;
+    try {
+      await chrome.windows.update(existing.id, { focused: true });
+      return;
+    } catch (e) {
+      // 病例: 关窗后立刻唤起, getContexts 可能撞上正在关闭的窗口 ——
+      // update 抛错时落回新建, 不能就此返回(用户按了没反应)
+      standaloneWinId = null;
+    }
   }
   const { standaloneBounds: b = {} } = await chrome.storage.local.get('standaloneBounds');
-  const win = await chrome.windows.create({
+  // 2026-10-14 用户口径: "尺寸跟插件唤起的窗口期望一样, 跟随指针位置唤起"。
+  // 默认尺寸 = 弹窗固有 480×520(此后尊重用户拖拽后的记忆宽高);
+  // 位置: 面板转发来的锚点(面板就开在指针/图标旁) > 记忆位置 > Chrome 默认。
+  // SW 拿不到全局鼠标坐标, 锚点是唯一可靠的"指针位置"来源。
+  const createOpts = {
     url: STANDALONE_URL,
     type: 'popup',
     focused: true,
-    width: Math.max(480, b.width || 760),   // 下限 = 弹窗固有尺寸, 防布局挤坏
-    height: Math.max(520, b.height || 640),
-    ...(Number.isFinite(b.left) && Number.isFinite(b.top) ? { left: b.left, top: b.top } : {}),
-  });
+    width: Math.max(480, b.width || 480),
+    height: Math.max(520, b.height || 520),
+    ...(Number.isFinite(anchor?.x) && Number.isFinite(anchor?.y)
+      ? { left: Math.round(anchor.x), top: Math.round(anchor.y) }
+      : Number.isFinite(b.left) && Number.isFinite(b.top)
+        ? { left: b.left, top: b.top }
+        : {}),
+  };
+  let win;
+  try {
+    win = await chrome.windows.create(createOpts);
+  } catch (e) {
+    // 病例: 锚点贴屏幕边缘 + 窗口较大时超出可见区 50%, create 直接报错
+    // (= ⌘E 又"没反应")。去掉位置重试, 让 Chrome 自己安排落点。
+    if (createOpts.left === undefined) throw e;
+    delete createOpts.left;
+    delete createOpts.top;
+    win = await chrome.windows.create(createOpts);
+  }
   standaloneWinId = win.id;
   // 立即删可能早于历史落库, 等 1s(QuicKey 同款注释)
   setTimeout(() => chrome.history.deleteUrl({ url: STANDALONE_URL }).catch(() => {}), 1000);
@@ -684,23 +709,6 @@ chrome.commands.onCommand.addListener((command) => {
     openStandalone().catch(e => console.error('打开独立窗口失败:', e));
   }
 });
-
-// "唤起为独立窗口"⇒ 图标点击与 ⌘E(_execute_action)都应直接走独立窗口:
-// 把弹出面板置空(setPopup('')), action 触发 onClicked —— ⌘E 同样触发。
-// 不再有"面板转发+自关"的竞态(2026-10-14 病例: ⌘E 后窗口没到台前/没反应 ——
-// 面板秒关时转发消息可能丢, 且关面板瞬间开的窗在 macOS 上到不了台前)。
-async function applyActionMode() {
-  try {
-    const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
-    await chrome.action.setPopup({ popup: openAsWindowEnabled ? '' : 'popup.html' });
-  } catch (e) {}
-}
-applyActionMode(); // setPopup 是持久态但 SW 每次启动重设一次, 确保与设置一致
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.openAsWindowEnabled) applyActionMode();
-});
-chrome.action.onClicked.addListener(() =>
-  openStandalone().catch(e => console.error('独立窗口打开失败:', e)));
 
 // 拖拽缩放后记住位置尺寸(下限限制在 create 时做, 这里照单全收)
 chrome.windows.onBoundsChanged.addListener(async (win) => {
@@ -755,9 +763,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
   if (msg?.type === 'open-standalone') {
-    // ⌘E 转发(设置"唤起为独立窗口"): 弹出面板自关前请我们开窗
-    openStandalone().then(() => sendResponse({ ok: true })).catch((e) => fail(e));
-    return true; // 异步应答, 保持通道
+    // ⌘E 转发(设置"唤起为独立窗口"): 弹出面板自关前请我们开窗, 顺带把
+    // 自己的屏幕位置(anchor)带来 —— 面板就开在指针旁, 窗口原地接管
+    openStandalone(msg?.anchor).then(() => sendResponse({ ok: true })).catch((e) => fail(e));
+    return true; // 异步应答, 保持通道(等应答再自关, 消息不会丢)
   }
   if (msg?.type === 'get-snapshot') {
     const fresh = tabSnapshot && (Date.now() - tabSnapshot.ts < 2000)
