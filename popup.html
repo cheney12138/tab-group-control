@@ -1744,8 +1744,13 @@
        * 下放落定, 配合分组头多走两拍的 stagger(render.js staggerDelay(2)), 整列读成一组接一组
        * 向下展开, 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的
        * scale 打架。ease-out 加在每段之间: 下放段减速如绳子松劲, 沉降段同样缓出。 */
-      from { opacity: 0; translate: 0 -14px; }
-      55% { opacity: 1; }         /* 下落前半程显形: 材质先到, 落定在后 */
+      /* 2026-10-14 用户口径: "不要这个渐变了…每一个 tab 从自己对应的分组开始往下放"。
+       * 起点用 --drop-y(render.js 首帧量出的"本组头底边 → 本行"距离, 默认 -14px 兜底)。
+       * 透明度只保留 0 → 18%(≈60ms)的极速显形: 没有它, 延迟期(backwards 填充 from 帧)
+       * 会把"还没轮到的行"全部全实堆在组头位置暴露出来; 有了它, 行一离开组头就是
+       * 实体, 之后整段下落读不出任何渐变, 只读出"绳子在放"。 */
+      from { opacity: 0; translate: 0 var(--drop-y, -14px); }
+      18% { opacity: 1; }
       78% { translate: 0 2px; }    /* 过零点轻沉 2px —— "绳子放到底坠一下", 2px 为限不算跳 */
       to { opacity: 1; translate: 0 0; }
     }

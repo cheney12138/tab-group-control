@@ -312,6 +312,20 @@ export function render() {
     }
   });
   resultsEl.appendChild(frag);
+  // 2026-10-14 用户口径: "每一个 tab 从自己对应的分组开始往下放" —— 首帧量出
+  // 每行到本组头的距离写进 --drop-y(row-drop 的起点), 组头就是绳子的固定端。
+  // 只在入场时算(offsetTop 是布局位, 不受 translate 动画干扰); 搜索态行
+  // 不设此变量, 走 keyframes 的 -14px 兜底。
+  if (document.body.classList.contains('entrance')) {
+    let headerBottom = 0;
+    for (const el of resultsEl.children) {
+      if (el.classList.contains('group-header')) {
+        headerBottom = el.offsetTop + el.offsetHeight;
+      } else if (el.classList.contains('tab-item') && headerBottom) {
+        el.style.setProperty('--drop-y', `${(headerBottom - el.offsetTop).toFixed(1)}px`);
+      }
+    }
+  }
   // 清理收起记忆里已不存在的分组(组被删掉/改名后,残留的 key 会让同名的组莫名收起)
   const liveKeys = new Set(sections.map(s => groupKey(s.group)));
   const staleKeys = [...collapsed].filter(k => !liveKeys.has(k) && k !== '__ungrouped__');
