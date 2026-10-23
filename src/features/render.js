@@ -111,6 +111,7 @@ let staggerIdx = 0; // stagger 入场: render 内每行取号
 let entrancePlayed = false;
 let entranceTimer = 0;
 let queuedDuringEntrance = false;
+let entranceSpreadMs = 0; // 级联总跨度(行延迟上限), 由浏览路径的首帧测量回填
 function staggerDelay(step = 1) {
   staggerIdx += step;
   const i = Math.min(staggerIdx, 200); // 不再封顶 —— 2026-10-14 用户口径"按分组 cell 顺序加载, 不要并行":
@@ -128,7 +129,7 @@ function staggerDelay(step = 1) {
 function scheduleEntranceEnd() {
   if (!document.body.classList.contains('entrance')) return;
   clearTimeout(entranceTimer);
-  const total = staggerIdx * 20 + 320 + 180; // 全部级联 + 单行动画(row-drop 0.32s) + 余量
+  const total = entranceSpreadMs + 320 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画 + 余量
   entranceTimer = setTimeout(() => {
     entranceTimer = 0;
     document.body.classList.remove('entrance');
@@ -317,13 +318,27 @@ export function render() {
   // 只在入场时算(offsetTop 是布局位, 不受 translate 动画干扰); 搜索态行
   // 不设此变量, 走 keyframes 的 -14px 兜底。
   if (document.body.classList.contains('entrance')) {
+    // 2026-10-14 用户口径: "稀稀拉拉一直在往下掉, 形成一个循环" —— 组序串行
+    // 不封顶, 大列表(18 组 47 行)级联拖到 ~2s, 尾部行零星坠落读成故障。
+    // 首帧顺手做两件事: ①量 --drop-y(各自的组头); ②把行延迟**等比压缩**进
+    // 上限(顺序不变, 组仍依次, 只是节拍变密) —— 总跨度封顶 700ms。
+    const entranceRows = [];
     let headerBottom = 0;
     for (const el of resultsEl.children) {
       if (el.classList.contains('group-header')) {
         headerBottom = el.offsetTop + el.offsetHeight;
       } else if (el.classList.contains('tab-item') && headerBottom) {
         el.style.setProperty('--drop-y', `${(headerBottom - el.offsetTop).toFixed(1)}px`);
+        entranceRows.push(el);
       }
+    }
+    const delays = entranceRows.map(r => parseFloat(r.style.animationDelay) || 0);
+    const maxDelay = Math.max(0, ...delays);
+    entranceSpreadMs = maxDelay;
+    if (maxDelay > 700) {
+      const k = 700 / maxDelay;
+      entranceRows.forEach((r, i) => { r.style.animationDelay = `${Math.round(delays[i] * k)}ms`; });
+      entranceSpreadMs = 700;
     }
   }
   // 清理收起记忆里已不存在的分组(组被删掉/改名后,残留的 key 会让同名的组莫名收起)
