@@ -589,7 +589,8 @@ const optOpenAsWindow = document.getElementById('optOpenAsWindow');
 })();
 optOpenAsWindow.addEventListener('change', async () => {
   try { await chrome.storage.local.set({ openAsWindowEnabled: optOpenAsWindow.checked }); } catch (e) {}
-  showToast(optOpenAsWindow.checked ? '⌘E 将唤起独立窗口(下次唤起生效)' : '⌘E 将贴图标弹出面板');
+  // onChanged 会即时 setPopup, 立刻生效
+  showToast(optOpenAsWindow.checked ? '⌘E 已切换为唤起独立窗口' : '⌘E 已切换为贴图标弹出面板');
 });
 const optShowUrl = document.getElementById('optShowUrl');
 // (模糊匹配开关已删: 功能保留、永远开启,不再暴露配置)

@@ -685,6 +685,23 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
+// "唤起为独立窗口"⇒ 图标点击与 ⌘E(_execute_action)都应直接走独立窗口:
+// 把弹出面板置空(setPopup('')), action 触发 onClicked —— ⌘E 同样触发。
+// 不再有"面板转发+自关"的竞态(2026-10-14 病例: ⌘E 后窗口没到台前/没反应 ——
+// 面板秒关时转发消息可能丢, 且关面板瞬间开的窗在 macOS 上到不了台前)。
+async function applyActionMode() {
+  try {
+    const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
+    await chrome.action.setPopup({ popup: openAsWindowEnabled ? '' : 'popup.html' });
+  } catch (e) {}
+}
+applyActionMode(); // setPopup 是持久态但 SW 每次启动重设一次, 确保与设置一致
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.openAsWindowEnabled) applyActionMode();
+});
+chrome.action.onClicked.addListener(() =>
+  openStandalone().catch(e => console.error('独立窗口打开失败:', e)));
+
 // 拖拽缩放后记住位置尺寸(下限限制在 create 时做, 这里照单全收)
 chrome.windows.onBoundsChanged.addListener(async (win) => {
   if (win.type !== 'popup') return;
