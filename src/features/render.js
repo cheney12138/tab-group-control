@@ -128,7 +128,7 @@ function staggerDelay(step = 1) {
 function scheduleEntranceEnd() {
   if (!document.body.classList.contains('entrance')) return;
   clearTimeout(entranceTimer);
-  const total = staggerIdx * 20 + 220 + 150; // 全部级联 + 单行动画 + 余量
+  const total = staggerIdx * 20 + 320 + 180; // 全部级联 + 单行动画(row-drop 0.32s) + 余量
   entranceTimer = setTimeout(() => {
     entranceTimer = 0;
     document.body.classList.remove('entrance');
