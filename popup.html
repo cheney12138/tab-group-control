@@ -1742,9 +1742,8 @@
     @keyframes row-drop {
       /* 2026-10-14 用户口径: "给分组加个向下展开的入场" + "像用绳子放东西下来" —— 行从上方 -14px
        * 下放落定, 配合分组头多走两拍的 stagger(render.js staggerDelay(2)), 整列读成一组接一组
-       * 向下展开。仍用独立 translate 属性(不碰 transform), 不与 .active 的 scale 打架。 */
-       * 分组头多走两拍的 stagger(render.js staggerDelay(3)), 整列读成一组接一组向下展开,
-       * 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的 scale 打架。 */
+       * 向下展开, 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的
+       * scale 打架。ease-out 加在每段之间: 下放段减速如绳子松劲, 沉降段同样缓出。 */
       from { opacity: 0; translate: 0 -14px; }
       55% { opacity: 1; }         /* 下落前半程显形: 材质先到, 落定在后 */
       78% { translate: 0 2px; }    /* 过零点轻沉 2px —— "绳子放到底坠一下", 2px 为限不算跳 */
