@@ -615,6 +615,23 @@ for (const ev of ['keydown', 'wheel', 'mousedown', 'touchstart']) {
 // 不关的情况: 刚打开 600ms 内(唤起瞬间的焦点抖动); 设置面板开着(备份选
 // 文件等原生对话框会让窗口失焦, 关了会打断备份); 分组弹层/编辑卡开着。
 if (IS_STANDALONE) {
+  // 标题栏卫生(2026-10-14 用户: "窗口上面这个黑边有点丑, 影响我主题了"):
+  // ① macOS 弹窗标题栏显示一长串 chrome-extension:// URL → 改成干净标题;
+  // ② 标题栏颜色跟系统深色模式(ink 米色主题配黑条很突兀), color-scheme
+  //    它不认, 试 meta theme-color(桌面 Chrome 会拿它染浏览器框) → 跟主题
+  //    纸色走; 若 macOS 不生效, 标题栏仍随系统, 这是扩展窗口的硬边界。
+  document.title = '标签搜索';
+  const themeMeta = document.createElement('meta');
+  themeMeta.name = 'theme-color';
+  document.head.appendChild(themeMeta);
+  const syncThemeColor = () => {
+    themeMeta.content = getComputedStyle(document.body).backgroundColor || '#ffffff';
+  };
+  syncThemeColor();
+  new MutationObserver(syncThemeColor) // 主题切换即时跟色
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeColor);
+
   const panelOpenedAt = Date.now();
   window.addEventListener('blur', () => {
     setTimeout(() => {
