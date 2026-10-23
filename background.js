@@ -737,6 +737,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return;
   }
+  if (msg?.type === 'open-standalone') {
+    // ⌘E 转发(设置"唤起为独立窗口"): 弹出面板自关前请我们开窗
+    openStandalone().then(() => sendResponse({ ok: true })).catch((e) => fail(e));
+    return true; // 异步应答, 保持通道
+  }
   if (msg?.type === 'get-snapshot') {
     const fresh = tabSnapshot && (Date.now() - tabSnapshot.ts < 2000)
       ? tabSnapshot : null;

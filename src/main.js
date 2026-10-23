@@ -610,6 +610,19 @@ for (const ev of ['keydown', 'wheel', 'mousedown', 'touchstart']) {
 
 (async () => {
   const bootT0 = performance.now();
+  // ⌘E 唤起为独立窗口(设置"唤起为独立窗口"): 弹出面板只当"转发器" —— 立即请
+  // background 开独立窗口并自关, 用户看到的是窗口而不是一闪而过的弹窗。
+  // 独立窗口自身(?win=1)不转发, 否则自己给自己开窗死循环。
+  if (!IS_STANDALONE) {
+    try {
+      const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
+      if (openAsWindowEnabled) {
+        chrome.runtime.sendMessage({ type: 'open-standalone' }).catch(() => {});
+        window.close();
+        return;
+      }
+    } catch (e) {}
+  }
   await loadTabs();
   search('');
   render();

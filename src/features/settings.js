@@ -580,6 +580,17 @@ optForceMotion.addEventListener('change', async () => {
   try { await chrome.storage.local.set({ forceMotionEnabled: optForceMotion.checked }); } catch (e) {}
   showToast(optForceMotion.checked ? '动效已强制开启(忽略系统设置)' : '动效跟随系统设置');
 });
+const optOpenAsWindow = document.getElementById('optOpenAsWindow');
+(async () => { // 初值(默认关: 未写过 = 贴图标弹出)
+  try {
+    const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
+    if (optOpenAsWindow) optOpenAsWindow.checked = !!openAsWindowEnabled;
+  } catch (e) {}
+})();
+optOpenAsWindow.addEventListener('change', async () => {
+  try { await chrome.storage.local.set({ openAsWindowEnabled: optOpenAsWindow.checked }); } catch (e) {}
+  showToast(optOpenAsWindow.checked ? '⌘E 将唤起独立窗口(下次唤起生效)' : '⌘E 将贴图标弹出面板');
+});
 const optShowUrl = document.getElementById('optShowUrl');
 // (模糊匹配开关已删: 功能保留、永远开启,不再暴露配置)
 optShowUrl.checked = actions.getSettings().showUrl;
