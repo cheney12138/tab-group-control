@@ -629,11 +629,72 @@ async function ungroupAllOthersGroups() {
   }
 }
 
-// 快捷键命令: 返回上一个标签(A/B 互跳)
+// ---------------------------------------------------------------------------
+// 独立搜索窗口(2026-10-14, 用户参考 QuicKey 的窗口模式):
+// popup.html?win=1 以 chrome.windows.create({type:'popup'}) 拉起 —— 无边框
+// 普通窗口, 可拖拽缩放, 位置尺寸记忆。两个入口一份代码, 功能样式天然对齐。
+//   · 重复唤起 → 聚焦已有窗口, 不再开新的;
+//   · 面板 URL 会进历史, 开后 1s 删掉(QuicKey 同款, 不污染历史);
+//   · SW 随时回收 ⇒ 窗口 id 只做缓存, 查找走 runtime.getContexts 重校真。
+// ---------------------------------------------------------------------------
+const STANDALONE_URL = chrome.runtime.getURL('popup.html') + '?win=1';
+let standaloneWinId = null;
+
+async function findStandaloneWindow() {
+  try {
+    if (!chrome.runtime.getContexts) return null; // Chrome < 116 无此 API, 直查必活窗口
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: [chrome.runtime.ContextType?.TAB || 'TAB'],
+    });
+    const hit = contexts.find(c => (c.documentUrl || '') === STANDALONE_URL);
+    if (!hit) return null;
+    const win = await chrome.windows.get(hit.windowId).catch(() => null);
+    return (win && win.type === 'popup') ? win : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function openStandalone() {
+  const existing = await findStandaloneWindow();
+  if (existing) {
+    standaloneWinId = existing.id;
+    await chrome.windows.update(existing.id, { focused: true });
+    return;
+  }
+  const { standaloneBounds: b = {} } = await chrome.storage.local.get('standaloneBounds');
+  const win = await chrome.windows.create({
+    url: STANDALONE_URL,
+    type: 'popup',
+    focused: true,
+    width: Math.max(480, b.width || 760),   // 下限 = 弹窗固有尺寸, 防布局挤坏
+    height: Math.max(520, b.height || 640),
+    ...(Number.isFinite(b.left) && Number.isFinite(b.top) ? { left: b.left, top: b.top } : {}),
+  });
+  standaloneWinId = win.id;
+  // 立即删可能早于历史落库, 等 1s(QuicKey 同款注释)
+  setTimeout(() => chrome.history.deleteUrl({ url: STANDALONE_URL }).catch(() => {}), 1000);
+}
+
+// 快捷键命令: A/B 互跳 + 独立窗口
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'previous-tab') {
     gotoPreviousTab().catch(e => console.error('返回上一标签失败:', e));
+  } else if (command === 'open-window') {
+    openStandalone().catch(e => console.error('打开独立窗口失败:', e));
   }
+});
+
+// 拖拽缩放后记住位置尺寸(下限限制在 create 时做, 这里照单全收)
+chrome.windows.onBoundsChanged.addListener(async (win) => {
+  if (win.type !== 'popup') return;
+  if (standaloneWinId !== win.id) {
+    const found = await findStandaloneWindow();
+    if (!found || found.id !== win.id) return;
+    standaloneWinId = win.id;
+  }
+  await chrome.storage.local.set({ standaloneBounds: {
+    left: win.left, top: win.top, width: win.width, height: win.height } });
 });
 
 // popup 消息: 快照 / 整理触发

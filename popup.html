@@ -204,6 +204,13 @@
       padding: 0;
       box-sizing: border-box;
     }
+    /* 独立窗口模式(?win=1): 填满真窗口, 解除弹窗 480×520 固定 —— 可拖拽缩放,
+     * 位置尺寸由 background 记忆。其余样式与弹窗共用, 两入口一份代码。 */
+    html.standalone, html.standalone body {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+    }
     body {
       animation: panel-enter 0.14s ease-out;
       display: flex;
@@ -3257,7 +3264,7 @@
               <tr><td><span class="kbd">/b</span><span class="kbd">/h</span><span class="kbd">/r</span></td><td>搜索 书签 / 历史 / 最近关闭(输入命令后接关键词)</td></tr>
             </tbody>
           </table>
-          <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="nw"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">E</span></span></div>
+          <div class="help-card-sub">全局快捷键(呼出弹窗)请在 <a href="#" id="shortcutLink">chrome://extensions/shortcuts</a> 中自定义,默认 <span class="nw"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">E</span></span>；独立搜索窗口默认 <span class="nw"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">E</span></span></div>
         </div>
       </div>
     </div>

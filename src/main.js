@@ -2,6 +2,11 @@
 // 读取 chrome.tabGroups 中由 Tabbiy 等插件创建的原生分组,
 // 搜索结果按分组分区显示,支持模糊匹配与拼音首字母场景下的子串匹配。
 
+// 独立窗口模式(popup.html?win=1, background 经 chrome.windows.create 拉起):
+// html.standalone 让 CSS 填满真窗口; currentWindowId 改解析为聚焦的普通窗口
+const IS_STANDALONE = new URLSearchParams(location.search).has('win');
+if (IS_STANDALONE) document.documentElement.classList.add('standalone');
+
 // core 层
 import { groupKey } from './core/format.js';
 import { showToast, resultsEl, rowByTabId, indexOfRow, input } from './core/dom.js';
@@ -126,7 +131,14 @@ async function loadTabs(opts = {}) {
       }),
     ]);
   }
-  state.currentWindowId = (await currentWinPromise)?.id ?? null;
+  if (IS_STANDALONE) {
+    // 独立窗口里 getCurrent 是面板自己(无标签页) —— "当前窗口"取最后聚焦的
+    // 普通浏览器窗口(QuicKey 的 getLastWindow 同款语义), 否则当前窗口视图为空
+    const wins = await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => []);
+    state.currentWindowId = (wins.find(w => w.focused) || wins[wins.length - 1])?.id ?? null;
+  } else {
+    state.currentWindowId = (await currentWinPromise)?.id ?? null;
+  }
   if (DEBUG) console.log(`[TGS] loadTabs 耗时: ${(performance.now() - t0).toFixed(1)}ms, 标签数: ${tabs.length}${fromSnapshot ? '(快照)' : '(直查)'}`);
   const groupById = new Map(groups.map(g => [g.id, g]));
   // 收集窗口序号映射(过滤发生在收集之后,保证编号连续且与实际窗口一致)
