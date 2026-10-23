@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <link rel="icon" href="data:,">
+  <script src="boot-theme.js"></script><!-- 同步首绘定主题, 详见面顶部注释(2026-10-14 黑框闪现) -->
   <style>
     /* 原生系统字体栈(零加载延迟、匹配 macOS/Windows 原生渲染习惯、免 CSP 权限限制) */
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,7 +13,9 @@
      * 视觉 token 一律在各主题块 [data-theme="..."] 内全量定义(ADR-0003 换肤协议);
      * :root 不再承载默认主题,data-theme 缺省/未知值一律按 linear 渲染 */
     :root {
-      color-scheme: light dark; /* 原生滚动条/checkbox 跟随深浅色(主题块声明优先) */
+      /* 基础画布锁浅色: 未定主题的空白帧不再随系统深色变黑(2026-10-14 录屏黑框);
+       * linear 的暗色画布由其主题块自带 color-scheme: light dark 接管 */
+      color-scheme: light;
       --space-1: 4px;
       --space-2: 8px;
       --space-3: 12px;

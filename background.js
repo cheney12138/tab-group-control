@@ -744,6 +744,24 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
+// "唤起为独立窗口"⇒ 弹出面板整个不创建(2026-10-14 用户录屏: ⌘E 先在图标
+// 位置闪一下面板再开窗 —— 面板转发流程的固有闪现; 且面板锚点已弃用,
+// 面板在链路里已无作用)。setPopup('') 后图标点击与 ⌘E(_execute_action)
+// 直接触发 action.onClicked → 直接开窗, 无中间页。main.js 的转发路径保留
+// 作兜底(setPopup 未及应用的边角)。
+async function applyActionMode() {
+  try {
+    const { openAsWindowEnabled } = await chrome.storage.local.get('openAsWindowEnabled');
+    await chrome.action.setPopup({ popup: openAsWindowEnabled ? '' : 'popup.html' });
+  } catch (e) {}
+}
+applyActionMode(); // setPopup 是持久态, SW 每次启动重设一次确保与设置一致
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.openAsWindowEnabled) applyActionMode();
+});
+chrome.action.onClicked.addListener(() =>
+  openStandalone().catch(e => console.error('独立窗口打开失败:', e)));
+
 // 拖拽缩放后记住位置尺寸(下限限制在 create 时做, 这里照单全收)
 chrome.windows.onBoundsChanged.addListener(async (win) => {
   if (win.type !== 'popup') return;
