@@ -131,7 +131,7 @@ function staggerDelay(step = 1) {
 function scheduleEntranceEnd() {
   if (!document.body.classList.contains('entrance')) return;
   clearTimeout(entranceTimer);
-  const total = entranceSpreadMs + 320 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画 + 余量
+  const total = entranceSpreadMs + 300 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画(row-settle 0.3s) + 余量
   entranceTimer = setTimeout(() => {
     entranceTimer = 0;
     document.body.classList.remove('entrance');
@@ -228,17 +228,6 @@ export function render() {
       frag.appendChild(buildTabRow(item));
     }
     resultsEl.appendChild(frag);
-    // 平铺视图(recent/current/命令)也要有绳子: 固定端 = 列表顶再上 40px(命令栏
-    // 背后)。病例(2026-10-14 用户两窗口对比录屏): 本路径早退, 行没有 --drop-y
-    // 走 -14px 兜底读成"淡入", 与分组视图的绳子下放动效不一致。
-    if (document.body.classList.contains('entrance')) {
-      const ropeAnchor = resultsEl.offsetTop - 40;
-      for (const el of resultsEl.children) {
-        if (el.classList.contains('tab-item')) {
-          el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
-        }
-      }
-    }
     // ⚠️ 病例: 本路径早退曾经漏掉 scheduleEntranceEnd —— body.entrance 永远
     // 挂着, 窗口内的重渲染全被排队直到用户输入才冲掉
     scheduleEntranceEnd();
@@ -275,18 +264,6 @@ export function render() {
       }
     }
     resultsEl.appendChild(frag);
-    // 平铺视图(recent/current/命令)与分组视图共用同一套绳子(见浏览路径的注释):
-    // 固定端 = 列表顶再上 40px(命令栏背后); 组头会就地改写固定端(搜索态有组头)
-    if (document.body.classList.contains('entrance')) {
-      let ropeAnchor = resultsEl.offsetTop - 40;
-      for (const el of resultsEl.children) {
-        if (el.classList.contains('group-header')) {
-          ropeAnchor = el.offsetTop;
-        } else if (el.classList.contains('tab-item')) {
-          el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
-        }
-      }
-    }
     restoreFocus(prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
     scheduleEntranceEnd();
@@ -341,24 +318,13 @@ export function render() {
     }
   });
   resultsEl.appendChild(frag);
-  // 2026-10-14 用户口径: "每一个 tab 从自己对应的分组开始往下放" —— 首帧量出
-  // 每行到本组头的距离写进 --drop-y(row-drop 的起点), 组头就是绳子的固定端。
-  // 固定端 = 组头**顶边**(病例: 用底边时每组第一行只落 2px, 读成原地淡入 ——
-  // 18 个组就有 18 行"不掉"); 从顶边垂出, 所有人都至少落一个组头高度,
-  // 视觉上是"从组头后面吊出来"。搜索态行不设此变量, 走 -14px 兜底。
   if (document.body.classList.contains('entrance')) {
-    // 同口径: "稀稀拉拉一直在往下掉, 形成一个循环" —— 级联总跨度封顶 800ms,
-    // 等比压缩行延迟(顺序不变, 节拍变密)。
+    // 级联总跨度封顶 800ms, 等比压缩行延迟(顺序不变, 节拍变密) ——
+    // 病例: "稀稀拉拉一直在往下掉, 形成一个循环"(大列表级联拖到 2s+)。
+    // (row-settle 原位晕开, 不再需要 --drop-y 绳距测量)
     const entranceRows = [];
-    // 平铺视图(最近使用, 无组头)也要有绳子: 固定端 = 列表顶再上 40px ——
-    // 藏在不透明命令栏背后, 行从它背后垂出(病例: 平铺视图无 --drop-y,
-    // 走 -14px 兜底读成"淡入", 与分组视图动效不一致 —— 两窗口对比被看出来)
-    let ropeAnchor = resultsEl.offsetTop - 40;
     for (const el of resultsEl.children) {
-      if (el.classList.contains('group-header')) {
-        ropeAnchor = el.offsetTop;
-      } else if (el.classList.contains('tab-item') && ropeAnchor != null) {
-        el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
+      if (el.classList.contains('tab-item')) {
         entranceRows.push(el);
       }
     }

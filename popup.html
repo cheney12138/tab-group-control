@@ -1715,11 +1715,12 @@
        入场只属于组内的 tab 行 —— 配合组头处的节拍空隙(render.js), 每组读成"箭头刚展开,
        tab 向下露出"。 */
     body.entrance .tab-item {
-      /* 2026-10-14 用户口径: "改成弹簧的形式, 从上面一块一块地掉下来, 就像
-       * 用绳子放东西下来一样; 不要太跳脱" —— row-drop: 下落前半程显形,
-       * 过零点后轻沉 2px 再归位(绳子放下的"坠一下"), 无缩放无横跳;
-       * 任何主动输入仍可立即打断(main.js 的 endEntrance), 不强迫看完。 */
-      animation: row-drop 0.32s ease-out backwards;
+      /* 2026-10-14 用户口径(录屏里长绳距多行空中交错糊成一团): "乱七八糟的感觉,
+       * 不适合用掉下来的方式, 想一种更优雅更舒缓的表达, 视觉效果太重了" ——
+       * 弃"掉落", 改**墨迹晕开**(row-settle): 原位轻微上浮 6px + blur 3px→0 聚焦,
+       * 没有大位移/交错/投影, 视觉重量极轻, 配 ink 水墨主题;
+       * 顺序仍是逐帧瀑布(16ms/行), 任何主动输入可立即打断。 */
+      animation: row-settle 0.3s ease-out backwards;
     }
     /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
      * ⚠️ 2026-10-08 病例(本机): 用户报"唤起面板后, 选中的那行才慢慢上浮, 看着像延迟"。
@@ -1736,27 +1737,18 @@
      * 2026-10-14 病例: animation:none 让它第一帧孤零零全显, 周围全是空的, 内容涌入时整段读成"闪一下"。
      * 改为 0 延迟的 opacity-only 入场: 选中行第一个亮相, 上下文随后展开; 位置分毫未动, 不违 10-08 病例。 */
     body.entrance .tab-item.active {
-      animation: active-enter 0.3s linear backwards;
+      animation: active-enter 0.3s ease-out backwards;
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
-    @keyframes row-drop {
-      /* 2026-10-14 用户口径: "给分组加个向下展开的入场" + "像用绳子放东西下来" —— 行从上方 -14px
-       * 下放落定, 配合分组头多走两拍的 stagger(render.js staggerDelay(2)), 整列读成一组接一组
-       * 向下展开, 不再是散点浮现。仍用独立 translate 属性(不碰 transform), 不与 .active 的
-       * scale 打架。ease-out 加在每段之间: 下放段减速如绳子松劲, 沉降段同样缓出。 */
-      /* 2026-10-14 用户口径: "不要这个渐变了…每一个 tab 从自己对应的分组开始往下放"。
-       * 起点用 --drop-y(render.js 首帧量出的"本组头底边 → 本行"距离, 默认 -14px 兜底)。
-       * 透明度只保留 0 → 18%(≈60ms)的极速显形: 没有它, 延迟期(backwards 填充 from 帧)
-       * 会把"还没轮到的行"全部全实堆在组头位置暴露出来; 有了它, 行一离开组头就是
-       * 实体, 之后整段下落读不出任何渐变, 只读出"绳子在放"。 */
-      from { opacity: 0; translate: 0 var(--drop-y, -14px); }
-      18% { opacity: 1; }
-      78% { translate: 0 2px; }    /* 过零点轻沉 2px —— "绳子放到底坠一下", 2px 为限不算跳 */
-      to { opacity: 1; translate: 0 0; }
+    @keyframes row-settle {
+      /* "墨迹晕开": 原位上浮 6px + 失焦聚焦。opacity 只在 from 压 0(兜住延迟期的
+       * backwards 填充, 不然没轮到的行会全实堆在原地), ease-out 让上浮前快后缓。 */
+      from { opacity: 0; translate: 0 6px; filter: blur(3px); }
+      to { opacity: 1; translate: 0 0; filter: blur(0); }
     }
     @keyframes active-enter {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from { opacity: 0; filter: blur(3px); }
+      to { opacity: 1; filter: blur(0); }
     }
     .tab-item {
       display: flex;
