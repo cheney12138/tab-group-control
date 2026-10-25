@@ -114,10 +114,12 @@ let queuedDuringEntrance = false;
 let entranceSpreadMs = 0; // 级联总跨度(行延迟上限), 由浏览路径的首帧测量回填
 function staggerDelay(step = 1) {
   staggerIdx += step;
-  const i = Math.min(staggerIdx, 200); // 不再封顶 —— 2026-10-14 用户口径"按分组 cell 顺序加载, 不要并行":
-  // 组头 2 拍 + 每行 1 拍, 18 组 × 47 行 ≈ 83 拍 ≈ 1.7s 串行走完(窗口按实际级联总长计算,
-  // 见 scheduleEntranceEnd); 超出一屏的部分在视口外播完, 可见区仍是前几组先出。允许打断。
-  return `${i * 20}ms`;
+  const i = Math.min(staggerIdx, 200);
+  // 2026-10-14 用户口径: "顺序 1、2、3、4 那种线性的掉落…看起来帧率很高的样子" ——
+  // 节拍 = 16ms = 一帧: 每行比上一行晚一帧起跳, 落差逐帧错开, 读成一条连续瀑布。
+  // (此前 20ms 拍 + 组头 2 拍空隙 → 大列表压缩到 10ms/行 < 一帧, 相邻行同帧起跳,
+  //  读成"一坨直接掉下来"; 组间空拍又造成"循环感"。两头一起治: 无空拍 + 一帧一行。)
+  return `${i * 16}ms`;
 }
 // 入场收场原语: 用户一动手(↑↓ 导航)就立即结束入场。
 // 病例(本机 2026-10-14, 用户报"⌘E 唤起按 ⬇️ 时 tab 闪烁, 只闪前几个就正常"):
@@ -335,10 +337,10 @@ export function render() {
     const delays = entranceRows.map(r => parseFloat(r.style.animationDelay) || 0);
     const maxDelay = Math.max(0, ...delays);
     entranceSpreadMs = maxDelay;
-    if (maxDelay > 700) {
-      const k = 700 / maxDelay;
+    if (maxDelay > 800) {
+      const k = 800 / maxDelay;
       entranceRows.forEach((r, i) => { r.style.animationDelay = `${Math.round(delays[i] * k)}ms`; });
-      entranceSpreadMs = 700;
+      entranceSpreadMs = 800;
     }
   }
   // 清理收起记忆里已不存在的分组(组被删掉/改名后,残留的 key 会让同名的组莫名收起)
@@ -376,7 +378,7 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWin
   // 组头本身不入场(锚定, 见 popup.html), 但它仍是"一次展开"的节拍边界:
   // 在这里多走两拍不加延迟, 组与组之间留出呼吸, 组内行紧跟着连续入场
   // ⇒ 每组读成"箭头刚展开, tab 向下露出", 而不是全列表一锅粥地浮现
-  staggerDelay(2);
+  // 组头不吃节拍(2026-10-14: 组间空拍读成"循环感"; 行序本身就保持分组顺序)
   header.dataset.groupKey = groupKey(group);
   const assets = themeAssets();
   const groupColor = assets.groupColors[(group && group.color) || 'grey'] || assets.groupColors.grey;
