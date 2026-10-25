@@ -317,20 +317,19 @@ export function render() {
   resultsEl.appendChild(frag);
   // 2026-10-14 用户口径: "每一个 tab 从自己对应的分组开始往下放" —— 首帧量出
   // 每行到本组头的距离写进 --drop-y(row-drop 的起点), 组头就是绳子的固定端。
-  // 只在入场时算(offsetTop 是布局位, 不受 translate 动画干扰); 搜索态行
-  // 不设此变量, 走 keyframes 的 -14px 兜底。
+  // 固定端 = 组头**顶边**(病例: 用底边时每组第一行只落 2px, 读成原地淡入 ——
+  // 18 个组就有 18 行"不掉"); 从顶边垂出, 所有人都至少落一个组头高度,
+  // 视觉上是"从组头后面吊出来"。搜索态行不设此变量, 走 -14px 兜底。
   if (document.body.classList.contains('entrance')) {
-    // 2026-10-14 用户口径: "稀稀拉拉一直在往下掉, 形成一个循环" —— 组序串行
-    // 不封顶, 大列表(18 组 47 行)级联拖到 ~2s, 尾部行零星坠落读成故障。
-    // 首帧顺手做两件事: ①量 --drop-y(各自的组头); ②把行延迟**等比压缩**进
-    // 上限(顺序不变, 组仍依次, 只是节拍变密) —— 总跨度封顶 700ms。
+    // 同口径: "稀稀拉拉一直在往下掉, 形成一个循环" —— 级联总跨度封顶 800ms,
+    // 等比压缩行延迟(顺序不变, 节拍变密)。
     const entranceRows = [];
-    let headerBottom = 0;
+    let ropeAnchor = null;
     for (const el of resultsEl.children) {
       if (el.classList.contains('group-header')) {
-        headerBottom = el.offsetTop + el.offsetHeight;
-      } else if (el.classList.contains('tab-item') && headerBottom) {
-        el.style.setProperty('--drop-y', `${(headerBottom - el.offsetTop).toFixed(1)}px`);
+        ropeAnchor = el.offsetTop;
+      } else if (el.classList.contains('tab-item') && ropeAnchor != null) {
+        el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
         entranceRows.push(el);
       }
     }
