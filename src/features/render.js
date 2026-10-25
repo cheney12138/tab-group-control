@@ -131,7 +131,7 @@ function staggerDelay(step = 1) {
 function scheduleEntranceEnd() {
   if (!document.body.classList.contains('entrance')) return;
   clearTimeout(entranceTimer);
-  const total = entranceSpreadMs + 300 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画(row-settle 0.3s) + 余量
+  const total = entranceSpreadMs + 260 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画(row-settle 0.26s) + 余量
   entranceTimer = setTimeout(() => {
     entranceTimer = 0;
     document.body.classList.remove('entrance');
@@ -331,10 +331,10 @@ export function render() {
     const delays = entranceRows.map(r => parseFloat(r.style.animationDelay) || 0);
     const maxDelay = Math.max(0, ...delays);
     entranceSpreadMs = maxDelay;
-    if (maxDelay > 800) {
-      const k = 800 / maxDelay;
+    if (maxDelay > 650) {
+      const k = 650 / maxDelay;
       entranceRows.forEach((r, i) => { r.style.animationDelay = `${Math.round(delays[i] * k)}ms`; });
-      entranceSpreadMs = 800;
+      entranceSpreadMs = 650;
     }
   }
   // 清理收起记忆里已不存在的分组(组被删掉/改名后,残留的 key 会让同名的组莫名收起)
