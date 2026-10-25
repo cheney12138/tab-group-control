@@ -1720,7 +1720,7 @@
        * 不要影响性能" —— row-settle: 原位上浮 6px 落定, 只动 opacity/translate
        * (纯合成器属性, 零重栅格化)。blur 已撤: filter 动画逐帧重栅格化,
        * 65 行是最大掉帧源。顺序仍是逐帧瀑布(16ms/行), 可打断。 */
-      animation: row-settle 0.45s ease-out backwards; /* 2026-10-14 用户口径: "动画速度太快了, 调慢一点, 温柔一点" —— 0.26 → 0.45s */
+      animation: row-settle 0.5s ease-out backwards; /* 2026-10-14 用户口径: "调慢一点, 温柔一点" + "0.5s" —— 统一 0.5s */
     }
     /* 选中行不参与入场: 它必须"一睁眼就已经浮好"。
      * ⚠️ 2026-10-08 病例(本机): 用户报"唤起面板后, 选中的那行才慢慢上浮, 看着像延迟"。
@@ -1743,7 +1743,7 @@
     /* 墨迹晕开(容器级): 单层 blur 0.28s —— 逐行 filter 要重栅格化 65 层,
      * 容器只栅格化 1 层; 行逐帧冒出来时都带着晕开感。仅入场时挂(render.js)。 */
     #results.ink-in {
-      animation: results-ink 0.6s ease-out both; /* 容器晕开放慢近半 —— 晕染是主角, 让它从容 */
+      animation: results-ink 0.5s ease-out both; /* 2026-10-14 用户口径: 统一 0.5s */
     }
     @keyframes results-ink {
       from { filter: blur(2.5px); }
