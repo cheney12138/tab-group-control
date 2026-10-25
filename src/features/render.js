@@ -228,6 +228,20 @@ export function render() {
       frag.appendChild(buildTabRow(item));
     }
     resultsEl.appendChild(frag);
+    // 平铺视图(recent/current/命令)也要有绳子: 固定端 = 列表顶再上 40px(命令栏
+    // 背后)。病例(2026-10-14 用户两窗口对比录屏): 本路径早退, 行没有 --drop-y
+    // 走 -14px 兜底读成"淡入", 与分组视图的绳子下放动效不一致。
+    if (document.body.classList.contains('entrance')) {
+      const ropeAnchor = resultsEl.offsetTop - 40;
+      for (const el of resultsEl.children) {
+        if (el.classList.contains('tab-item')) {
+          el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
+        }
+      }
+    }
+    // ⚠️ 病例: 本路径早退曾经漏掉 scheduleEntranceEnd —— body.entrance 永远
+    // 挂着, 窗口内的重渲染全被排队直到用户输入才冲掉
+    scheduleEntranceEnd();
     return;
   }
 
@@ -261,6 +275,18 @@ export function render() {
       }
     }
     resultsEl.appendChild(frag);
+    // 平铺视图(recent/current/命令)与分组视图共用同一套绳子(见浏览路径的注释):
+    // 固定端 = 列表顶再上 40px(命令栏背后); 组头会就地改写固定端(搜索态有组头)
+    if (document.body.classList.contains('entrance')) {
+      let ropeAnchor = resultsEl.offsetTop - 40;
+      for (const el of resultsEl.children) {
+        if (el.classList.contains('group-header')) {
+          ropeAnchor = el.offsetTop;
+        } else if (el.classList.contains('tab-item')) {
+          el.style.setProperty('--drop-y', `${(ropeAnchor - el.offsetTop).toFixed(1)}px`);
+        }
+      }
+    }
     restoreFocus(prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
     scheduleEntranceEnd();
@@ -324,7 +350,10 @@ export function render() {
     // 同口径: "稀稀拉拉一直在往下掉, 形成一个循环" —— 级联总跨度封顶 800ms,
     // 等比压缩行延迟(顺序不变, 节拍变密)。
     const entranceRows = [];
-    let ropeAnchor = null;
+    // 平铺视图(最近使用, 无组头)也要有绳子: 固定端 = 列表顶再上 40px ——
+    // 藏在不透明命令栏背后, 行从它背后垂出(病例: 平铺视图无 --drop-y,
+    // 走 -14px 兜底读成"淡入", 与分组视图动效不一致 —— 两窗口对比被看出来)
+    let ropeAnchor = resultsEl.offsetTop - 40;
     for (const el of resultsEl.children) {
       if (el.classList.contains('group-header')) {
         ropeAnchor = el.offsetTop;
