@@ -142,6 +142,7 @@ function scheduleEntranceEnd() {
 export function endEntrance(flush = false) {
   if (entranceTimer) { clearTimeout(entranceTimer); entranceTimer = 0; }
   document.body.classList.remove('entrance');
+  resultsEl.classList.remove('ink-in');
   if (flush && queuedDuringEntrance) { queuedDuringEntrance = false; render(); }
 }
 
@@ -166,6 +167,7 @@ export function render() {
   if (!entrancePlayed) {
     entrancePlayed = true;
     document.body.classList.add('entrance');
+    resultsEl.classList.add('ink-in'); // 容器级墨迹晕开(单层 blur, 见 popup.html)
     // 收场定时器改到 build 完成后按**实际级联总长**挂(scheduleEntranceEnd) ——
     // 组数/行数不定的串行级联, 写死窗口必然掐尾巴或白等
   } else if (document.body.classList.contains('entrance')) {

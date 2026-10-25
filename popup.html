@@ -1740,6 +1740,15 @@
       animation: active-enter 0.3s ease-out backwards;
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
+    /* 墨迹晕开(容器级): 单层 blur 0.28s —— 逐行 filter 要重栅格化 65 层,
+     * 容器只栅格化 1 层; 行逐帧冒出来时都带着晕开感。仅入场时挂(render.js)。 */
+    #results.ink-in {
+      animation: results-ink 0.28s ease-out both;
+    }
+    @keyframes results-ink {
+      from { filter: blur(2.5px); }
+      to { filter: blur(0); }
+    }
     @keyframes row-settle {
       /* 原位上浮 6px 落定。opacity 只在 from 压 0(兜住延迟期的 backwards 填充,
        * 不然没轮到的行会全实堆在原地), ease-out 让上浮前快后缓。 */
