@@ -131,7 +131,7 @@ function staggerDelay(step = 1) {
 function scheduleEntranceEnd() {
   if (!document.body.classList.contains('entrance')) return;
   clearTimeout(entranceTimer);
-  const total = entranceSpreadMs + 260 + 180; // 压缩后的级联跨度(首帧测量回填) + 单行动画(row-settle 0.26s) + 余量
+  const total = entranceSpreadMs + 450 + 200; // 压缩后的级联跨度 + 单行动画(row-settle 0.45s, 温柔版) + 余量
   entranceTimer = setTimeout(() => {
     entranceTimer = 0;
     document.body.classList.remove('entrance');
