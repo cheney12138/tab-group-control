@@ -2371,6 +2371,11 @@
     }
     html[data-theme="ink"] .help-card .kbd + .kbd { margin-left: 7px; }
     html[data-theme="ink"] .sbtn .kbd + .kbd { margin-left: 7px; }
+    /* 删除按键下拉(⌘ 退格)的值文本同裸宋键帽 —— select 放不进 kbd 帽, 字体对齐 */
+    html[data-theme="ink"] #optDeleteKey {
+      font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif;
+      font-weight: 600; letter-spacing: 0.04em;
+    }
     /* 帮助卡里 ⌘ 不带小方帽(2026-10-14 用户圈红"⌘ 的白底突兀"): 这一列别的键都是裸宋体,
        唯独 ⌘ 套着白底描边盒, 就它"穿外套"。只剥盒, 字面仍留等宽(符号用衬线渲染没把握);
        设置行按钮的键帽同批接入裸宋(.sbtn .kbd, 2026-10-14 用户口径"优化成跟使用帮助按键一样的样式")。 */
@@ -3234,7 +3239,7 @@
           <div class="srow"><span class="slabel">删除按键</span>
             <span class="sselect">
               <select id="optDeleteKey">
-                <option value="cmd-bs">⌘ + 退格</option>
+                <option value="cmd-bs">⌘ 退格</option>
                 <option value="bs">退格(起点)</option>
                 <option value="dbl-bs">双击退格</option>
               </select>
