@@ -778,13 +778,6 @@
     }
     .accent-swatch:hover { transform: scale(1.1); }
     .accent-swatch.active { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .10), 0 0 0 1.5px var(--surface), 0 0 0 3px var(--accent); }
-    /* 键帽: 快捷键小方块圆角浅灰底 */
-    .keycap {
-      display: inline-flex; align-items: center; gap: 3px;
-      padding: 3px 7px; border-radius: 6px;
-      background: var(--fill-2); color: var(--text-2);
-      font-size: 11px; font-weight: 600;
-    }
     /* 底部小灰字说明 */
     .s-foot { margin-top: 6px; text-align: center; font-size: 11px; color: var(--text-3); line-height: 1.5; }
     .s-foot a { color: var(--text-3); text-decoration: none; }
@@ -1443,7 +1436,7 @@
     }
     /* 组合键 = **一键一帽**(2026-10-14 用户圈红"组合键太挤"): ⌘ 与字母各自成帽,
      * 帽间不留 HTML 空白(inline-block 的空白格会叠加在间距上), 距离全由这条 margin 给。 */
-    .help-card .kbd + .kbd { margin-left: 4px; }
+    .help-card .kbd + .kbd, .sbtn .kbd + .kbd { margin-left: 4px; }
     /* 页脚空间窄: "默认 ⌘ E" 作为整体换行, 别把 E 单独甩到下一行(sky 的药丸最宽, 必踩) */
     .help-card-sub .nw { white-space: nowrap; }
     .help-card-head .app-ver { font-variant-numeric: tabular-nums; }
@@ -2367,15 +2360,17 @@
     /* 帮助卡在 ink 下: 键位改**宋体**、去掉键帽 —— 墨纸上的一块等宽灰底键帽是"外来件";
        行间给一条极淡的分隔线, 像账本。正文仍留在信息层(无衬线, 保证小字号可读)。
        这是对"宋体只上气质层"的一处**有意例外**: 键位是短符号(↑↓/Tab/⌘C), 宋体不费力。 */
-    html[data-theme="ink"] .help-card .kbd {
+    html[data-theme="ink"] .help-card .kbd,
+    html[data-theme="ink"] .sbtn .kbd {
       background: none; padding: 0; border-radius: 0;
       font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif;
       font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
     }
     html[data-theme="ink"] .help-card .kbd + .kbd { margin-left: 7px; }
+    html[data-theme="ink"] .sbtn .kbd + .kbd { margin-left: 7px; }
     /* 帮助卡里 ⌘ 不带小方帽(2026-10-14 用户圈红"⌘ 的白底突兀"): 这一列别的键都是裸宋体,
        唯独 ⌘ 套着白底描边盒, 就它"穿外套"。只剥盒, 字面仍留等宽(符号用衬线渲染没把握);
-       .keycap(设置行按钮上的键帽)不动 —— 那是"按钮上的键位标注", 盒子在那是有意的。 */
+       设置行按钮的键帽同批接入裸宋(.sbtn .kbd, 2026-10-14 用户口径"优化成跟使用帮助按键一样的样式")。 */
     html[data-theme="ink"] .help-card .k-c,
     html[data-theme="ink"] .help-card .k-cmd {
       background: none;
@@ -2875,7 +2870,6 @@
       border-radius: 12px;
       border: 1px solid var(--line);
     }
-    html[data-theme="ink"] .keycap,
     html[data-theme="ink"] .k-c,
     html[data-theme="ink"] .k-cmd {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -3253,7 +3247,7 @@
               <button class="accent-swatch" data-accent="rose" style="--sw:#E55375" title="玫红"></button>
             </span>
           </div>
-          <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="keycap"><span class="k-cmd"></span>⇧K</span></button>
+          <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></button>
         </div>
         <div class="sbox">
           <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>
