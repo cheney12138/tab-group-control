@@ -1740,14 +1740,16 @@
       animation: active-enter 0.5s ease-out backwards; /* 选中行同步放慢, 温柔同调 */
       animation-delay: 0s !important; /* 选中行第一个亮相(inline 的 stagger 延迟对它不适用) */
     }
-    /* 墨迹晕开(容器级): 单层 blur 0.28s —— 逐行 filter 要重栅格化 65 层,
-     * 容器只栅格化 1 层; 行逐帧冒出来时都带着晕开感。仅入场时挂(render.js)。 */
+    /* 墨迹晕开 → **揭纱**(2026-10-14 用户口径: "blur 有点掉帧, 优化渲染方式"):
+     * blur 活着, 容器就每帧重跑高斯滤波(行在动 → 内容每帧变), step 数也省不掉。
+     * 改为纯合成器属性: 容器从 opacity 0.5 + scale(1.012) 揭到清晰 —— 一层、
+     * 零重栅格化, 柔焦感由纱 + 行自身的 6px 上浮共同营造。仅入场时挂(render.js)。 */
     #results.ink-in {
-      animation: results-ink 0.5s ease-out both; /* 2026-10-14 用户口径: 统一 0.5s */
+      animation: results-ink 0.5s ease-out backwards; /* 2026-10-14 用户口径: 统一 0.5s */
     }
     @keyframes results-ink {
-      from { filter: blur(2.5px); }
-      to { filter: blur(0); }
+      from { opacity: 0.5; transform: scale(1.012); }
+      to { opacity: 1; transform: scale(1); }
     }
     @keyframes row-settle {
       /* 原位上浮 6px 落定。opacity 只在 from 压 0(兜住延迟期的 backwards 填充,
