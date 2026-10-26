@@ -1437,6 +1437,9 @@
     /* 组合键 = **一键一帽**(2026-10-14 用户圈红"组合键太挤"): ⌘ 与字母各自成帽,
      * 帽间不留 HTML 空白(inline-block 的空白格会叠加在间距上), 距离全由这条 margin 给。 */
     .help-card .kbd + .kbd, .sbtn .kbd + .kbd { margin-left: 4px; }
+    /* 设置行按钮的键帽组: 不拆分地贴在行尾 —— .srow 是 space-between 的 flex,
+     * 裸 .kbd 直接做子项会被撑满整行(2026-10-14 病例: ⌘/⇧/K 拉到三头) */
+    .sbtn .keycaps { display: inline-flex; align-items: center; flex: none; }
     /* 页脚空间窄: "默认 ⌘ E" 作为整体换行, 别把 E 单独甩到下一行(sky 的药丸最宽, 必踩) */
     .help-card-sub .nw { white-space: nowrap; }
     .help-card-head .app-ver { font-variant-numeric: tabular-nums; }
@@ -3247,7 +3250,7 @@
               <button class="accent-swatch" data-accent="rose" style="--sw:#E55375" title="玫红"></button>
             </span>
           </div>
-          <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></button>
+          <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="keycaps"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></span></button>
         </div>
         <div class="sbox">
           <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>

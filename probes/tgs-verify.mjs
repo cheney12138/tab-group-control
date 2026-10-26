@@ -104,8 +104,15 @@ const FAKES = () => {
   chk(`⬇️ 不重启 row-settle(${after - before} 个新启动)`, after - before === 0);
 
   // ── 3. 帮助卡 ──
-  const kbd = await p.evaluate(() => document.querySelectorAll('.help-card .kbd').length);
-  chk(`帮助卡键帽 ${kbd} 个(≥20)`, kbd >= 20);
+  const kbd = await p.evaluate(() => {
+    const caps = document.querySelectorAll('.help-card .kbd').length;
+    const group = document.querySelector('.sbtn .keycaps');
+    const ks = group ? [...group.querySelectorAll('.kbd')] : [];
+    const spread = ks.length >= 2 ? ks[1].getBoundingClientRect().left - ks[0].getBoundingClientRect().right : -1;
+    return { caps, group: !!group, spread };
+  });
+  chk(`帮助卡键帽 ${kbd.caps} 个(≥20)`, kbd.caps >= 20);
+  chk(`设置行键帽组不拆分(间距 ${Math.round(kbd.spread)}px ≤ 12)`, kbd.group && kbd.spread >= 0 && kbd.spread <= 12);
   await p.close();
 }
 
