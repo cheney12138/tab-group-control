@@ -791,6 +791,15 @@ export async function switchTo(tab) {
     window.close();
     return;
   }
+  // 2026-10-14 用户口径: "选中一段时间不打开的 tab, 总是空白, 需要我手动刷新一下" ——
+  // 被内存节省程序/休眠插件 discard 的 tab, 仅 activate 有概率落在空白帧上
+  // (休眠插件的 discard 尤其如此)。激活前显式 reload 一次, 落地就是加载中的页面。
+  try {
+    const fresh = await chrome.tabs.get(tab.id).catch(() => null);
+    if (fresh && (fresh.discarded || fresh.status === 'unloaded')) {
+      await chrome.tabs.reload(tab.id);
+    }
+  } catch (e) { /* tab 可能刚被关闭, 走下面的 activate 自然兜底 */ }
   await chrome.tabs.update(tab.id, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
   window.close();
