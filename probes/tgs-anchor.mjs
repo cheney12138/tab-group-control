@@ -1,7 +1,7 @@
 // 验证位置策略: 指针可查→跟随; 拿不到→聚焦普通窗口居中; 宽高记忆
 Object.defineProperty(process.versions, 'node', { value: '20.0.0', configurable: true });
 const { chromium } = await import('/Users/qianyuchen/.npm/_npx/9833c18b2d85bc59/node_modules/playwright/index.mjs');
-const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const REPO = '/Users/qianyuchen/tab-group-search';
 const ctx = await chromium.launchPersistentContext(`/tmp/tgs-anc-${Date.now()}`, {
   executablePath: EXE, viewport: null,

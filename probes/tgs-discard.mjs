@@ -2,7 +2,7 @@
 // 注意: 点击行会 window.close(), reload 记录写 localStorage, 从常驻 helper 页读取
 Object.defineProperty(process.versions, 'node', { value: '20.0.0', configurable: true });
 const { chromium } = await import('/Users/qianyuchen/.npm/_npx/9833c18b2d85bc59/node_modules/playwright/index.mjs');
-const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const REPO = '/Users/qianyuchen/tab-group-search';
 const ctx = await chromium.launchPersistentContext(`/tmp/tgs-dsc-${Date.now()}`, {
   executablePath: EXE, viewport: null,

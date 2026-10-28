@@ -1,7 +1,7 @@
 // 验证独立窗口失焦自关: hasFocus 恒真时守卫不误关(CDP 无法模拟真失焦, 真机验证)
 Object.defineProperty(process.versions, 'node', { value: '20.0.0', configurable: true });
 const { chromium } = await import('/Users/qianyuchen/.npm/_npx/9833c18b2d85bc59/node_modules/playwright/index.mjs');
-const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const REPO = '/Users/qianyuchen/tab-group-search';
 const ctx = await chromium.launchPersistentContext(`/tmp/tgs-blur-${Date.now()}`, {
   executablePath: EXE, viewport: null,
