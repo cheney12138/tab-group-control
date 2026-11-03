@@ -310,6 +310,40 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
     }
     .search-wrap input { flex: 1; }
+
+    /* 方块光标(2026-11-03 用户口径: 终端录屏里"实心方块 + 慢闪"比 1px 细线丝滑得多):
+       原生 caret 透明, 用一层 accent 方块贴住插入点 —— 方块只做视觉影子, 输入仍走原生
+       输入流(IME/选区/撤销全不受影响)。只动 transform/opacity 两个合成器属性。 */
+    #search { caret-color: transparent; }
+    /* 拼音上屏期间交还原生 caret: 组合串要跟着拼音走, 影子和它不同步反而乱 */
+    .search-wrap.composing #search { caret-color: auto; }
+    .search-wrap.composing .block-caret { opacity: 0 !important; animation: none !important; }
+    .block-caret {
+      position: absolute; left: 0; top: 50%;
+      width: 8px; height: 1.05em; font-size: 13.5px;
+      margin-top: -0.525em;
+      border-radius: 2px;
+      background: var(--accent);
+      opacity: 0;
+      pointer-events: none;
+      will-change: transform;
+      transition: transform 70ms cubic-bezier(0.22, 0.85, 0.28, 1), opacity 0.1s linear;
+    }
+    /* 打字时保持实心(不闪), 停手 420ms 后由 JS 挂上 .blink 恢复终端式慢闪 */
+    .block-caret.on { opacity: 0.88; }
+    .block-caret.on.blink { animation: caret-blink 1.06s steps(1, end) infinite; }
+    @keyframes caret-blink {
+      0%, 49.9% { opacity: 0.88 }
+      50%, 100% { opacity: 0 }
+    }
+    /* 墨纸上是宣纸+墨块: 方角收一点, 墨色比 accent 更沉 */
+    html[data-theme="ink"] .block-caret { border-radius: 1px; }
+    html[data-theme="ink"] .block-caret.on { opacity: 0.75; }
+    html[data-theme="ink"] .block-caret.on.blink { animation-name: caret-blink-ink; }
+    @keyframes caret-blink-ink {
+      0%, 49.9% { opacity: 0.75 }
+      50%, 100% { opacity: 0 }
+    }
     .search-ink-stroke { display: none; }
     /* 数据源按钮: 搜索框左缘的书签/历史入口,点击激活对应命令(等价 /b /h) */
     .src-btn {
@@ -3169,6 +3203,7 @@
       <span class="cmd-chip-x" title="移除命令 (⌫)">×</span>
     </span>
     <input id="search" type="text" placeholder="搜索标签页…" autofocus autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" name="tgs-search">
+    <span id="blockCaret" class="block-caret" aria-hidden="true"></span>
     <button id="locateBtn" class="src-btn" title="定位当前标签" aria-label="定位当前标签">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
     </button>

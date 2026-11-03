@@ -24,6 +24,7 @@ import { initCloseBatch } from './features/close-batch.js';
 import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
 import { initBackup } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
+import { initBlockCaret, refreshBlockCaret } from './features/caret.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl, endEntrance } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
 
@@ -599,6 +600,9 @@ initGroupEdit({
 // 配置备份: 写在弹窗侧而不是 background —— service worker 里没有 localStorage(见 backup.js 文件头)
 initBackup();
 initSearch({ render });
+// 方块光标: 终端那种实心插入点(2026-11-03 用户口径), 输入链路不变, 只换视觉
+initBlockCaret();
+window.__tgsRefreshCaret = refreshBlockCaret;
 initRender({ refreshData, getSettings: () => settings });
 
 // 入场动效**允许打断**(2026-10-14 用户口径: "不要强迫用户看完"): 任何主动输入
