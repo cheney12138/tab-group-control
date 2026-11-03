@@ -4,3 +4,6 @@
 .claude/
 skills-lock.json
 design/icon/build/
+
+# 本地采集报告(ai-coding-usage 等): 个人使用数据, 不入库
+.skillspace/
