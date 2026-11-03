@@ -13,4 +13,4 @@
 | `tgs-mouse.mjs` | content.js 鼠标位置跟随 | 3/3 |
 | `tgs-blur.mjs` | 独立窗口失焦自关的守卫(设置/分组弹层期间不自关) | 2/2 |
 | `tgs-discard.mjs` | 休眠(discarded)tab 被点击 → 显式 reload, 不落空白帧 | 2/2 |
-| `tgs-caret.mjs` | 方块光标: 原生 caret 透明 / 位置=插入点文本宽 / 打字不闪+停手 420ms 慢闪 / ← 按字宽移动 / blur 隐藏 / 拼音组合交还原生 caret | 13/13 |
+| `tgs-caret.mjs` | 滑行光标: 原生 caret 透明 / 细竖线 2px / 位置=插入点文本宽 / 位移 90ms 补间(中间帧存在非端点 x) / 打字不闪+停手 420ms 慢闪 / blur 隐藏 / 拼音组合交还原生 caret | 15/15 |

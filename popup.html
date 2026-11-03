@@ -311,37 +311,38 @@
     }
     .search-wrap input { flex: 1; }
 
-    /* 方块光标(2026-11-03 用户口径: 终端录屏里"实心方块 + 慢闪"比 1px 细线丝滑得多):
-       原生 caret 透明, 用一层 accent 方块贴住插入点 —— 方块只做视觉影子, 输入仍走原生
-       输入流(IME/选区/撤销全不受影响)。只动 transform/opacity 两个合成器属性。 */
+    /* 滑行光标(2026-11-03 用户口径: 终端录屏里光标是**滑**过去的, 不是一格一格顿开;
+     * 用户明确否掉了方块: "这个方块只是 tui 的样式, 不是要它这个方块")。
+     * 原生 caret 无法做位移补间, 所以设透明, 用一根细竖线贴住插入点 ——
+     * 位置只走 transform(合成器属性), 90ms ease-out 滑到新位置。 */
     #search { caret-color: transparent; }
-    /* 拼音上屏期间交还原生 caret: 组合串要跟着拼音走, 影子和它不同步反而乱 */
+    /* 拼音上屏期间交还原生 caret: 组合串跟着拼音走, 影子追不上反而乱 */
     .search-wrap.composing #search { caret-color: auto; }
-    .search-wrap.composing .block-caret { opacity: 0 !important; animation: none !important; }
-    .block-caret {
+    .search-wrap.composing .smooth-caret { opacity: 0 !important; animation: none !important; }
+    .smooth-caret {
       position: absolute; left: 0; top: 50%;
-      width: 8px; height: 1.05em; font-size: 13.5px;
-      margin-top: -0.525em;
-      border-radius: 2px;
+      width: 2px; height: 1.15em; font-size: 13.5px;
+      margin-top: -0.575em;
+      border-radius: 1px;
       background: var(--accent);
       opacity: 0;
       pointer-events: none;
       will-change: transform;
-      transition: transform 70ms cubic-bezier(0.22, 0.85, 0.28, 1), opacity 0.1s linear;
+      transition: transform 90ms cubic-bezier(0.22, 0.9, 0.28, 1), opacity 0.1s linear;
     }
-    /* 打字时保持实心(不闪), 停手 420ms 后由 JS 挂上 .blink 恢复终端式慢闪 */
-    .block-caret.on { opacity: 0.88; }
-    .block-caret.on.blink { animation: caret-blink 1.06s steps(1, end) infinite; }
+    /* 打字时保持实心(不闪), 停手 420ms 后由 JS 挂上 .blink 恢复慢闪 */
+    .smooth-caret.on { opacity: 0.9; }
+    .smooth-caret.on.blink { animation: caret-blink 1.06s steps(1, end) infinite; }
     @keyframes caret-blink {
-      0%, 49.9% { opacity: 0.88 }
+      0%, 49.9% { opacity: 0.9 }
       50%, 100% { opacity: 0 }
     }
-    /* 墨纸上是宣纸+墨块: 方角收一点, 墨色比 accent 更沉 */
-    html[data-theme="ink"] .block-caret { border-radius: 1px; }
-    html[data-theme="ink"] .block-caret.on { opacity: 0.75; }
-    html[data-theme="ink"] .block-caret.on.blink { animation-name: caret-blink-ink; }
+    /* 墨纸上线细一档、墨色压深 */
+    html[data-theme="ink"] .smooth-caret { width: 1.6px; width: 2px; }
+    html[data-theme="ink"] .smooth-caret.on { opacity: 0.85; }
+    html[data-theme="ink"] .smooth-caret.on.blink { animation-name: caret-blink-ink; }
     @keyframes caret-blink-ink {
-      0%, 49.9% { opacity: 0.75 }
+      0%, 49.9% { opacity: 0.85 }
       50%, 100% { opacity: 0 }
     }
     .search-ink-stroke { display: none; }
@@ -3203,7 +3204,7 @@
       <span class="cmd-chip-x" title="移除命令 (⌫)">×</span>
     </span>
     <input id="search" type="text" placeholder="搜索标签页…" autofocus autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" name="tgs-search">
-    <span id="blockCaret" class="block-caret" aria-hidden="true"></span>
+    <span id="smoothCaret" class="smooth-caret" aria-hidden="true"></span>
     <button id="locateBtn" class="src-btn" title="定位当前标签" aria-label="定位当前标签">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
     </button>

@@ -1,8 +1,8 @@
 // tgs-caret.mjs (2026-11-03) — 方块光标不变量:
-//   ① 原生 caret 透明 + 方块在场
-//   ② 打字后方块 x = 插入点文本宽度(±3px), 且宽 ≈ 光标处字符宽
+//   ① 原生 caret 透明 + 细竖线在场(宽 2px, 不是贴字宽的方块)
+//   ② 打字后 x = 插入点文本宽度(±3px)
 //   ③ 打字期间不闪, 停手 420ms 后挂 .blink
-//   ④ 方向键左移 → 方块左移一个字宽
+//   ④ 换位置是补间滑行: 中间帧存在非端点 x(顿跳只会有 2 个 x)
 //   ⑤ blur 隐藏 / 拼音组合期间交还原生 caret
 Object.defineProperty(process.versions, 'node', { value: '20.0.0', configurable: true });
 const { chromium } = await import('/Users/qianyuchen/.npm/_npx/9833c18b2d85bc59/node_modules/playwright/index.mjs');
@@ -41,7 +41,7 @@ await p.waitForSelector('.tab-item', { timeout: 10000 });
 
 const readCaret = () => p.evaluate(() => {
   const input = document.getElementById('search');
-  const caret = document.getElementById('blockCaret');
+  const caret = document.getElementById('smoothCaret');
   const cs = getComputedStyle(input);
   const ctx2 = document.createElement('canvas').getContext('2d');
   ctx2.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
@@ -61,6 +61,8 @@ const readCaret = () => p.evaluate(() => {
     charW: ctx2.measureText(ch).width,
     on: caret.classList.contains('on'),
     blink: caret.classList.contains('blink'),
+    width: caretRect.width,
+    glide: getComputedStyle(caret).transition,
     height: caretRect.height,
     inputH: inputRect.height,
     pos,
@@ -73,10 +75,12 @@ const readCaret = () => p.evaluate(() => {
   await p.waitForTimeout(150);
   const st = await readCaret();
   chk(`原生 caret 透明(${st.caretColor})`, st.caretColor === 'rgba(0, 0, 0, 0)' || st.caretColor === 'transparent');
-  chk('方块在场(.on)', st.on);
-  // 终端方块 = 一行字高(行盒), 不是含 padding 的整个输入框
-  chk(`方块高 ≈ 行高(${st.height.toFixed(1)}px, 输入框 ${st.inputH}px 含 7px 上下 padding)`,
+  chk('光标在场(.on)', st.on);
+  chk(`是细竖线不是方块(宽 ${st.width.toFixed(2)}px)`, st.width >= 1.5 && st.width <= 2.5);
+  // 竖线高 = 一行字高(行盒), 不是含 padding 的整个输入框
+  chk(`竖线高 ≈ 行高(${st.height.toFixed(1)}px, 输入框 ${st.inputH}px 含 7px 上下 padding)`,
     st.height >= 12 && st.height <= st.inputH - 12);
+  chk('位移带补间(transition 含 transform 90ms)', /transform/.test(st.glide) && /0\.09s|90ms/.test(st.glide));
 }
 
 // ② 打字后位置对得上
@@ -86,8 +90,6 @@ const readCaret = () => p.evaluate(() => {
   const st = await readCaret();
   chk(`打字后 x 与插入点吻合(${st.caretX.toFixed(1)} vs ${st.expectedX.toFixed(1)})`,
     Math.abs(st.caretX - st.expectedX) <= 3);
-  chk(`方块宽 ≈ 字符宽(${st.caretW.toFixed(1)} vs ${st.charW.toFixed(1)})`,
-    Math.abs(st.caretW - st.charW) <= 2);
   chk('打字时不闪(!blink)', !st.blink);
 }
 
@@ -97,22 +99,41 @@ const readCaret = () => p.evaluate(() => {
   const st = await readCaret();
   chk('停手后挂上 .blink', st.blink);
   const anim = await p.evaluate(() => {
-    const c = document.getElementById('blockCaret');
-    const a = c.getAnimations().map(x => x.animationName || x.effect?.getKeyframes?.().length);
-    return { name: getComputedStyle(c).animationName, timing: getComputedStyle(c).animationDuration };
+    const c = document.getElementById('smoothCaret');
+    const cs = getComputedStyle(c);
+    return { name: cs.animationName, timing: cs.animationDuration };
   });
   chk(`慢闪 1.06s steps(${anim.name} / ${anim.timing})`, anim.name === 'caret-blink' && anim.timing === '1.06s');
 }
 
-// ④ 方向键左移 → 方块左移一个字宽
+// ④ 换位置是"滑"过去的: 采样中间帧, 必须存在非端点的 x
 {
-  const before = await readCaret();
-  await p.keyboard.press('ArrowLeft');
-  await p.waitForTimeout(140);
-  const after = await readCaret();
-  const delta = before.caretX - after.caretX;
-  chk(`← 后方块左移一个字宽(${delta.toFixed(1)}px, 期望≈${before.charW.toFixed(1)}px)`,
-    after.pos === before.pos - 1 && Math.abs(delta - before.charW) <= 4);
+  const res = await p.evaluate(async () => {
+    const input = document.getElementById('search');
+    const caret = document.getElementById('smoothCaret');
+    const xs = [];
+    let running = true;
+    const t0 = performance.now();
+    const tick = () => {
+      xs.push([performance.now() - t0, caret.getBoundingClientRect().left]);
+      if (running) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    await new Promise(r => setTimeout(r, 40));
+    const startX = caret.getBoundingClientRect().left;
+    input.setSelectionRange(input.value.length - 1, input.value.length - 1);
+    input.dispatchEvent(new Event('select'));   // 重定位 → CSS 补间滑行
+    await new Promise(r => setTimeout(r, 240));
+    running = false;
+    const endX = caret.getBoundingClientRect().left;
+    const mid = xs.map(([, x]) => x);
+    const between = mid.filter(x => x < startX - 0.4 && x > endX + 0.4).length;
+    const uniq = new Set(mid.map(x => x.toFixed(1))).size;
+    return { dist: startX - endX, between, uniq };
+  });
+  chk(`光标位移 ${res.dist.toFixed(1)}px`, res.dist > 3);
+  chk(`中间帧落在起止之间(${res.between} 帧 / 共 ${res.uniq} 个不同 x) —— 顿跳只会有 2 个 x`,
+    res.between >= 1 && res.uniq >= 3);
 }
 
 // ⑤ blur 隐藏
@@ -120,7 +141,7 @@ const readCaret = () => p.evaluate(() => {
   await p.evaluate(() => document.getElementById('search').blur());
   await p.waitForTimeout(80);
   const st = await readCaret();
-  chk('blur 后方块隐藏', !st.on);
+  chk('blur 后光标隐藏', !st.on);
 }
 
 // ⑥ 拼音组合期间交还原生 caret
@@ -137,12 +158,12 @@ const readCaret = () => p.evaluate(() => {
     return {
       caretColor: getComputedStyle(input).caretColor,
       composing: wrap.classList.contains('composing'),
-      blockOpacity: getComputedStyle(document.getElementById('blockCaret')).opacity,
+      blockOpacity: getComputedStyle(document.getElementById('smoothCaret')).opacity,
     };
   });
   chk('组合期间 wrap 挂 .composing', st.composing);
   chk(`组合期间原生 caret 回来(${st.caretColor})`, st.caretColor !== 'rgba(0, 0, 0, 0)');
-  chk(`组合期间方块藏起(opacity ${st.blockOpacity})`, st.blockOpacity === '0');
+  chk(`组合期间光标藏起(opacity ${st.blockOpacity})`, st.blockOpacity === '0');
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
