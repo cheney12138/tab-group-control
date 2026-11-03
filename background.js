@@ -735,12 +735,13 @@ async function openStandalone() {
   setTimeout(() => chrome.history.deleteUrl({ url: STANDALONE_URL }).catch(() => {}), 1000);
 }
 
-// 快捷键命令: A/B 互跳 + 独立窗口
+// 快捷键命令: A/B 互跳
+// (2026-11-03 用户口径: "我现在不是有这个配置吗, 如果做不了全局的, 就别多此一举
+//  用 cmd shift e 绑定快捷键了. 没必要" —— open-window 命令撤掉: 设置里"唤起为
+//  独立窗口"开关 + ⌘E 已经覆盖同一个需求, 再挂一个 ⌘⇧E 只是多一个键位要记)
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'previous-tab') {
     gotoPreviousTab().catch(e => console.error('返回上一标签失败:', e));
-  } else if (command === 'open-window') {
-    openStandalone().catch(e => console.error('打开独立窗口失败:', e));
   }
 });
 

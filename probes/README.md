@@ -5,7 +5,7 @@
 
 | 探针 | 守什么 | 当前 |
 |---|---|---|
-| `tgs-verify.mjs` | 入场 row-settle 0.5s / 揭纱 ink-in / ⬇️ 不重启 / 帮助卡键帽 / 设置行键帽组不拆分 / 主题不透明底 / wave-icon | 10/10 |
+| `tgs-verify.mjs` | 入场 row-settle 0.5s / 揭纱 ink-in / ⬇️ 不重启 / 帮助卡键帽 / 设置行键帽组不拆分 / 快捷键命令只剩 2 个 / 主题不透明底 / wave-icon | 11/11 |
 | `tgs-drop.mjs` | 级联压缩 650ms 上限 / 帧拍 ≥10ms / 单调不倒退 | 5/5 |
 | `tgs-flicker.mjs` | ⬇️ 重启后 80/300/600ms 无 row-settle 重播 | 4/4 |
 | `tgs-flash.mjs` | 独立窗口开关(setPopup(''))时无弹窗闪帧 | 3/3 |

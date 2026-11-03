@@ -112,6 +112,10 @@ const FAKES = () => {
     return { caps, group: !!group, spread };
   });
   chk(`帮助卡键帽 ${kbd.caps} 个(≥20)`, kbd.caps >= 20);
+  // 2026-11-03: open-window 命令撤掉(⌘⇧E 与"唤起为独立窗口"开关重复) —— 防回归
+  const cmdCount = await p.evaluate(() =>
+    Object.keys(chrome.runtime.getManifest().commands || {}).length);
+  chk(`快捷键命令只剩 2 个(_execute_action/previous-tab, 实测 ${cmdCount})`, cmdCount === 2);
   chk(`设置行键帽组不拆分(间距 ${Math.round(kbd.spread)}px ≤ 12)`, kbd.group && kbd.spread >= 0 && kbd.spread <= 12);
   await p.close();
 }
