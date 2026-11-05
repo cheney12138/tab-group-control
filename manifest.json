@@ -69,6 +69,17 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://ingee.meituan.com/*"
+      ],
+      "js": [
+        "ghost-media-fix.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
     }
   ],
   "host_permissions": [
