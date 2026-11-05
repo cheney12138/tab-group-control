@@ -291,6 +291,8 @@ async function doAutoGroupTab(tab) {
         return;
       }
     }
+    // 标签本身已关闭(批量关闭/清理与 onUpdated 归组赛跑): 无物可归, 直接跳过
+    if (/No tab with id/i.test(String(e?.message || ''))) return;
     console.error(`归组失败(${groupName}):`, e);
   }
 }
@@ -803,6 +805,10 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     const raw = s[BACKUP_FOLDER_KEY];
     const folder = typeof raw === 'string' ? raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
     suggest({ filename: folder ? `${folder}/${BACKUP_FILENAME}` : BACKUP_FILENAME, conflictAction: 'overwrite' });
+    // 下载管理器(NeatDM)会 cancel+erase 我们这条下载, 存储读取的间隙里记录已失效,
+    // suggest 落在死 id 上会置 runtime.lastError("Invalid downloadId")——
+    // 这里读一下把它标记为已处理, 否则错误面板里堆 "Unchecked runtime.lastError" 噪音
+    void chrome.runtime.lastError;
   }).catch(() => suggest({ filename: BACKUP_FILENAME, conflictAction: 'overwrite' }));
 });
 

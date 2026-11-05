@@ -494,10 +494,13 @@ function handleShortcuts(e) {
     if (shouldDelete && inDeleteTarget) {
       e.preventDefault();
       const target = state.filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
-      if (target && target.duplicates && target.duplicates.length) {
+      if (!target) return; // 行数据已失效(重渲染竞态下旧行还在 DOM), 不动作避免误关
+      if (target.duplicates && target.duplicates.length) {
         closeOneDuplicate(target);
-      } else {
-        closeTab(Number(focusedUnit.dataset.tabId));
+      } else if (target.tab.id > 0) {
+        // 用 state 里的权威 id, 而非再解析一次 dataset;
+        // 虚拟条目(负 id)无关闭语义, 直接跳过
+        closeTab(target.tab.id);
       }
     }
   }

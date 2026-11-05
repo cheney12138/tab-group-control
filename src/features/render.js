@@ -690,7 +690,9 @@ function buildTabRow(item) {
     // 关闭是 button,点击会拿走键盘焦点,抢回 input 保证快捷键继续工作
     input.focus();
   });
-  row.appendChild(closeBtn);
+  // 虚拟条目(书签/历史/最近关闭, 负 id)没有关闭语义(与右键菜单同口径),
+  // 不挂关闭按钮, 避免点了静默无效
+  if (!isVirtualItem) row.appendChild(closeBtn);
 
   row.addEventListener('click', () => switchTo(t));
 
@@ -724,6 +726,13 @@ function groupNeighbours(rows, idx) {
 
 // 关闭标签页并从列表中移除该行,焦点迁移到相邻行; 底部提供限时撤销
 export async function closeTab(tabId) {
+  // 防线: 虚拟条目(书签/历史/最近关闭, 负 id)没有关闭语义;
+  // 非整数(重渲染竞态下 dataset 解析出 NaN)也直接忽略,
+  // 否则 tabs.remove 参数校验直接扡 "Value did not match any choice"
+  if (!Number.isInteger(tabId) || tabId <= 0) {
+    console.warn('[TGS] closeTab: 非法 tabId, 已忽略:', tabId);
+    return;
+  }
   const rows = [...resultsEl.querySelectorAll('.tab-item')];
   const rowIdx = rows.findIndex(r => Number(r.dataset.tabId) === tabId);
   const closed = state.filtered.find(f => f.tab.id === tabId);
@@ -800,8 +809,10 @@ export async function switchTo(tab) {
       await chrome.tabs.reload(tab.id);
     }
   } catch (e) { /* tab 可能刚被关闭, 走下面的 activate 自然兜底 */ }
-  await chrome.tabs.update(tab.id, { active: true });
-  await chrome.windows.update(tab.windowId, { focused: true });
+  try {
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } catch (e) { /* 标签在切换瞬间被关掉: 静默, 弹窗即将关闭 */ }
   window.close();
 }
 

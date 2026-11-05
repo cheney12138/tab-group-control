@@ -374,7 +374,16 @@ export async function closeOneDuplicate(target) {
     const remaining = (src?.duplicates?.length ?? target.duplicates.length - 1) + 1;
     showToast(`已关闭一份副本,剩余 ${remaining} 份`);
   } catch (e) {
-    console.error('关闭副本失败:', e);
+    // 副本可能已在别处被关(右键批量/其他窗口), 陈旧 id 停在 duplicates 里
+    // 会每次删除都报 "No tab with id" —— 从源头清掉后下次自然轮到下一份
+    console.warn('关闭副本失败(副本可能已不存在):', e.message || e);
+    const src = state.allTabs.find(x => x.tab.url === target.tab.url);
+    if (src?.duplicates) {
+      src.duplicates = src.duplicates.filter(id => id !== victimId);
+      search(searchValue());
+      actions.render();
+      showToast('该副本已不存在, 已跳过');
+    }
   }
 }
 
