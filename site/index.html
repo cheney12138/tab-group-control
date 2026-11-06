@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tab Group Search — 几百个标签页,一个弹窗管好</title>
+<meta name="description" content="Tab Group Search 是一款 Chrome 扩展:搜索切换 + 自动分组 + 归档收纳。全量拼音搜索、域名规则引擎、右键批量管理,专为多环境开发场景设计。纯本地运行,零网络请求。">
+<meta property="og:title" content="Tab Group Search — 几百个标签页,一个弹窗管好">
+<meta property="og:description" content="搜索切换 + 自动分组 + 归档收纳。⌘E 唤起,全量拼音秒搜,规则引擎自动归组。">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Design tokens — 沿用产品 Linear 主题的色板(默认突出色 #387BE5)
+   ============================================================ */
+:root {
+  --bg: #f9f9fb;
+  --surface: #ffffff;
+  --fill: rgba(8,9,10,0.05);
+  --text: #08090a;
+  --text-2: #5e6b7a;
+  --text-3: #9ca3af;
+  --hairline: rgba(8,9,10,0.08);
+  --accent: #387BE5;
+  --accent-hi: #2768cc;
+  --accent-dark: #8AB4F8;
+  --tint: rgba(56,123,229,0.12);
+  --tint-2: rgba(56,123,229,0.18);
+  --danger: #dc2626;
+  --danger-bg: rgba(220,38,38,0.09);
+  --green: #34A853; --green-bg: rgba(22,163,74,0.12);
+  --blue-tag: #5e6ad2;  --blue-tag-bg: rgba(94,106,210,0.10);
+  --gray-tag: #5e6b7a;  --gray-tag-bg: rgba(8,9,10,0.06);
+  --amber: #b45309;     --amber-bg: rgba(180,83,9,0.12);
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
+  --shadow-card: 0 1px 2px rgba(8,9,10,0.06);
+  --shadow-pop: 0 1px 2px rgba(8,9,10,0.18), 0 8px 32px rgba(8,9,10,0.12);
+  --shadow-hero: 0 24px 80px -16px rgba(8,20,60,0.28), 0 4px 16px rgba(8,9,10,0.08);
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --maxw: 1120px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: rgba(56,123,229,0.22); }
+a { color: inherit; }
+img { display: block; }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+
+/* ---------------- Nav ---------------- */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 60px;
+  background: rgba(249,249,251,0.82);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--hairline);
+}
+.nav-inner { max-width: var(--maxw); margin: 0 auto; height: 100%; padding: 0 28px; display: flex; align-items: center; gap: 10px; }
+.nav-logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; text-decoration: none; }
+.nav-logo img { width: 26px; height: 26px; }
+.nav-links { margin-left: auto; display: flex; align-items: center; gap: 26px; }
+.nav-links a { font-size: 13.5px; color: var(--text-2); text-decoration: none; transition: color .15s; }
+.nav-links a:hover { color: var(--text); }
+.nav-cta {
+  font-size: 13px; font-weight: 600; color: #fff !important;
+  background: var(--accent); padding: 7px 16px; border-radius: 8px;
+  transition: background .15s;
+}
+.nav-cta:hover { background: var(--accent-hi); }
+@media (max-width: 720px) { .nav-links a:not(.nav-cta) { display: none; } }
+
+/* ---------------- Hero ---------------- */
+.hero {
+  position: relative;
+  padding: 152px 0 110px;
+  text-align: center;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(680px 340px at 50% -60px, rgba(56,123,229,0.14), transparent 70%),
+    radial-gradient(400px 200px at 80% 120px, rgba(52,168,83,0.06), transparent 70%),
+    radial-gradient(400px 200px at 15% 160px, rgba(229,83,117,0.05), transparent 70%);
+}
+.hero-grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(var(--hairline) 1px, transparent 1px), linear-gradient(90deg, var(--hairline) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(720px 420px at 50% 0, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(720px 420px at 50% 0, #000 30%, transparent 75%);
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  background: var(--tint); border: 1px solid rgba(56,123,229,0.24);
+  padding: 5px 13px; border-radius: 99px; margin-bottom: 22px;
+}
+.hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.hero h1 {
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  margin-bottom: 18px;
+}
+.hero h1 .grad {
+  background: linear-gradient(115deg, #387BE5 10%, #5e6ad2 55%, #387BE5 95%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-sub {
+  font-size: clamp(15px, 2vw, 18px);
+  color: var(--text-2);
+  max-width: 620px; margin: 0 auto 14px;
+  line-height: 1.7;
+}
+.hero-kbd-hint { font-size: 13px; color: var(--text-3); margin-bottom: 30px; }
+kbd {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px;
+  color: var(--text-2);
+  box-shadow: 0 1px 0 rgba(8,9,10,0.04);
+  white-space: nowrap;
+}
+.hero-actions { display: flex; gap: 14px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 14.5px; font-weight: 600; text-decoration: none;
+  padding: 12px 26px; border-radius: 10px;
+  transition: transform .15s var(--ease-spring), background .15s, box-shadow .15s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(56,123,229,0.32); }
+.btn-primary:hover { background: var(--accent-hi); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(56,123,229,0.38); }
+.btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--hairline); box-shadow: var(--shadow-card); }
+.btn-ghost:hover { border-color: rgba(56,123,229,0.4); color: var(--accent); transform: translateY(-1px); }
+.hero-meta { display: flex; gap: 22px; justify-content: center; font-size: 12.5px; color: var(--text-3); flex-wrap: wrap; }
+.hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.hero-meta svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------------- Browser frame + demo ---------------- */
+.hero-visual { position: relative; margin-top: 78px; }
+.browser {
+  max-width: 880px; margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: var(--shadow-hero);
+  overflow: visible;
+  position: relative;
+  text-align: left;
+}
+.browser-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(8,9,10,0.015);
+  border-radius: 14px 14px 0 0;
+}
+.b-dot { width: 11px; height: 11px; border-radius: 50%; }
+.b-dot.r { background: #FF5F57; } .b-dot.y { background: #FEBC2E; } .b-dot.g { background: #28C840; }
+.browser-url {
+  flex: 1; margin-left: 8px;
+  font-size: 12px; color: var(--text-3);
+  background: var(--fill); border-radius: 7px;
+  padding: 5px 12px; display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono);
+}
+.tabstrip {
+  display: flex; align-items: flex-end; gap: 3px;
+  padding: 9px 14px 0;
+  background: rgba(8,9,10,0.02);
+  border-bottom: 1px solid var(--hairline);
+  overflow: hidden;
+}
+.chip {
+  flex: none;
+  font-size: 11px; color: var(--text-2);
+  padding: 6px 12px 7px;
+  background: rgba(8,9,10,0.04);
+  border: 1px solid var(--hairline); border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  white-space: nowrap;
+  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0.85;
+}
+.chip.on { background: var(--surface); opacity: 1; color: var(--text); font-weight: 500; box-shadow: 0 -1px 3px rgba(8,9,10,0.04); }
+.gchip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600;
+  padding: 6px 10px 7px;
+  background: color-mix(in srgb, var(--gc) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--gc) 30%, transparent); border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: color-mix(in srgb, var(--gc) 75%, #333);
+  white-space: nowrap;
+}
+.gchip i { width: 7px; height: 7px; border-radius: 50%; background: var(--gc); }
+.gchip em { font-style: normal; font-weight: 400; opacity: .65; font-size: 10px; }
+.browser-body {
+  position: relative;
+  height: 300px;
+  background: var(--surface);
+  border-radius: 0 0 14px 14px;
+}
+.page-ghost { padding: 34px 36px; }
+.ghost-line { height: 10px; border-radius: 5px; background: var(--fill); margin-bottom: 12px; }
+.ghost-line.w60 { width: 60%; } .ghost-line.w80 { width: 80%; } .ghost-line.w40 { width: 40%; }
+.ghost-block { height: 90px; border-radius: 10px; background: var(--fill); margin-top: 18px; }
+
+/* The floating demo popup (复刻产品 UI) */
+.demo {
+  position: absolute;
+  right: -24px; top: -52px;
+  width: 380px;
+  height: 480px;
+  background: #f9f9fb;
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  box-shadow: 0 18px 60px -8px rgba(8,15,40,0.35), 0 2px 8px rgba(8,9,10,0.10);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  font-size: 12.5px;
+  z-index: 10;
+  transition: box-shadow .2s;
+}
+.demo-float { animation: demo-float 7s ease-in-out infinite; }
+@keyframes demo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.demo-tabs {
+  display: flex; gap: 16px;
+  padding: 10px 14px 8px;
+  position: relative;
+  flex: none;
+}
+.demo-tab {
+  border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; color: var(--text-2);
+  padding: 0 2px 5px; position: relative;
+  transition: color .15s;
+}
+.demo-tab.active { color: var(--text); font-weight: 600; }
+.demo-tab.active::after {
+  content: ''; position: absolute; left: 50%; bottom: 0;
+  width: 26px; height: 2.5px; border-radius: 99px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+.demo-tabs .spacer { flex: 1; }
+.demo-gear {
+  border: none; background: none; cursor: pointer; color: var(--text-3);
+  padding: 3px; border-radius: 6px; display: flex; align-self: center;
+}
+.demo-gear:hover { background: rgba(8,9,10,0.05); color: var(--text); }
+.demo-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.demo-search-row { padding: 0 14px 9px; flex: none; }
+.demo-search {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline));
+  box-shadow: 0 0 0 2.5px rgba(56,123,229,0.10);
+  border-radius: 10px;
+  padding: 0 9px;
+}
+.demo-search .src { color: var(--text-3); display: flex; }
+.demo-search .src svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.demo-search input {
+  flex: 1; min-width: 0;
+  border: none; outline: none; background: transparent;
+  font-family: inherit; font-size: 13px; color: var(--text);
+  padding: 8px 0;
+}
+.demo-search input::placeholder { color: rgba(8,9,10,0.44); }
+.demo-search kbd { font-size: 10px; padding: 1px 5px; border-bottom-width: 1px; }
+.demo-cmd-chip {
+  flex: none; display: none; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--accent); background: var(--tint);
+  border: 1px solid rgba(56,123,229,0.3);
+  border-radius: 6px; padding: 2px 6px;
+}
+.demo-cmd-chip.show { display: inline-flex; }
+.demo-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 10px; scrollbar-width: thin; }
+.demo-list::-webkit-scrollbar { width: 8px; }
+.demo-list::-webkit-scrollbar-thumb { background: rgba(8,9,10,0.12); border-radius: 4px; }
+.ghead {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px 5px;
+  font-size: 11.5px; font-weight: 700; color: var(--text-2);
+  cursor: pointer; user-select: none;
+  position: sticky; top: 0;
+  background: #f9f9fb;
+  z-index: 2;
+}
+.ghead .gdot { width: 7px; height: 7px; border-radius: 50%; background: var(--gc); flex: none; }
+.ghead .gcount {
+  font-weight: 600; font-size: 10px; color: var(--text-3);
+  background: rgba(8,9,10,0.05); border-radius: 99px; padding: 1px 6px;
+}
+.ghead .gchev { margin-left: auto; color: var(--text-3); transition: transform .2s; display: flex; }
+.ghead .gchev svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ghead.collapsed .gchev { transform: rotate(-90deg); }
+.trow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  position: relative;
+}
+.trow:hover { background: rgba(8,9,10,0.045); }
+.trow.sel {
+  background: rgba(56,123,229,0.11);
+  color: var(--text);
+  box-shadow: inset 2.5px 0 0 var(--accent);
+}
+.trow.sel::after {
+  content: '↵'; margin-left: auto; flex: none;
+  font-size: 10.5px; color: var(--accent); opacity: .8;
+}
+.fav {
+  width: 16px; height: 16px; border-radius: 4px; flex: none;
+  background: var(--fc, #e8eaf0);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8.5px; font-weight: 800; color: #fff;
+  position: relative;
+}
+.trow .t {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trow .u {
+  flex: none; max-width: 110px;
+  font-size: 10px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trow.sel .u { color: color-mix(in srgb, var(--accent) 70%, var(--text-3)); }
+mark { background: rgba(56,123,229,0.22); color: inherit; border-radius: 2px; padding: 0 1px; }
+.ttag {
+  flex: none; font-size: 9.5px; font-weight: 600;
+  padding: 1px 5px; border-radius: 4px;
+}
+.ttag.hot { color: #15803d; background: var(--green-bg); }
+.ttag.info { color: var(--blue-tag); background: var(--blue-tag-bg); }
+.ttag.mid { color: var(--gray-tag); background: var(--gray-tag-bg); }
+.ttag.stale { color: var(--amber); background: var(--amber-bg); }
+.ttag.zzz { color: var(--text-3); background: rgba(8,9,10,0.06); }
+.mbtn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px;
+  background: var(--surface); border: none; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(8,9,10,0.16);
+  color: var(--text-2);
+}
+.mbtn:hover { color: var(--accent); }
+.mbtn svg { width: 11px; height: 11px; fill: currentColor; }
+.dup {
+  position: absolute; right: -4px; bottom: -3px;
+  font-size: 8px; font-weight: 800;
+  background: var(--text-3); color: #fff;
+  border-radius: 99px; padding: 0 3.5px; line-height: 1.5;
+}
+.demo-empty {
+  padding: 34px 20px; text-align: center; color: var(--text-3); font-size: 12px; display: none;
+}
+.demo-empty.show { display: block; }
+.demo-undo {
+  position: absolute; left: 12px; right: 12px; bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+  background: #16171c; color: #f7f8f8;
+  border-radius: 10px; padding: 9px 12px;
+  font-size: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  transform: translateY(64px); opacity: 0;
+  transition: transform .28s var(--ease-spring), opacity .2s;
+  z-index: 20;
+}
+.demo-undo.show { transform: translateY(0); opacity: 1; }
+.demo-undo .undo-btn { color: var(--accent-dark); font-weight: 600; cursor: pointer; margin-left: auto; white-space: nowrap; }
+.demo-undo .undo-btn kbd { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.16); color: var(--accent-dark); }
+
+/* typed caret */
+.type-caret {
+  display: inline-block; width: 2px; height: 1.1em;
+  background: var(--accent); border-radius: 1px;
+  vertical-align: text-bottom; margin-left: 1px;
+  animation: caret-blink 1.06s steps(1,end) infinite;
+}
+@keyframes caret-blink { 0%,49.9% { opacity: 1 } 50%,100% { opacity: 0 } }
+
+@media (max-width: 980px) {
+  .demo { position: relative; right: auto; top: auto; margin: 22px auto 0; width: min(380px, 94vw); animation: none; }
+  .browser-body { display: none; }
+}
+@media (max-width: 720px) {
+  .hero { padding: 110px 0 72px; }
+  .hero h1 { font-size: clamp(30px, 9.2vw, 40px); }
+  .hero-sub { font-size: 14.5px; }
+  .wrap { padding: 0 20px; }
+  section { padding: 64px 0; }
+  .hero-actions .btn { padding: 11px 20px; font-size: 14px; }
+}
+
+/* ---------------- Sections common ---------------- */
+section { padding: 96px 0; }
+.sec-head { max-width: 640px; margin-bottom: 52px; }
+.sec-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+.eyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 12px;
+}
+.sec-head h2 {
+  font-size: clamp(26px, 3.6vw, 38px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.18;
+  margin-bottom: 14px;
+}
+.sec-head p { font-size: 15.5px; color: var(--text-2); line-height: 1.7; }
+
+/* ---------------- Pain points ---------------- */
+.pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.pain {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  padding: 26px 24px;
+  transition: transform .2s, box-shadow .2s, border-color .2s;
+}
+.pain:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(8,9,10,0.08); border-color: rgba(56,123,229,0.3); }
+.pain-ico {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--tint); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 16px;
+}
+.pain-ico svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pain h3 { font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
+.pain p { font-size: 13.5px; color: var(--text-2); line-height: 1.65; }
+.pain .pain-stat { font-size: 32px; font-weight: 800; letter-spacing: -0.03em; color: var(--accent); display: block; margin-bottom: 2px; }
+@media (max-width: 860px) { .pains { grid-template-columns: 1fr; } }
+
+/* ---------------- Pillars (dark) ---------------- */
+.dark {
+  background: #0a0c12;
+  color: #f7f8f8;
+  position: relative;
+  overflow: hidden;
+}
+.dark .sec-head h2 { color: #f7f8f8; }
+.dark .sec-head p { color: #9ca3af; }
+.dark-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(700px 380px at 20% 0%, rgba(56,123,229,0.12), transparent 60%),
+              radial-gradient(600px 320px at 85% 100%, rgba(94,106,210,0.10), transparent 60%);
+}
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; position: relative; }
+.pillar {
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--r-lg);
+  padding: 30px 26px;
+  display: flex; flex-direction: column;
+  transition: transform .2s, border-color .2s, background .2s;
+}
+.pillar:hover { transform: translateY(-4px); border-color: rgba(138,180,248,0.35); background: rgba(255,255,255,0.055); }
+.pillar-num {
+  font-family: var(--mono); font-size: 12px; color: var(--accent-dark);
+  margin-bottom: 18px; letter-spacing: 0.1em;
+}
+.pillar-ico {
+  width: 42px; height: 42px; border-radius: 11px;
+  background: rgba(138,180,248,0.12); color: var(--accent-dark);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+}
+.pillar-ico svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pillar h3 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; margin-bottom: 10px; }
+.pillar > p { font-size: 13.5px; color: #9ca3af; line-height: 1.7; margin-bottom: 18px; }
+.pillar ul { list-style: none; margin-top: auto; display: flex; flex-direction: column; gap: 9px; }
+.pillar ul li {
+  font-size: 12.5px; color: #c8cdd6; line-height: 1.55;
+  padding-left: 18px; position: relative;
+}
+.pillar ul li::before {
+  content: ''; position: absolute; left: 0; top: 7px;
+  width: 8px; height: 8px; border-radius: 2.5px;
+  background: rgba(138,180,248,0.25);
+  box-shadow: inset 0 0 0 1.5px var(--accent-dark);
+}
+.pillar ul li b { color: #f7f8f8; font-weight: 600; }
+@media (max-width: 960px) { .pillars { grid-template-columns: 1fr; } }
+
+/* ---------------- Feature deep-dives ---------------- */
+.dive {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center;
+  padding: 84px 0;
+}
+.dive + .dive { border-top: 1px solid var(--hairline); }
+.dive.flip .dive-text { order: 2; }
+.dive.flip .dive-visual { order: 1; }
+.dive-text h3 { font-size: clamp(22px, 3vw, 30px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.22; margin-bottom: 14px; }
+.dive-text > p { font-size: 15px; color: var(--text-2); line-height: 1.75; margin-bottom: 22px; }
+.dive-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.dive-list li { display: flex; gap: 11px; font-size: 14px; color: var(--text-2); line-height: 1.6; }
+.dive-list li b { color: var(--text); font-weight: 600; }
+.dive-check {
+  flex: none; width: 19px; height: 19px; margin-top: 2px;
+  border-radius: 50%; background: var(--tint); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.dive-check svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.dive-visual { position: relative; }
+.dive-visual .panel {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  box-shadow: 0 16px 48px -12px rgba(8,15,40,0.16), var(--shadow-card);
+  overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 18px; border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px; font-weight: 700;
+}
+.panel-head .ph-act { display: flex; gap: 12px; }
+.panel-head .ph-act span { font-size: 11.5px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.panel-body { padding: 16px 18px; }
+@media (max-width: 900px) {
+  .dive { grid-template-columns: 1fr; gap: 36px; padding: 64px 0; }
+  .dive.flip .dive-text { order: 1; }
+  .dive.flip .dive-visual { order: 2; }
+}
+
+/* rules editor mock */
+.rule-group {
+  border: 1px solid var(--hairline); border-radius: 10px;
+  margin-bottom: 10px; overflow: hidden;
+  background: var(--surface);
+}
+.rule-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; background: rgba(8,9,10,0.018);
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px; font-weight: 600;
+}
+.rule-group-head .gdot { width: 8px; height: 8px; border-radius: 50%; }
+.rule-group-head .rg-meta { margin-left: auto; font-size: 10.5px; color: var(--text-3); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+.host-chip {
+  font-family: var(--mono); font-size: 11px;
+  background: var(--fill); border: 1px solid var(--hairline);
+  border-radius: 6px; padding: 3px 8px;
+  color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.host-chip.hl { background: var(--tint); border-color: rgba(56,123,229,0.35); color: var(--accent); font-weight: 600; }
+.host-chip .x { opacity: .45; cursor: pointer; font-size: 12px; }
+.host-chip .x:hover { opacity: 1; }
+.host-chip.add { background: none; border-style: dashed; color: var(--text-3); cursor: pointer; }
+.others-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--hairline); border-radius: 10px;
+  font-size: 12px; color: var(--text-3);
+}
+.others-row .gdot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+
+/* pinyin match visual */
+.match-demo { padding: 8px 0 4px; }
+.match-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 13.5px;
+}
+.match-row + .match-row { margin-top: 2px; }
+.match-row.hit { background: rgba(56,123,229,0.08); box-shadow: inset 2.5px 0 0 var(--accent); }
+.match-row .q {
+  flex: none; width: 74px;
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+  background: var(--tint); border-radius: 6px; padding: 3px 8px;
+  text-align: center; font-weight: 600;
+}
+.match-row .r { color: var(--text-2); }
+.match-row .r b { color: var(--text); }
+.match-row .arrow { flex: none; color: var(--text-3); font-size: 11px; }
+.match-note { padding: 12px 14px 4px; font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+
+/* archive mock */
+.arch-card {
+  border: 1px solid var(--hairline); border-radius: 10px;
+  margin-bottom: 10px; overflow: hidden;
+  transition: border-color .15s;
+}
+.arch-card:hover { border-color: rgba(56,123,229,0.3); }
+.arch-head {
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 14px; cursor: pointer;
+}
+.arch-head .gdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.arch-head .an { font-size: 13px; font-weight: 600; }
+.arch-head .am { font-size: 11px; color: var(--text-3); }
+.arch-restore {
+  margin-left: auto; flex: none;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--tint); border: none; border-radius: 99px;
+  padding: 4px 11px; cursor: pointer;
+}
+.arch-restore:hover { background: var(--tint-2); }
+.arch-tabs { border-top: 1px solid var(--hairline); background: var(--bg); padding: 7px 14px 9px; display: flex; flex-direction: column; gap: 4px; }
+.arch-tab { font-size: 11px; color: var(--text-2); display: flex; gap: 6px; align-items: center; }
+.arch-tab::before { content: '•'; color: var(--text-3); }
+
+/* media visual */
+.media-mock { padding: 10px; }
+.media-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  color: var(--text-2);
+}
+.media-row.playing { background: rgba(56,123,229,0.09); box-shadow: inset 2.5px 0 0 var(--accent); color: var(--text); }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.eq i { width: 2.5px; background: var(--accent); border-radius: 2px; animation: eq 0.9s ease-in-out infinite; }
+.eq i:nth-child(1) { height: 40%; animation-delay: 0s; }
+.eq i:nth-child(2) { height: 90%; animation-delay: .18s; }
+.eq i:nth-child(3) { height: 60%; animation-delay: .36s; }
+.eq i:nth-child(4) { height: 30%; animation-delay: .5s; }
+@keyframes eq { 0%,100% { transform: scaleY(.4);} 50% { transform: scaleY(1);} }
+.media-row .t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-ctrls { display: flex; gap: 6px; flex: none; }
+.mctrl {
+  width: 26px; height: 26px; border-radius: 7px; border: none; cursor: pointer;
+  background: var(--surface); box-shadow: 0 1px 3px rgba(8,9,10,0.16);
+  color: var(--text-2); display: flex; align-items: center; justify-content: center;
+  transition: color .12s, transform .12s;
+}
+.mctrl:hover { color: var(--accent); transform: scale(1.08); }
+.mctrl svg { width: 12px; height: 12px; fill: currentColor; }
+.mctrl .st { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.media-note { padding: 8px 16px 14px; font-size: 11.5px; color: var(--text-3); }
+
+/* ---------------- Themes ---------------- */
+.themes { background: var(--surface); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 26px; }
+.theme-card {
+  border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  overflow: hidden; background: var(--surface);
+  transition: transform .2s, box-shadow .2s;
+}
+.theme-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(8,9,10,0.1); }
+.theme-shot { height: 190px; position: relative; overflow: hidden; }
+.theme-meta { padding: 16px 18px; }
+.theme-meta h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 4px; }
+.theme-meta p { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.accent-row { display: flex; align-items: center; gap: 10px; justify-content: center; }
+.accent-lbl { font-size: 12.5px; color: var(--text-2); margin-right: auto; }
+.sw {
+  width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+  transition: transform .15s var(--ease-spring), box-shadow .15s;
+}
+.sw:hover { transform: scale(1.15); }
+.sw.active { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1), 0 0 0 2px var(--surface), 0 0 0 4px var(--swc); }
+@media (max-width: 860px) { .theme-grid { grid-template-columns: 1fr; } }
+
+/* mini popup css mocks for themes */
+.mini { position: absolute; inset: 14px; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; font-size: 10px; box-shadow: 0 4px 14px rgba(8,9,10,0.1); }
+.mini-bar { flex: none; padding: 7px 10px; display: flex; gap: 8px; align-items: center; }
+.mini-search { flex: 1; height: 17px; border-radius: 5px; display: flex; align-items: center; padding: 0 7px; gap: 4px; }
+.mini-search i { width: 40%; height: 4px; border-radius: 2px; }
+.mini-list { flex: 1; padding: 6px 8px; display: flex; flex-direction: column; gap: 5px; }
+.mini-ghead { display: flex; align-items: center; gap: 4px; padding: 2px 2px 0; }
+.mini-ghead i { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+.mini-ghead b { height: 4px; border-radius: 2px; }
+.mini-ghead s { text-decoration: none; height: 3.5px; border-radius: 2px; margin-left: auto; }
+.mini-row { height: 14px; border-radius: 4px; display: flex; align-items: center; gap: 5px; padding: 0 6px; }
+.mini-row i { border-radius: 2px; height: 4px; }
+.mini-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+
+/* ---------------- Shortcuts ---------------- */
+.keys-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+.keys-table-wrap { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--hairline); box-shadow: var(--shadow-card); }
+.keys-table { border: none; border-radius: 0; box-shadow: none; }
+.keys-table th {
+  text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-3); padding: 13px 20px; background: rgba(8,9,10,0.02);
+  border-bottom: 1px solid var(--hairline);
+}
+.keys-table td { padding: 12px 20px; font-size: 13.5px; border-bottom: 1px solid var(--hairline); }
+.keys-table tr:last-child td { border-bottom: none; }
+.keys-table tr:hover td { background: rgba(56,123,229,0.035); }
+.keys-table td.d { color: var(--text-2); }
+.keys-note { margin-top: 14px; font-size: 12.5px; color: var(--text-3); text-align: center; }
+
+/* ---------------- Privacy / tech ---------------- */
+.trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.trust {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  padding: 24px;
+}
+.trust .t-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 700; color: #15803d;
+  background: var(--green-bg); border-radius: 99px; padding: 4px 12px;
+  margin-bottom: 14px;
+}
+.trust .t-badge.blue { color: var(--accent); background: var(--tint); }
+.trust .t-badge.violet { color: #5e6ad2; background: var(--blue-tag-bg); }
+.trust h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 8px; }
+.trust p { font-size: 13px; color: var(--text-2); line-height: 1.7; }
+.trust code { font-family: var(--mono); font-size: 11.5px; background: var(--fill); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+@media (max-width: 860px) { .trust-grid { grid-template-columns: 1fr; } }
+
+/* ---------------- Install / CTA ---------------- */
+.install-sec { padding: 100px 0; }
+.install-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #0d1420 0%, #101a30 55%, #0d1420 100%);
+  border-radius: 24px;
+  padding: 64px 60px;
+  color: #f7f8f8;
+  display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center;
+}
+.install-card::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(500px 260px at 12% 0%, rgba(56,123,229,0.25), transparent 65%);
+}
+.install-card h2 { font-size: clamp(24px, 3.4vw, 34px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 14px; position: relative; }
+.install-card p { color: #9ca3af; font-size: 14.5px; line-height: 1.7; margin-bottom: 24px; position: relative; }
+.steps { list-style: none; position: relative; display: flex; flex-direction: column; gap: 0; }
+.step { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
+.step:last-child { padding-bottom: 0; }
+.step::before {
+  content: ''; position: absolute; left: 13px; top: 30px; bottom: 2px;
+  width: 1.5px; background: rgba(255,255,255,0.12);
+}
+.step:last-child::before { display: none; }
+.step-num {
+  flex: none; width: 27px; height: 27px; border-radius: 50%;
+  background: rgba(138,180,248,0.14); color: var(--accent-dark);
+  border: 1px solid rgba(138,180,248,0.35);
+  font-size: 12px; font-weight: 700; font-family: var(--mono);
+  display: flex; align-items: center; justify-content: center;
+}
+.step p { margin: 3px 0 0; font-size: 13px; color: #c8cdd6; }
+.step p code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.08); border-radius: 4px; padding: 1.5px 6px; color: var(--accent-dark); }
+.install-actions { display: flex; gap: 12px; margin-top: 28px; position: relative; flex-wrap: wrap; }
+.btn-light { background: #fff; color: #0d1420; }
+.btn-light:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(255,255,255,0.18); }
+.btn-outline { border: 1px solid rgba(255,255,255,0.25); color: #f7f8f8; }
+.btn-outline:hover { border-color: rgba(255,255,255,0.55); }
+@media (max-width: 900px) { .install-card { grid-template-columns: 1fr; padding: 44px 30px; } }
+
+/* ---------------- Footer ---------------- */
+footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
+.foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.foot img { width: 22px; height: 22px; }
+.foot .fn { font-weight: 700; font-size: 13.5px; }
+.foot .fm { color: var(--text-3); font-size: 12.5px; }
+.foot .flinks { margin-left: auto; display: flex; gap: 20px; }
+.foot .flinks a { font-size: 12.5px; color: var(--text-2); text-decoration: none; }
+.foot .flinks a:hover { color: var(--accent); }
+
+/* reveal on scroll */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .demo-float { animation: none; }
+  .eq i { animation: none; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-logo" href="#top">
+      <img src="icon128.png" alt="Tab Group Search">
+      <span>Tab Group Search</span>
+    </a>
+    <div class="nav-links">
+      <a href="#pillars">能力总览</a>
+      <a href="#features">核心功能</a>
+      <a href="#themes">主题</a>
+      <a href="#shortcuts">快捷键</a>
+      <a href="#install" class="nav-cta">立即安装</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="wrap" style="position:relative;">
+    <div class="hero-eyebrow"><span class="dot"></span>Chrome 扩展 · Manifest V3 · v1.3</div>
+    <h1>几百个标签页<br><span class="grad">一个弹窗管好</span></h1>
+    <p class="hero-sub">搜索切换 + 自动分组 + 归档收纳。为多环境开发场景而生——按 <kbd>⌘E</kbd> 唤起,标题、拼音、组名、域名秒级命中,规则引擎让标签栏永远整齐。</p>
+    <div class="hero-kbd-hint">👇 下方弹窗不是截图,是活的——点击它,或直接用键盘 <kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Tab</kbd> 操作</div>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#install">免费安装
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/cheney12138/tab-group-control" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.75 2.69 1.25 3.34.95.11-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span><svg viewBox="0 0 24 24"><path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z"/></svg>纯本地 · 零网络请求</span>
+      <span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>即点即开 &lt;50ms</span>
+      <span><svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>20,924 汉字拼音索引</span>
+      <span><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>⌘Z 全量可撤销</span>
+    </div>
+
+    <!-- Browser frame + live demo -->
+    <div class="hero-visual">
+      <div class="browser">
+        <div class="browser-bar">
+          <span class="b-dot r"></span><span class="b-dot y"></span><span class="b-dot g"></span>
+          <div class="browser-url">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            github.com/cheney12138/tab-group-control
+          </div>
+        </div>
+        <div class="tabstrip">
+          <span class="gchip" style="--gc:#387BE5"><i></i>前端<em>4</em></span>
+          <span class="chip">订单管理后台</span>
+          <span class="chip on">Tab Group Search</span>
+          <span class="chip">React 文档</span>
+          <span class="gchip" style="--gc:#34A853"><i></i>设计<em>3</em></span>
+          <span class="chip">Figma</span>
+          <span class="gchip" style="--gc:#E66A28"><i></i>文档<em>3</em></span>
+          <span class="chip">需求评审 v3</span>
+          <span class="gchip" style="--gc:#9ca3af"><i></i>Others<em>2</em></span>
+        </div>
+        <div class="browser-body">
+          <div class="page-ghost">
+            <div class="ghost-line w60"></div>
+            <div class="ghost-line w80"></div>
+            <div class="ghost-line w40"></div>
+            <div class="ghost-block"></div>
+          </div>
+        </div>
+
+        <!-- ============ LIVE DEMO (复刻产品弹窗) ============ -->
+        <div class="demo demo-float" id="demo">
+          <div class="demo-tabs">
+            <button class="demo-tab active" data-view="group">分组</button>
+            <button class="demo-tab" data-view="recent">最近使用</button>
+            <button class="demo-tab" data-view="window">当前窗口</button>
+            <span class="spacer"></span>
+            <button class="demo-gear" title="设置(演示)" tabindex="-1">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.11 1.56h.08a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.11z"/></svg>
+            </button>
+          </div>
+          <div class="demo-search-row">
+            <div class="demo-search">
+              <span class="src" title="搜书签 /b"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg></span>
+              <span class="src" title="搜历史 /h"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+              <span class="demo-cmd-chip" id="demoCmdChip">/b</span>
+              <input id="demoInput" type="text" placeholder="搜索标签页 / 拼音 / 组名 / 域名" autocomplete="off" spellcheck="false">
+              <kbd>esc</kbd>
+            </div>
+          </div>
+          <div class="demo-list" id="demoList"></div>
+          <div class="demo-empty" id="demoEmpty">没有匹配的标签页 — 试试「dingdan」或「/b」</div>
+          <div class="demo-undo" id="demoUndo">
+            <span>已关闭该标签页</span>
+            <span class="undo-btn">撤销 <kbd>⌘Z</kbd></span>
+          </div>
+        </div>
+        <!-- ============ /LIVE DEMO ============ -->
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ PAIN POINTS ============ -->
+<section id="pains" style="padding-top:60px;">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <div class="eyebrow">The Problem</div>
+      <h2>标签页一多,浏览器就开始和你作对</h2>
+      <p>开发者的日常:文档、监控、需求、代码评审、临时调研……标签栏挤到只剩 favicon,找一个标签靠缘分。</p>
+    </div>
+    <div class="pains">
+      <div class="pain reveal">
+        <span class="pain-stat">40+</span>
+        <h3>找标签靠肉眼扫描</h3>
+        <p>标题被压缩到只剩图标,Chrome 原生搜索只管开关排序,不支持拼音、不认分组,搜「订单」找不到「订单管理后台」。</p>
+      </div>
+      <div class="pain reveal" style="transition-delay:.08s">
+        <span class="pain-stat">N×</span>
+        <h3>分组靠手动拖</h3>
+        <p>每开一个环境就要手动归一次组。本地、测试、预发、线上四套环境 × 每天几十个标签,重复的体力活永远没有尽头。</p>
+      </div>
+      <div class="pain reveal" style="transition-delay:.16s">
+        <span class="pain-stat">0</span>
+        <h3>关掉就找不回</h3>
+        <p>手滑关了一整组?Chrome 只认单个标签的历史恢复,分组身份、标签顺序、关闭现场全部丢失。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PILLARS ============ -->
+<section id="pillars" class="dark">
+  <div class="dark-glow"></div>
+  <div class="wrap" style="position:relative;">
+    <div class="sec-head center reveal">
+      <div class="eyebrow" style="color:var(--accent-dark)">Three Pillars</div>
+      <h2>三大支柱,一个不少</h2>
+      <p>搜索切换是入口,自动分组是秩序,归档收纳是喘息空间。三者咬合,才撑得起几百个标签页的日常。</p>
+    </div>
+    <div class="pillars">
+      <div class="pillar reveal">
+        <div class="pillar-num">01</div>
+        <div class="pillar-ico">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <h3>搜索切换</h3>
+        <p>⌘E 唤起,输入即搜。标题、全拼、首字母、组名、域名、URL 五路分层匹配,命中字符高亮。</p>
+        <ul>
+          <li><b>全量拼音引擎</b>:20,924 汉字码点索引,零依赖,「dingdan」命中「订单管理」</li>
+          <li><b>命令模式</b>:<b>/b</b> 搜书签、<b>/h</b> 搜历史、<b>/r</b> 找回最近关闭</li>
+          <li><b>组名精确置顶</b>,重复 URL 自动折叠计数</li>
+          <li>三个视图:分组 / 最近使用 / 当前窗口,<b>Tab</b> 键循环</li>
+        </ul>
+      </div>
+      <div class="pillar reveal" style="transition-delay:.08s">
+        <div class="pillar-num">02</div>
+        <div class="pillar-ico">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="7" rx="1.5"/><path d="M17.5 15v6M14.5 18h6"/></svg>
+        </div>
+        <h3>自动分组</h3>
+        <p>内置域名规则引擎,新标签和页内跳转都自动归组。标签栏从此不用手动整理。</p>
+        <ul>
+          <li><b>域名规则</b>:精确主机(含 www 别名),<b>*.域名</b> 通配显式声明,最长规则优先</li>
+          <li><b>路径细分</b>:同域多项目(个人/公司/org)按路径前缀各自进组</li>
+          <li><b>Others 兜底</b>:不命中任何规则的标签自动入兜底组</li>
+          <li>公共后缀 / localhost / IP 永不误伤,可完全替代 Tabbiy</li>
+        </ul>
+      </div>
+      <div class="pillar reveal" style="transition-delay:.16s">
+        <div class="pillar-num">03</div>
+        <div class="pillar-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 8h16M6 8V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><path d="M5 8l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M10 12v4M14 12v4"/></svg>
+        </div>
+        <h3>归档收纳</h3>
+        <p>阶段性不用的分组整组归档:拍快照、关标签、收进仓库。标签栏瞬间清爽。</p>
+        <ul>
+          <li><b>一键归档</b>:组名 + 颜色 + 标签 URL 清单整体封存</li>
+          <li><b>随时还原</b>:在当前窗口全新加载,归回原组名的组</li>
+          <li><b>⌘Z 抢救层</b>:6 秒内的误关连分组一起还原</li>
+          <li>一次性 stash 语义,纯本机存储,卸载即焚</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURE DIVES ============ -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head center reveal" style="margin-bottom:20px;">
+      <div class="eyebrow">Deep Dive</div>
+      <h2>每个功能,都做到位</h2>
+    </div>
+
+    <!-- Dive 1: 拼音搜索 -->
+    <div class="dive">
+      <div class="dive-text reveal">
+        <div class="eyebrow">Search Engine</div>
+        <h3>中文场景,拼音是刚需</h3>
+        <p>内置 20,924 个汉字的 Unicode 码点索引表,全拼、首字母、混合输入全部命中。不需要切换输入法,想到什么打什么。</p>
+        <ul class="dive-list">
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>五路分层匹配</b>:标题 &gt; 拼音 &gt; 组名 &gt; 域名 &gt; 完整 URL,精确子串优先于模糊匹配</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>命中字符高亮</b>:为什么搜到这条,一眼可见</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>输入法安全</b>:中文组合输入期间,回车交给输入法选字,绝不误触发切换</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>找回分层</b>:⌘Z 管 6 秒抢救、/r 管关闭现场、/h 管浏览足迹,各管一段不重叠</span></li>
+        </ul>
+      </div>
+      <div class="dive-visual reveal">
+        <div class="panel">
+          <div class="panel-head">搜索「dingdan」<div class="ph-act"><span>⌘E 唤起</span></div></div>
+          <div class="panel-body match-demo">
+            <div class="match-row hit"><span class="q">dingdan</span><span class="arrow">→</span><span class="r"><b>订单管理</b>后台 — 测试环境</span></div>
+            <div class="match-row hit"><span class="q">ddgl</span><span class="arrow">→</span><span class="r"><b>订单管理</b>后台 — 生产环境</span></div>
+            <div class="match-row hit"><span class="q">dingd</span><span class="arrow">→</span><span class="r"><b>订单</b>履约监控看板</span></div>
+            <div class="match-row"><span class="q">/b react</span><span class="arrow">→</span><span class="r">书签:<b>React</b> 官方文档 · 中文</span></div>
+            <div class="match-note">↑ 组名精确匹配时该组固定排第一;同 URL 重复标签折叠成一行,favicon 角标显示份数。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dive 2: 规则引擎 -->
+    <div class="dive flip">
+      <div class="dive-text reveal">
+        <div class="eyebrow">Rule Engine</div>
+        <h3>分组规则,声明一次永久生效</h3>
+        <p>给每个分组绑定一组域名,之后新开的标签、页内的跳转全部自动归组。建组前先复用同名组,永远不会堆出重复组。</p>
+        <ul class="dive-list">
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>通配显式声明</b>:默认只精确匹配所写主机;写 <code style="font-family:var(--mono);font-size:12px">*.bilibili.com</code> 才含子域</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>路径细分</b>:<code style="font-family:var(--mono);font-size:12px">github.com/cheney12138</code> 按「主机+路径前缀」归组,同域多项目各自进组</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>安全边界</b>:github.io 等公共后缀、localhost、IP 永远只精确匹配,不误伤别人的站点</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>规则编辑器</b>:chip 式编辑、脏点提示、保存即生效,支持导入/导出 JSON</span></li>
+        </ul>
+      </div>
+      <div class="dive-visual reveal">
+        <div class="panel">
+          <div class="panel-head">自动分组规则<div class="ph-act"><span>导入</span><span>导出</span></div></div>
+          <div class="panel-body">
+            <div class="rule-group">
+              <div class="rule-group-head"><span class="gdot" style="background:#387BE5"></span>前端开发<span class="rg-meta">3 条域名 · 4 个标签</span></div>
+              <div class="chips">
+                <span class="host-chip">github.com<span class="x">×</span></span>
+                <span class="host-chip hl">github.com/cheney12138<span class="x">×</span></span>
+                <span class="host-chip">*.stackblitz.com<span class="x">×</span></span>
+                <span class="host-chip add">+ 添加域名</span>
+              </div>
+            </div>
+            <div class="rule-group">
+              <div class="rule-group-head"><span class="gdot" style="background:#34A853"></span>设计<span class="rg-meta">2 条域名 · 3 个标签</span></div>
+              <div class="chips">
+                <span class="host-chip">figma.com<span class="x">×</span></span>
+                <span class="host-chip">*.notion.site<span class="x">×</span></span>
+              </div>
+            </div>
+            <div class="others-row"><span class="gdot"></span><b>Others</b>&nbsp;— 兜底组:不命中任何规则的标签自动归入,标签栏始终整齐</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dive 3: 右键批量 -->
+    <div class="dive">
+      <div class="dive-text reveal">
+        <div class="eyebrow">Batch Ops</div>
+        <h3>右键一下,批量收场</h3>
+        <p>在任意标签行上右键,组级批量操作即刻展开。每个动作内嵌真实数量——屏幕上只看到 3 行,菜单里显示的是 Chrome 里的 12 个。</p>
+        <ul class="dive-list">
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>关闭本组其余标签 (n)</b> / <b>关闭此标签下方 (n)</b> / <b>关闭整组 (n)</b></span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>归档「组名」分组</b>:关闭与归档语义分离,一个入口各就其位</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span>分组编辑同菜单直达:<b>新建分组 / 改名改色 / 移出 / 解散</b></span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>6 秒内 ⌘Z 整批救回</b>:静默开回原窗口、原位置、原分组,不抢焦点</span></li>
+        </ul>
+      </div>
+      <div class="dive-visual reveal">
+        <div class="panel">
+          <div class="panel-head">标签行 · 右键菜单</div>
+          <div class="panel-body" style="padding:10px;">
+            <div class="media-row" style="padding:7px 12px;"><span class="fav" style="background:#387BE5">G</span><span class="t">tab-group-search · GitHub</span><span class="u" style="font-size:10px;color:var(--text-3)">github.com</span></div>
+            <div style="margin:6px auto 0;width:fit-content;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;box-shadow:var(--shadow-pop);padding:5px;font-size:12.5px;min-width:230px;">
+              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">新建分组…</div>
+              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">移出分组</div>
+              <div style="height:1px;margin:4px 6px;background:var(--hairline);"></div>
+              <div style="padding:7px 10px;border-radius:6px;background:rgba(56,123,229,0.09);color:var(--text);">关闭本组其余标签 <b style="color:var(--accent)">(12)</b></div>
+              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">关闭此标签下方标签 <b>(5)</b></div>
+              <div style="padding:7px 10px;border-radius:6px;color:var(--danger);">关闭「前端开发」全部标签 <b>(16)</b></div>
+              <div style="height:1px;margin:4px 6px;background:var(--hairline);"></div>
+              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">归档「前端开发」分组</div>
+            </div>
+            <div class="match-note" style="text-align:center;">数量按 Chrome 真实标签计算,是预告也是防呆</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dive 4: 归档 -->
+    <div class="dive flip">
+      <div class="dive-text reveal">
+        <div class="eyebrow">Archive</div>
+        <h3>项目告一段落?整组收进仓库</h3>
+        <p>上线完成、评审结束、调研收尾——这些标签不该一直占着标签栏,但直接关掉又不放心。归档给它们一个体面的暂存处。</p>
+        <ul class="dive-list">
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>整组快照</b>:组名、颜色、标签 URL 清单一次性封存</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>一键重开</b>:在当前窗口全新加载,自动归回原组名的组</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>即焚语义</b>:还原成功后归档卡消失——是一次性 stash,不是工作区模板</span></li>
+        </ul>
+      </div>
+      <div class="dive-visual reveal">
+        <div class="panel">
+          <div class="panel-head">已归档 <span style="font-size:10px;background:var(--accent);color:#fff;border-radius:99px;padding:1.5px 6px;margin-left:2px;">2</span></div>
+          <div class="panel-body">
+            <div class="arch-card">
+              <div class="arch-head"><span class="gdot" style="background:#E66A28"></span><span class="an">Q3 大促专项</span><span class="am">8 个标签 · 3 天前</span><button class="arch-restore">重新打开</button></div>
+              <div class="arch-tabs">
+                <span class="arch-tab">大促需求文档 v3(终版)</span>
+                <span class="arch-tab">压测报告 — 订单链路</span>
+                <span class="arch-tab">复盘会议记录</span>
+              </div>
+            </div>
+            <div class="arch-card">
+              <div class="arch-head"><span class="gdot" style="background:#5e6ad2"></span><span class="an">技术调研:Rust WASM</span><span class="am">12 个标签 · 2 周前</span><button class="arch-restore">重新打开</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dive 5: 媒体控制 -->
+    <div class="dive">
+      <div class="dive-text reveal">
+        <div class="eyebrow">Media Control</div>
+        <h3>不用切过去,就能管住声音</h3>
+        <p>开会时哪个标签在响?不用逐个点开找。媒体页行内直接浮现控制钮,播放、暂停、静音、画中画,原地操作。</p>
+        <ul class="dive-list">
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>行内控制</b>:播放/暂停、静音、画中画三个按钮浮在媒体行上</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>智能探测</b>:页面存在带源的 video/audio 即算媒体页,暂停中也保留续播入口</span></li>
+          <li><span class="dive-check"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>音浪动效</b>:正在播放的行有实时律动标识,扫一眼定位噪声源</span></li>
+        </ul>
+      </div>
+      <div class="dive-visual reveal">
+        <div class="panel">
+          <div class="panel-head">媒体页识别</div>
+          <div class="panel-body media-mock">
+            <div class="media-row playing">
+              <span class="fav" style="background:#E55375">♪</span>
+              <span class="t">每日推荐 · 私人 FM — 网易云音乐</span>
+              <span class="eq"><i></i><i></i><i></i><i></i></span>
+              <span class="media-ctrls">
+                <button class="mctrl" title="暂停"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+                <button class="mctrl" title="静音"><svg viewBox="0 0 24 24" class="st"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></button>
+                <button class="mctrl" title="画中画"><svg viewBox="0 0 24 24" class="st"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>
+              </span>
+            </div>
+            <div class="media-row">
+              <span class="fav" style="background:#5e6ad2">▶</span>
+              <span class="t">发布会有哪些看点 — 回放</span>
+              <span class="media-ctrls">
+                <button class="mctrl" title="播放"><svg viewBox="0 0 24 24"><path d="M7 4.5l13 7.5-13 7.5z"/></svg></button>
+              </span>
+            </div>
+            <div class="media-note">在播行带音浪动效 · 暂停页保留续播入口 · 无需切换标签</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THEMES ============ -->
+<section id="themes" class="themes">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <div class="eyebrow">Themes</div>
+      <h2>三套主题,一种讲究</h2>
+      <p>同一套 token 体系驱动,互不影响。突出色五色可换,每套主题有各自的适配值。</p>
+    </div>
+    <div class="theme-grid">
+      <div class="theme-card reveal">
+        <div class="theme-shot" style="background:linear-gradient(180deg,#eceef2,#f9f9fb);">
+          <div class="mini" style="background:#f9f9fb;border:1px solid var(--hairline);">
+            <div class="mini-bar"><div class="mini-search" style="background:#fff;border:1px solid rgba(56,123,229,.4);"><i style="background:rgba(56,123,229,.35)"></i></div></div>
+            <div class="mini-list">
+              <div class="mini-ghead"><i style="background:#387BE5"></i><b style="width:34px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
+              <div class="mini-row" style="background:rgba(56,123,229,.11);box-shadow:inset 2px 0 0 #387BE5"><span class="mini-dot" style="background:#387BE5"></span><i style="width:52%;background:#c6cdd8"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#387BE5"></span><i style="width:38%;background:#dde1e8"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#387BE5"></span><i style="width:46%;background:#dde1e8"></i></div>
+              <div class="mini-ghead"><i style="background:#34A853"></i><b style="width:26px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#34A853"></span><i style="width:60%;background:#dde1e8"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#34A853"></span><i style="width:44%;background:#dde1e8"></i></div>
+              <div class="mini-ghead"><i style="background:#E66A28"></i><b style="width:30px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#E66A28"></span><i style="width:56%;background:#dde1e8"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-meta">
+          <h3>极简现代 · Linear</h3>
+          <p>冷灰底、发丝线、单强调色。明暗两态,自动跟随系统。</p>
+        </div>
+      </div>
+      <div class="theme-card reveal" style="transition-delay:.08s">
+        <div class="theme-shot" style="background:linear-gradient(180deg,#efe9dc,#f5f0e4);">
+          <div class="mini" style="background:#f7f2e7;border:1px solid rgba(120,100,70,.25);">
+            <div class="mini-bar"><div class="mini-search" style="background:rgba(255,255,255,.6);border:1px solid rgba(120,100,70,.3);"><i style="background:rgba(90,70,50,.4)"></i></div></div>
+            <div class="mini-list">
+              <div class="mini-ghead"><i style="background:#8c2f25"></i><b style="width:34px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
+              <div class="mini-row" style="background:rgba(120,100,70,.13);box-shadow:inset 2px 0 0 #8c2f25"><span class="mini-dot" style="background:#8c2f25"></span><i style="width:52%;background:rgba(90,70,50,.3)"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#8c2f25"></span><i style="width:44%;background:rgba(90,70,50,.18)"></i></div>
+              <div class="mini-ghead"><i style="background:#5a6e52"></i><b style="width:26px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#5a6e52"></span><i style="width:58%;background:rgba(90,70,50,.18)"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#5a6e52"></span><i style="width:42%;background:rgba(90,70,50,.18)"></i></div>
+              <div class="mini-ghead"><i style="background:#3f5e78"></i><b style="width:30px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#3f5e78"></span><i style="width:46%;background:rgba(90,70,50,.18)"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-meta">
+          <h3>水墨古风 · Ink</h3>
+          <p>宣纸肌理 + 墨色 + 朱印,分组色条是笔锋渐隐的墨线,宋体气质只上标题区。</p>
+        </div>
+      </div>
+      <div class="theme-card reveal" style="transition-delay:.16s">
+        <div class="theme-shot" style="background:linear-gradient(135deg,#dbe7fa,#eef4fd);">
+          <div class="mini" style="background:#f2f7ff;border:1px solid rgba(60,100,180,.2);">
+            <div class="mini-bar" style="background:linear-gradient(135deg,#2B50A5,#4C71C6);"><div class="mini-search" style="background:rgba(255,255,255,.9);"><i style="background:rgba(43,80,165,.4)"></i></div></div>
+            <div class="mini-list" style="background:linear-gradient(180deg,#eaf2fd,#f7fbff);">
+              <div class="mini-ghead"><i style="background:#4C71C6"></i><b style="width:34px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
+              <div class="mini-row" style="background:rgba(76,113,198,.14);box-shadow:inset 2px 0 0 #4C71C6"><span class="mini-dot" style="background:#4C71C6"></span><i style="width:50%;background:#c2d4ef"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#4C71C6"></span><i style="width:40%;background:#d5e3f6"></i></div>
+              <div class="mini-ghead"><i style="background:#7ba3e0"></i><b style="width:26px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#7ba3e0"></span><i style="width:57%;background:#d5e3f6"></i></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#7ba3e0"></span><i style="width:45%;background:#d5e3f6"></i></div>
+              <div class="mini-ghead"><i style="background:#E66A28"></i><b style="width:30px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
+              <div class="mini-row"><span class="mini-dot" style="background:#E66A28"></span><i style="width:48%;background:#d5e3f6"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-meta">
+          <h3>蓝天颗粒 · Sky</h3>
+          <p>天蓝渐变顶栏 + 胶片颗粒,下方蓝调白云。固定亮色,适合喜欢轻盈的人。</p>
+        </div>
+      </div>
+    </div>
+    <div class="accent-row reveal">
+      <span class="accent-lbl">突出色 · 五色可换,各主题独立适配:</span>
+      <button class="sw active" style="background:#387BE5;--swc:#387BE5" title="蓝" data-accent="#387BE5"></button>
+      <button class="sw" style="background:#1BA39C;--swc:#1BA39C" title="青" data-accent="#1BA39C"></button>
+      <button class="sw" style="background:#34A853;--swc:#34A853" title="绿" data-accent="#34A853"></button>
+      <button class="sw" style="background:#E66A28;--swc:#E66A28" title="橙" data-accent="#E66A28"></button>
+      <button class="sw" style="background:#E55375;--swc:#E55375" title="玫红" data-accent="#E55375"></button>
+      <span style="font-size:11.5px;color:var(--text-3);">← 点一点,全站跟着换(包括上面的 live demo)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SHORTCUTS ============ -->
+<section id="shortcuts">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <div class="eyebrow">Keyboard First</div>
+      <h2>键盘流的全套装备</h2>
+      <p>从唤起到切换到撤销,双手不用离开键盘。Windows 下 ⌘ 对应 Ctrl,⌥ 对应 Alt。</p>
+    </div>
+    <div class="keys-table-wrap reveal">
+      <table class="keys-table">
+        <thead><tr><th style="width:180px;">按键</th><th>作用</th><th style="width:180px;">按键</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>⌘E</kbd></td><td class="d">打开弹窗(全局,可自定义)</td><td><kbd>Tab</kbd></td><td class="d">循环切换三个视图</td></tr>
+          <tr><td><kbd>⌥Q</kbd></td><td class="d">返回上一个标签(A/B 互跳)</td><td><kbd>Enter</kbd></td><td class="d">切换到选中标签</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td class="d">上下选择(跨分组,落到折叠组头自动展开)</td><td><kbd>⌘C</kbd></td><td class="d">复制选中标签的 URL</td></tr>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td class="d">收起 / 展开焦点所在分组</td><td><kbd>⌘⌫</kbd></td><td class="d">删除选中项(可改为退格)</td></tr>
+          <tr><td><kbd>/b</kbd> <kbd>/h</kbd> <kbd>/r</kbd></td><td class="d">搜书签 / 搜历史 / 找回最近关闭</td><td><kbd>⌘Z</kbd></td><td class="d">撤销刚才的关闭(6 秒内)</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td class="d">分层退出:关设置 → 清搜索词 → 关弹窗</td><td><kbd>⌘⇧K</kbd></td><td class="d">清理 7 天未用的标签(可撤销)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="keys-note reveal">时间标签语义色:<b style="color:#15803d">刚刚</b> / <b style="color:#5e6ad2">小时内</b> / <b style="color:#5e6b7a">今天</b> / <b style="color:#b45309">昨天</b>,扫读即分桶 · 休眠标签的 💤 收拢为小徽标,信息保留不扰视线</p>
+  </div>
+</section>
+
+<!-- ============ TRUST / TECH ============ -->
+<section id="trust" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <div class="eyebrow">Engineering</div>
+      <h2>本地优先,工程洁癖</h2>
+    </div>
+    <div class="trust-grid">
+      <div class="trust reveal">
+        <span class="t-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>隐私安全</span>
+        <h3>纯本地,零网络请求</h3>
+        <p>不登录账号、不同步、不上报。只用 <code>storage.local</code> 与 <code>downloads</code> 两个本地 API。你的标签数据永远不会离开这台机器。</p>
+      </div>
+      <div class="trust reveal" style="transition-delay:.08s">
+        <span class="t-badge blue"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z"/></svg>性能</span>
+        <h3>即点即开,零框架</h3>
+        <p>原生 JavaScript + DOM,无框架无依赖,Manifest V3。content script 心跳保活 worker + 标签快照预热,弹窗打开延迟低于一次眨眼。</p>
+      </div>
+      <div class="trust reveal" style="transition-delay:.16s">
+        <span class="t-badge violet"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8H20l-5 3.7 1.9 5.8-5-3.6-5 3.6L8.8 12.5l-5-3.7h6.1z"/></svg>数据安全</span>
+        <h3>配置自动备份</h3>
+        <p>规则与开关变化时自动落一份 JSON 到下载目录,内容没变一个字节都不写。重装、换电脑,一键从备份恢复。装了下载管理器也照样对。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INSTALL / CTA ============ -->
+<section id="install" class="install-sec">
+  <div class="wrap">
+    <div class="install-card reveal">
+      <div>
+        <h2>两分钟装好<br>今天就把标签栏救回来</h2>
+        <p>开发者模式加载,无需上架审核等待。支持 Chrome 及所有 Chromium 系浏览器(Edge / Arc / Brave)。</p>
+        <div class="install-actions">
+          <a class="btn btn-light" href="https://github.com/cheney12138/tab-group-control" target="_blank" rel="noopener">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.75 2.69 1.25 3.34.95.11-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            下载源码
+          </a>
+          <a class="btn btn-outline" href="chrome://extensions/shortcuts" onclick="return false" title="安装后在浏览器地址栏打开">装好后去设置快捷键</a>
+        </div>
+      </div>
+      <ol class="steps">
+        <li class="step"><span class="step-num">1</span><p>下载本仓库:<code>git clone</code> 或 GitHub 下载 ZIP 解压</p></li>
+        <li class="step"><span class="step-num">2</span><p>打开 <code>chrome://extensions/</code>,右上角开启<b>开发者模式</b></p></li>
+        <li class="step"><span class="step-num">3</span><p>点<b>「加载已解压的扩展程序」</b>,选择项目目录</p></li>
+        <li class="step"><span class="step-num">4</span><p>在 <code>chrome://extensions/shortcuts</code> 确认快捷键:<code>⌘E</code> 弹窗、<code>⌥Q</code> 上一个标签</p></li>
+        <li class="step"><span class="step-num">5</span><p>按 <code>⌘E</code>,输入拼音,享受整洁 🎉</p></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap foot">
+    <img src="icon128.png" alt="">
+    <span class="fn">Tab Group Search</span>
+    <span class="fm">v1.3 · 搜索切换 + 自动分组 + 归档收纳 · 为多环境开发场景设计</span>
+    <div class="flinks">
+      <a href="https://github.com/cheney12138/tab-group-control" target="_blank" rel="noopener">GitHub</a>
+      <a href="#pillars">能力总览</a>
+      <a href="#install">安装</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ============================================================
+   LIVE DEMO — 模拟产品弹窗的搜索/选择/视图切换交互
+   ============================================================ */
+(function () {
+  const TABS = [
+    { g:'前端', gc:'#387BE5', t:'订单管理后台 — 测试环境',   u:'test.order.example.com', f:'订', fc:'#387BE5', tag:{txt:'刚刚', cls:'hot'},  py:'dingdanguanlihoutai' },
+    { g:'前端', gc:'#387BE5', t:'订单管理后台 — 生产环境',   u:'order.example.com',      f:'订', fc:'#387BE5', tag:{txt:'今天', cls:'mid'},  py:'dingdanguanlihoutai' },
+    { g:'前端', gc:'#387BE5', t:'Tab Group Search · GitHub', u:'github.com',             f:'G',  fc:'#24292f', tag:{txt:'小时内', cls:'info'}, media:true, playing:true },
+    { g:'前端', gc:'#387BE5', t:'React 官方文档 · Hooks',    u:'react.dev',              f:'⚛', fc:'#087ea4', tag:{txt:'今天', cls:'mid'} },
+    { g:'设计', gc:'#34A853', t:'Figma · 弹窗改版 v2',       u:'figma.com',              f:'F',  fc:'#a259ff', tag:{txt:'小时内', cls:'info'} },
+    { g:'设计', gc:'#34A853', t:'落地页灵感收集板',           u:'dribbble.com',           f:'D',  fc:'#ea4c89', tag:{txt:'昨天', cls:'stale'} },
+    { g:'设计', gc:'#34A853', t:'主题 token 对照表',          u:'notion.site',            f:'N',  fc:'#191919', tag:{txt:'💤', cls:'zzz'} },
+    { g:'文档', gc:'#E66A28', t:'需求评审 v3(终版)',         u:'docs.example.com',       f:'需', fc:'#E66A28', tag:{txt:'小时内', cls:'info'}, py:'xuqiupingshen', dup:2 },
+    { g:'文档', gc:'#E66A28', t:'Q4 OKR 草稿',               u:'docs.example.com',       f:'O',  fc:'#E66A28', tag:{txt:'今天', cls:'mid'},    py:'okrcaogao' },
+    { g:'文档', gc:'#E66A28', t:'技术方案:规则引擎设计',      u:'wiki.example.com',       f:'技', fc:'#E66A28', tag:{txt:'昨天', cls:'stale'}, py:'jishufangan' },
+    { g:'Others', gc:'#9ca3af', t:'每日推荐 · 私人 FM',      u:'music.163.com',          f:'♪', fc:'#E55375', tag:{txt:'今天', cls:'mid'}, media:true },
+    { g:'Others', gc:'#9ca3af', t:'机票价格日历',            u:'flights.example.com',    f:'✈', fc:'#0ea5e9', tag:{txt:'💤', cls:'zzz'} },
+  ];
+  const BOOKMARKS = [
+    { t:'React 官方文档 · 中文', u:'zh-hans.react.dev', f:'⚛', fc:'#087ea4' },
+    { t:'MDN Web Docs',          u:'developer.mozilla.org', f:'M', fc:'#1b1b1b' },
+    { t:'Chrome Extensions API', u:'developer.chrome.com',  f:'C', fc:'#4285f4' },
+    { t:'订单域服务等级协议',     u:'wiki.example.com',      f:'订', fc:'#387BE5' },
+  ];
+  const HISTORY = [
+    { t:'Chrome 插件 icon 设计参考', u:'dribbble.com', f:'D', fc:'#ea4c89' },
+    { t:'pinyin 码点表实现思路',     u:'stackoverflow.com', f:'S', fc:'#f48024' },
+    { t:'订单管理后台 — 预发环境',   u:'staging.order.example.com', f:'订', fc:'#387BE5' },
+  ];
+
+  const input = document.getElementById('demoInput');
+  const list = document.getElementById('demoList');
+  const emptyEl = document.getElementById('demoEmpty');
+  const undoEl = document.getElementById('demoUndo');
+  const cmdChip = document.getElementById('demoCmdChip');
+  const tabsBtns = Array.from(document.querySelectorAll('.demo-tab'));
+  const demo = document.getElementById('demo');
+
+  let view = 'group';         // group | recent | window
+  let query = '';
+  let sel = 0;                // flat index of selection
+  let visible = [];           // rows currently rendered (data refs)
+  let removed = new Set();    // indices removed via ⌫
+  let undoTimer = null;
+
+  function norm(s){ return (s||'').toLowerCase(); }
+
+  function matchTab(tab, q) {
+    if (!q) return true;
+    const nq = norm(q);
+    // 全拼/首字母
+    if (tab.py && (tab.py.includes(nq) || pinyinInitialsHit(tab, nq))) return true;
+    return norm(tab.t).includes(nq) || norm(tab.g).includes(nq) || norm(tab.u).includes(nq);
+  }
+  function pinyinInitialsHit(tab, q) {
+    // 首字母命中:把标题里的汉字逐个和 query 对齐由真实引擎做;这里做简化演示:
+    // 用预置的首字母串
+    const initials = { 'dingdanguanlihoutai':'ddglht', 'xuqiupingshen':'xqps', 'jishufangan':'jsfa', 'okrcaogao':'okrcg' };
+    const ini = initials[tab.py] || '';
+    return ini && ini.includes(q);
+  }
+
+  function hi(text, q) {
+    if (!q) return esc(text);
+    const i = norm(text).indexOf(norm(q));
+    if (i < 0) return esc(text);
+    return esc(text.slice(0,i)) + '<mark>' + esc(text.slice(i, i+q.length)) + '</mark>' + esc(text.slice(i+q.length));
+  }
+  function esc(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  function cmdOf(q){ const m = q.match(/^([bhr])\s*(.*)$/i); return m ? { c:m[1].toLowerCase(), rest:m[2] } : null; }
+
+  function collect() {
+    visible = [];
+    const q = query.trim();
+    const cmd = cmdOf(q);
+    cmdChip.classList.toggle('show', !!cmd);
+    if (cmd) cmdChip.textContent = '/' + cmd.c;
+
+    if (cmd && cmd.c === 'b') {
+      BOOKMARKS.forEach(b => { if (!q.slice(2).trim() || norm(b.t).includes(norm(q.slice(2).trim())) || norm(b.u).includes(norm(q.slice(2).trim()))) visible.push({ ...b, src:'书签' }); });
+    } else if (cmd && cmd.c === 'h') {
+      HISTORY.forEach(b => { if (!q.slice(2).trim() || norm(b.t).includes(norm(q.slice(2).trim())) || norm(b.u).includes(norm(q.slice(2).trim()))) visible.push({ ...b, src:'历史', dim:true }); });
+    } else if (cmd && cmd.c === 'r') {
+      visible = [
+        { t:'刚关闭:订单管理后台 — 预发环境', u:'staging.order.example.com', f:'订', fc:'#387BE5', src:'3 分钟前' },
+        { t:'刚关闭:发布会有哪些看点', u:'bilibili.com', f:'B', fc:'#00a1d6', src:'1 小时前' },
+      ];
+    } else {
+      const pool = TABS.map((t, i) => ({ ...t, _i: i })).filter(t => !removed.has(t._i));
+      const matched = pool.filter(t => matchTab(t, q));
+      if (view === 'group') {
+        const groups = [];
+        matched.forEach(t => {
+          let g = groups.find(g => g.name === t.g);
+          if (!g) { g = { name: t.g, color: t.gc, items: [] }; groups.push(g); }
+          g.items.push(t);
+        });
+        const flat = [];
+        groups.forEach(g => { flat.push({ __group: g }); g.items.forEach(it => flat.push(it)); });
+        visible = flat;
+      } else if (view === 'recent') {
+        visible = [...matched].sort((a,b) => (tagRank(a.tag) - tagRank(b.tag)));
+      } else {
+        visible = matched.filter(t => t.g !== 'Others').concat(matched.filter(t => t.g === 'Others'));
+      }
+    }
+    if (sel >= rows().length) sel = Math.max(0, rows().length - 1);
+    if (sel < 0) sel = 0;
+  }
+
+  function tagRank(tag) {
+    if (!tag) return 9;
+    return { hot:0, info:1, mid:2, stale:3, zzz:4 }[tag.cls] ?? 9;
+  }
+
+  function rows(){ return visible.filter(v => !v.__group); }
+
+  function render() {
+    collect();
+    const q = query.trim();
+    const cmd = cmdOf(q);
+    const subQ = cmd ? q.slice(2).trim() : q;
+    let html = '';
+    let rIdx = -1;
+    visible.forEach(item => {
+      if (item.__group) {
+        const g = item.__group;
+        html += `<div class="ghead" style="--gc:${g.color}"><span class="gdot"></span>${esc(g.name)}<span class="gcount">${g.items.length}</span><span class="gchev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div>`;
+        return;
+      }
+      rIdx++;
+      const isSel = rIdx === sel;
+      const tag = item.tag ? `<span class="ttag ${item.tag.cls}">${item.tag.txt}</span>` : '';
+      const src = item.src ? `<span class="ttag mid">${esc(item.src)}</span>` : '';
+      const dup = item.dup ? `<span class="dup">${item.dup}</span>` : '';
+      const media = item.media ? `<button class="mbtn" tabindex="-1" title="${item.playing?'暂停':'播放'}(演示)"><svg viewBox="0 0 24 24">${item.playing?'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>':'<path d="M7 4.5l13 7.5-13 7.5z"/>'}</svg></button>` : '';
+      const dim = item.dim ? ' style="opacity:.62"' : '';
+      html += `<div class="trow${isSel?' sel':''}"${dim} data-r="${rIdx}">
+        <span class="fav" style="background:${item.fc||'#e8eaf0'}">${esc(item.f||'')}${dup}</span>
+        <span class="t">${hi(item.t, subQ)}</span>
+        ${tag}${src}${media}
+        <span class="u">${esc(item.u||'')}</span>
+      </div>`;
+    });
+    list.innerHTML = html;
+    emptyEl.classList.toggle('show', rows().length === 0);
+
+    list.querySelectorAll('.trow').forEach(el => {
+      el.addEventListener('mouseenter', () => { sel = +el.dataset.r; render(); });
+      el.addEventListener('click', () => { sel = +el.dataset.r; flashSwitch(); });
+    });
+    const selEl = list.querySelector('.trow.sel');
+    if (selEl) selEl.scrollIntoView({ block:'nearest' });
+  }
+
+  function flashSwitch() {
+    const r = rows()[sel];
+    if (!r) return;
+    demo.style.boxShadow = '0 0 0 3px rgba(56,123,229,.55), 0 18px 60px -8px rgba(8,15,40,.35)';
+    input.value = ''; query = ''; sel = 0;
+    setTimeout(() => { demo.style.boxShadow = ''; render(); }, 240);
+    render();
+  }
+
+  function deleteSel() {
+    const r = rows()[sel];
+    if (!r || r._i === undefined) return;
+    removed.add(r._i);
+    render();
+    undoEl.classList.add('show');
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => undoEl.classList.remove('show'), 6000);
+  }
+  function undoDel() {
+    removed.clear();
+    undoEl.classList.remove('show');
+    render();
+  }
+
+  input.addEventListener('input', () => { query = input.value; sel = 0; render(); });
+  input.addEventListener('keydown', onKey);
+  demo.addEventListener('keydown', onKey);
+  undoEl.querySelector('.undo-btn').addEventListener('click', undoDel);
+
+  function onKey(e) {
+    const n = rows().length;
+    if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, n - 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); render(); e.preventDefault(); }
+    else if (e.key === 'Enter') { flashSwitch(); e.preventDefault(); }
+    else if (e.key === 'Tab') { cycleView(); e.preventDefault(); }
+    else if ((e.metaKey || e.ctrlKey) && (e.key === 'Backspace' || e.key === 'Delete')) { deleteSel(); e.preventDefault(); }
+    else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { undoDel(); e.preventDefault(); }
+    else if (e.key === 'Escape') { if (query) { input.value=''; query=''; sel=0; render(); } e.preventDefault(); }
+  }
+
+  function cycleView() {
+    const order = ['group','recent','window'];
+    view = order[(order.indexOf(view) + 1) % 3];
+    tabsBtns.forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    sel = 0; render();
+  }
+  tabsBtns.forEach(b => b.addEventListener('click', () => { view = b.dataset.view; tabsBtns.forEach(x => x.classList.toggle('active', x === b)); sel = 0; render(); input.focus(); }));
+
+  /* 自动打字引导:仅在用户未交互过时播放 */
+  let interacted = false;
+  ['pointerdown','keydown'].forEach(ev => demo.addEventListener(ev, () => { interacted = true; }, { capture:true }));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function autotype() {
+    await sleep(1800);
+    if (interacted) return;
+    const target = 'dingdan';
+    input.placeholder = '';
+    for (const ch of target) {
+      if (interacted) { input.placeholder = '搜索标签页 / 拼音 / 组名 / 域名'; return; }
+      input.value += ch; query = input.value; sel = 0; render();
+      await sleep(150);
+    }
+    await sleep(3400);
+    if (interacted) return;
+    // 清除,恢复原位
+    for (let i = 0; i < target.length; i++) {
+      if (interacted) return;
+      input.value = input.value.slice(0, -1); query = input.value; render();
+      await sleep(55);
+    }
+    input.placeholder = '搜索标签页 / 拼音 / 组名 / 域名';
+  }
+
+  render();
+  // 等 demo 滚进视口后再开始引导
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => { if (en.isIntersecting) { autotype(); io.disconnect(); } });
+  }, { threshold: 0.4 });
+  io.observe(demo);
+})();
+
+/* ============================================================
+   突出色切换(全站联动)
+   ============================================================ */
+(function () {
+  const DARK = { '#387BE5':'#2768cc', '#1BA39C':'#12827c', '#34A853':'#278641', '#E66A28':'#c75215', '#E55375':'#c93b5c' };
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+  document.querySelectorAll('.sw').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = btn.dataset.accent;
+      document.documentElement.style.setProperty('--accent', c);
+      document.documentElement.style.setProperty('--accent-hi', DARK[c] || c);
+      document.documentElement.style.setProperty('--tint', hexA(c, 0.12));
+      document.documentElement.style.setProperty('--tint-2', hexA(c, 0.18));
+      document.querySelectorAll('.sw').forEach(x => x.classList.toggle('active', x === btn));
+    });
+  });
+})();
+
+/* ============================================================
+   Reveal on scroll
+   ============================================================ */
+(function () {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+</script>
+</body>
+</html>
