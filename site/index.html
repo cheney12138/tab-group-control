@@ -223,191 +223,39 @@ kbd {
 .ghost-line.w60 { width: 60%; } .ghost-line.w80 { width: 80%; } .ghost-line.w40 { width: 40%; }
 .ghost-block { height: 90px; border-radius: 10px; background: var(--fill); margin-top: 18px; }
 
-/* The floating demo popup (复刻产品 UI) */
-.demo {
+/* 真实弹窗截图(悬浮在浏览器框上) */
+.shot-float {
   position: absolute;
-  right: -24px; top: -52px;
+  right: -30px; top: -56px;
   width: 380px;
-  height: 480px;
-  background: #f9f9fb;
-  border: 1px solid var(--hairline);
   border-radius: 13px;
   box-shadow: 0 18px 60px -8px rgba(8,15,40,0.35), 0 2px 8px rgba(8,9,10,0.10);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  font-size: 12.5px;
   z-index: 10;
-  transition: box-shadow .2s;
+  animation: shot-float 7s ease-in-out infinite;
 }
-.demo-float { animation: demo-float 7s ease-in-out infinite; }
-@keyframes demo-float {
+@keyframes shot-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
 }
-.demo-tabs {
-  display: flex; gap: 16px;
-  padding: 10px 14px 8px;
-  position: relative;
-  flex: none;
+.shot-float img {
+  width: 100%;
+  display: block;
+  border-radius: 13px;
+  border: 1px solid var(--hairline);
 }
-.demo-tab {
-  border: none; background: none; cursor: pointer;
-  font-family: inherit; font-size: 12.5px; color: var(--text-2);
-  padding: 0 2px 5px; position: relative;
-  transition: color .15s;
+.shot-float .shot-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .shot-float .shot-light { display: none; }
+  .shot-float .shot-dark { display: block; }
 }
-.demo-tab.active { color: var(--text); font-weight: 600; }
-.demo-tab.active::after {
-  content: ''; position: absolute; left: 50%; bottom: 0;
-  width: 26px; height: 2.5px; border-radius: 99px;
-  background: var(--accent);
-  transform: translateX(-50%);
+.shot-caption {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 10px;
+  font-size: 11.5px; color: var(--text-3);
 }
-.demo-tabs .spacer { flex: 1; }
-.demo-gear {
-  border: none; background: none; cursor: pointer; color: var(--text-3);
-  padding: 3px; border-radius: 6px; display: flex; align-self: center;
-}
-.demo-gear:hover { background: rgba(8,9,10,0.05); color: var(--text); }
-.demo-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.demo-search-row { padding: 0 14px 9px; flex: none; }
-.demo-search {
-  display: flex; align-items: center; gap: 7px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline));
-  box-shadow: 0 0 0 2.5px rgba(56,123,229,0.10);
-  border-radius: 10px;
-  padding: 0 9px;
-}
-.demo-search .src { color: var(--text-3); display: flex; }
-.demo-search .src svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.demo-search input {
-  flex: 1; min-width: 0;
-  border: none; outline: none; background: transparent;
-  font-family: inherit; font-size: 13px; color: var(--text);
-  padding: 8px 0;
-}
-.demo-search input::placeholder { color: rgba(8,9,10,0.44); }
-.demo-search kbd { font-size: 10px; padding: 1px 5px; border-bottom-width: 1px; }
-.demo-cmd-chip {
-  flex: none; display: none; align-items: center; gap: 4px;
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  color: var(--accent); background: var(--tint);
-  border: 1px solid rgba(56,123,229,0.3);
-  border-radius: 6px; padding: 2px 6px;
-}
-.demo-cmd-chip.show { display: inline-flex; }
-.demo-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 10px; scrollbar-width: thin; }
-.demo-list::-webkit-scrollbar { width: 8px; }
-.demo-list::-webkit-scrollbar-thumb { background: rgba(8,9,10,0.12); border-radius: 4px; }
-.ghead {
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 8px 5px;
-  font-size: 11.5px; font-weight: 700; color: var(--text-2);
-  cursor: pointer; user-select: none;
-  position: sticky; top: 0;
-  background: #f9f9fb;
-  z-index: 2;
-}
-.ghead .gdot { width: 7px; height: 7px; border-radius: 50%; background: var(--gc); flex: none; }
-.ghead .gcount {
-  font-weight: 600; font-size: 10px; color: var(--text-3);
-  background: rgba(8,9,10,0.05); border-radius: 99px; padding: 1px 6px;
-}
-.ghead .gchev { margin-left: auto; color: var(--text-3); transition: transform .2s; display: flex; }
-.ghead .gchev svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.ghead.collapsed .gchev { transform: rotate(-90deg); }
-.trow {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-2);
-  position: relative;
-}
-.trow:hover { background: rgba(8,9,10,0.045); }
-.trow.sel {
-  background: rgba(56,123,229,0.11);
-  color: var(--text);
-  box-shadow: inset 2.5px 0 0 var(--accent);
-}
-.trow.sel::after {
-  content: '↵'; margin-left: auto; flex: none;
-  font-size: 10.5px; color: var(--accent); opacity: .8;
-}
-.fav {
-  width: 16px; height: 16px; border-radius: 4px; flex: none;
-  background: var(--fc, #e8eaf0);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 8.5px; font-weight: 800; color: #fff;
-  position: relative;
-}
-.trow .t {
-  flex: 1; min-width: 0;
-  font-size: 12.5px; font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.trow .u {
-  flex: none; max-width: 110px;
-  font-size: 10px; color: var(--text-3);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.trow.sel .u { color: color-mix(in srgb, var(--accent) 70%, var(--text-3)); }
-mark { background: rgba(56,123,229,0.22); color: inherit; border-radius: 2px; padding: 0 1px; }
-.ttag {
-  flex: none; font-size: 9.5px; font-weight: 600;
-  padding: 1px 5px; border-radius: 4px;
-}
-.ttag.hot { color: #15803d; background: var(--green-bg); }
-.ttag.info { color: var(--blue-tag); background: var(--blue-tag-bg); }
-.ttag.mid { color: var(--gray-tag); background: var(--gray-tag-bg); }
-.ttag.stale { color: var(--amber); background: var(--amber-bg); }
-.ttag.zzz { color: var(--text-3); background: rgba(8,9,10,0.06); }
-.mbtn {
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 5px;
-  background: var(--surface); border: none; cursor: pointer;
-  box-shadow: 0 1px 3px rgba(8,9,10,0.16);
-  color: var(--text-2);
-}
-.mbtn:hover { color: var(--accent); }
-.mbtn svg { width: 11px; height: 11px; fill: currentColor; }
-.dup {
-  position: absolute; right: -4px; bottom: -3px;
-  font-size: 8px; font-weight: 800;
-  background: var(--text-3); color: #fff;
-  border-radius: 99px; padding: 0 3.5px; line-height: 1.5;
-}
-.demo-empty {
-  padding: 34px 20px; text-align: center; color: var(--text-3); font-size: 12px; display: none;
-}
-.demo-empty.show { display: block; }
-.demo-undo {
-  position: absolute; left: 12px; right: 12px; bottom: 12px;
-  display: flex; align-items: center; gap: 8px;
-  background: #16171c; color: #f7f8f8;
-  border-radius: 10px; padding: 9px 12px;
-  font-size: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-  transform: translateY(64px); opacity: 0;
-  transition: transform .28s var(--ease-spring), opacity .2s;
-  z-index: 20;
-}
-.demo-undo.show { transform: translateY(0); opacity: 1; }
-.demo-undo .undo-btn { color: var(--accent-dark); font-weight: 600; cursor: pointer; margin-left: auto; white-space: nowrap; }
-.demo-undo .undo-btn kbd { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.16); color: var(--accent-dark); }
-
-/* typed caret */
-.type-caret {
-  display: inline-block; width: 2px; height: 1.1em;
-  background: var(--accent); border-radius: 1px;
-  vertical-align: text-bottom; margin-left: 1px;
-  animation: caret-blink 1.06s steps(1,end) infinite;
-}
-@keyframes caret-blink { 0%,49.9% { opacity: 1 } 50%,100% { opacity: 0 } }
-
+.shot-caption svg { color: var(--accent); }
 @media (max-width: 980px) {
-  .demo { position: relative; right: auto; top: auto; margin: 22px auto 0; width: min(380px, 94vw); animation: none; }
+  .shot-float { position: relative; right: auto; top: auto; margin: 22px auto 0; width: min(380px, 94vw); animation: none; }
   .browser-body { display: none; }
 }
 @media (max-width: 720px) {
@@ -797,7 +645,6 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       <a href="#features">核心功能</a>
       <a href="#themes">主题</a>
       <a href="#shortcuts">快捷键</a>
-      <a href="#install" class="nav-cta">立即安装</a>
     </div>
   </div>
 </nav>
@@ -810,7 +657,7 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
     <div class="hero-eyebrow"><span class="dot"></span>Chrome 扩展 · Manifest V3 · v1.3</div>
     <h1>几百个标签页<br><span class="grad">一个弹窗管好</span></h1>
     <p class="hero-sub">搜索切换 + 自动分组 + 归档收纳。为多环境开发场景而生——按 <kbd>⌘E</kbd> 唤起,标题、拼音、组名、域名秒级命中,规则引擎让标签栏永远整齐。</p>
-    <div class="hero-kbd-hint">👇 下方弹窗不是截图,是活的——点击它,或直接用键盘 <kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Tab</kbd> 操作</div>
+    <div class="hero-kbd-hint">下方是产品真实弹窗的截图(亮色 / 暗色随系统切换),不是渲染复刻</div>
     <div class="hero-actions">
       <a class="btn btn-primary" href="#install">免费安装
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -827,7 +674,7 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       <span><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>⌘Z 全量可撤销</span>
     </div>
 
-    <!-- Browser frame + live demo -->
+    <!-- 真实弹窗截图(亮/暗双态) -->
     <div class="hero-visual">
       <div class="browser">
         <div class="browser-bar">
@@ -838,14 +685,14 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
           </div>
         </div>
         <div class="tabstrip">
-          <span class="gchip" style="--gc:#387BE5"><i></i>前端<em>4</em></span>
-          <span class="chip">订单管理后台</span>
-          <span class="chip on">Tab Group Search</span>
-          <span class="chip">React 文档</span>
-          <span class="gchip" style="--gc:#34A853"><i></i>设计<em>3</em></span>
-          <span class="chip">Figma</span>
-          <span class="gchip" style="--gc:#E66A28"><i></i>文档<em>3</em></span>
-          <span class="chip">需求评审 v3</span>
+          <span class="gchip" style="--gc:#387BE5"><i></i>工作<em>4</em></span>
+          <span class="chip">Tab Group Search</span>
+          <span class="chip on">Stack Overflow</span>
+          <span class="chip">MDN · Array</span>
+          <span class="gchip" style="--gc:#34A853"><i></i>学习<em>3</em></span>
+          <span class="chip">知乎</span>
+          <span class="gchip" style="--gc:#E66A28"><i></i>娱乐<em>3</em></span>
+          <span class="chip">bilibili</span>
           <span class="gchip" style="--gc:#9ca3af"><i></i>Others<em>2</em></span>
         </div>
         <div class="browser-body">
@@ -856,35 +703,14 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
             <div class="ghost-block"></div>
           </div>
         </div>
-
-        <!-- ============ LIVE DEMO (复刻产品弹窗) ============ -->
-        <div class="demo demo-float" id="demo">
-          <div class="demo-tabs">
-            <button class="demo-tab active" data-view="group">分组</button>
-            <button class="demo-tab" data-view="recent">最近使用</button>
-            <button class="demo-tab" data-view="window">当前窗口</button>
-            <span class="spacer"></span>
-            <button class="demo-gear" title="设置(演示)" tabindex="-1">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.11 1.56h.08a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.11z"/></svg>
-            </button>
-          </div>
-          <div class="demo-search-row">
-            <div class="demo-search">
-              <span class="src" title="搜书签 /b"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg></span>
-              <span class="src" title="搜历史 /h"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
-              <span class="demo-cmd-chip" id="demoCmdChip">/b</span>
-              <input id="demoInput" type="text" placeholder="搜索标签页 / 拼音 / 组名 / 域名" autocomplete="off" spellcheck="false">
-              <kbd>esc</kbd>
-            </div>
-          </div>
-          <div class="demo-list" id="demoList"></div>
-          <div class="demo-empty" id="demoEmpty">没有匹配的标签页 — 试试「dingdan」或「/b」</div>
-          <div class="demo-undo" id="demoUndo">
-            <span>已关闭该标签页</span>
-            <span class="undo-btn">撤销 <kbd>⌘Z</kbd></span>
+        <div class="shot-float">
+          <img class="shot-light" src="shots/hero-popup.png" alt="Tab Group Search 真实弹窗(亮色)">
+          <img class="shot-dark" src="shots/hero-popup-dark.png" alt="Tab Group Search 真实弹窗(暗色)">
+          <div class="shot-caption">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            真实弹窗截图 · 亮/暗随系统切换
           </div>
         </div>
-        <!-- ============ /LIVE DEMO ============ -->
       </div>
     </div>
   </div>
@@ -997,15 +823,12 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       </div>
       <div class="dive-visual reveal">
         <div class="panel">
-          <div class="panel-head">搜索「dingdan」<div class="ph-act"><span>⌘E 唤起</span></div></div>
-          <div class="panel-body match-demo">
-            <div class="match-row hit"><span class="q">dingdan</span><span class="arrow">→</span><span class="r"><b>订单管理</b>后台 — 测试环境</span></div>
-            <div class="match-row hit"><span class="q">ddgl</span><span class="arrow">→</span><span class="r"><b>订单管理</b>后台 — 生产环境</span></div>
-            <div class="match-row hit"><span class="q">dingd</span><span class="arrow">→</span><span class="r"><b>订单</b>履约监控看板</span></div>
-            <div class="match-row"><span class="q">/b react</span><span class="arrow">→</span><span class="r">书签:<b>React</b> 官方文档 · 中文</span></div>
-            <div class="match-note">↑ 组名精确匹配时该组固定排第一;同 URL 重复标签折叠成一行,favicon 角标显示份数。</div>
+          <div class="panel-head">真实弹窗 · 拼音搜索「zhihu」<div class="ph-act"><span>⌘E 唤起</span></div></div>
+          <div class="panel-body" style="padding:0;">
+            <img src="shots/search-pinyin.png" alt="拼音搜索 zhihu 命中知乎" style="width:100%;display:block;">
           </div>
         </div>
+        <div class="match-note" style="padding:12px 4px 0;">↑ 组名精确匹配时该组固定排第一;同 URL 重复标签折叠成一行,favicon 角标显示份数。</div>
       </div>
     </div>
 
@@ -1024,25 +847,9 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       </div>
       <div class="dive-visual reveal">
         <div class="panel">
-          <div class="panel-head">自动分组规则<div class="ph-act"><span>导入</span><span>导出</span></div></div>
-          <div class="panel-body">
-            <div class="rule-group">
-              <div class="rule-group-head"><span class="gdot" style="background:#387BE5"></span>前端开发<span class="rg-meta">3 条域名 · 4 个标签</span></div>
-              <div class="chips">
-                <span class="host-chip">github.com<span class="x">×</span></span>
-                <span class="host-chip hl">github.com/cheney12138<span class="x">×</span></span>
-                <span class="host-chip">*.stackblitz.com<span class="x">×</span></span>
-                <span class="host-chip add">+ 添加域名</span>
-              </div>
-            </div>
-            <div class="rule-group">
-              <div class="rule-group-head"><span class="gdot" style="background:#34A853"></span>设计<span class="rg-meta">2 条域名 · 3 个标签</span></div>
-              <div class="chips">
-                <span class="host-chip">figma.com<span class="x">×</span></span>
-                <span class="host-chip">*.notion.site<span class="x">×</span></span>
-              </div>
-            </div>
-            <div class="others-row"><span class="gdot"></span><b>Others</b>&nbsp;— 兜底组:不命中任何规则的标签自动归入,标签栏始终整齐</div>
+          <div class="panel-head">设置面板 · 自动分组规则编辑器</div>
+          <div class="panel-body" style="padding:0;">
+            <img src="shots/settings-rules.png" alt="自动分组规则编辑器" style="width:100%;display:block;">
           </div>
         </div>
       </div>
@@ -1063,20 +870,9 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       </div>
       <div class="dive-visual reveal">
         <div class="panel">
-          <div class="panel-head">标签行 · 右键菜单</div>
-          <div class="panel-body" style="padding:10px;">
-            <div class="media-row" style="padding:7px 12px;"><span class="fav" style="background:#387BE5">G</span><span class="t">tab-group-search · GitHub</span><span class="u" style="font-size:10px;color:var(--text-3)">github.com</span></div>
-            <div style="margin:6px auto 0;width:fit-content;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;box-shadow:var(--shadow-pop);padding:5px;font-size:12.5px;min-width:230px;">
-              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">新建分组…</div>
-              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">移出分组</div>
-              <div style="height:1px;margin:4px 6px;background:var(--hairline);"></div>
-              <div style="padding:7px 10px;border-radius:6px;background:rgba(56,123,229,0.09);color:var(--text);">关闭本组其余标签 <b style="color:var(--accent)">(12)</b></div>
-              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">关闭此标签下方标签 <b>(5)</b></div>
-              <div style="padding:7px 10px;border-radius:6px;color:var(--danger);">关闭「前端开发」全部标签 <b>(16)</b></div>
-              <div style="height:1px;margin:4px 6px;background:var(--hairline);"></div>
-              <div style="padding:7px 10px;border-radius:6px;color:var(--text-2);">归档「前端开发」分组</div>
-            </div>
-            <div class="match-note" style="text-align:center;">数量按 Chrome 真实标签计算,是预告也是防呆</div>
+          <div class="panel-head">真实弹窗 · 标签行右键菜单</div>
+          <div class="panel-body" style="padding:0;">
+            <img src="shots/contextmenu.png" alt="标签行右键菜单" style="width:100%;display:block;">
           </div>
         </div>
       </div>
@@ -1096,19 +892,9 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       </div>
       <div class="dive-visual reveal">
         <div class="panel">
-          <div class="panel-head">已归档 <span style="font-size:10px;background:var(--accent);color:#fff;border-radius:99px;padding:1.5px 6px;margin-left:2px;">2</span></div>
-          <div class="panel-body">
-            <div class="arch-card">
-              <div class="arch-head"><span class="gdot" style="background:#E66A28"></span><span class="an">Q3 大促专项</span><span class="am">8 个标签 · 3 天前</span><button class="arch-restore">重新打开</button></div>
-              <div class="arch-tabs">
-                <span class="arch-tab">大促需求文档 v3(终版)</span>
-                <span class="arch-tab">压测报告 — 订单链路</span>
-                <span class="arch-tab">复盘会议记录</span>
-              </div>
-            </div>
-            <div class="arch-card">
-              <div class="arch-head"><span class="gdot" style="background:#5e6ad2"></span><span class="an">技术调研:Rust WASM</span><span class="am">12 个标签 · 2 周前</span><button class="arch-restore">重新打开</button></div>
-            </div>
+          <div class="panel-head">设置面板 · 已归档</div>
+          <div class="panel-body" style="padding:0;">
+            <img src="shots/settings-archives.png" alt="已归档分组" style="width:100%;display:block;">
           </div>
         </div>
       </div>
@@ -1165,21 +951,8 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
     </div>
     <div class="theme-grid">
       <div class="theme-card reveal">
-        <div class="theme-shot" style="background:linear-gradient(180deg,#eceef2,#f9f9fb);">
-          <div class="mini" style="background:#f9f9fb;border:1px solid var(--hairline);">
-            <div class="mini-bar"><div class="mini-search" style="background:#fff;border:1px solid rgba(56,123,229,.4);"><i style="background:rgba(56,123,229,.35)"></i></div></div>
-            <div class="mini-list">
-              <div class="mini-ghead"><i style="background:#387BE5"></i><b style="width:34px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
-              <div class="mini-row" style="background:rgba(56,123,229,.11);box-shadow:inset 2px 0 0 #387BE5"><span class="mini-dot" style="background:#387BE5"></span><i style="width:52%;background:#c6cdd8"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#387BE5"></span><i style="width:38%;background:#dde1e8"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#387BE5"></span><i style="width:46%;background:#dde1e8"></i></div>
-              <div class="mini-ghead"><i style="background:#34A853"></i><b style="width:26px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#34A853"></span><i style="width:60%;background:#dde1e8"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#34A853"></span><i style="width:44%;background:#dde1e8"></i></div>
-              <div class="mini-ghead"><i style="background:#E66A28"></i><b style="width:30px;background:#aeb6c2"></b><s style="width:12px;background:#dde1e8"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#E66A28"></span><i style="width:56%;background:#dde1e8"></i></div>
-            </div>
-          </div>
+        <div class="theme-shot" style="padding:0;background:#eceef2;">
+          <img src="shots/theme-linear.png" alt="极简现代主题" style="width:100%;height:100%;object-fit:cover;object-position:top;">
         </div>
         <div class="theme-meta">
           <h3>极简现代 · Linear</h3>
@@ -1187,20 +960,8 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
         </div>
       </div>
       <div class="theme-card reveal" style="transition-delay:.08s">
-        <div class="theme-shot" style="background:linear-gradient(180deg,#efe9dc,#f5f0e4);">
-          <div class="mini" style="background:#f7f2e7;border:1px solid rgba(120,100,70,.25);">
-            <div class="mini-bar"><div class="mini-search" style="background:rgba(255,255,255,.6);border:1px solid rgba(120,100,70,.3);"><i style="background:rgba(90,70,50,.4)"></i></div></div>
-            <div class="mini-list">
-              <div class="mini-ghead"><i style="background:#8c2f25"></i><b style="width:34px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
-              <div class="mini-row" style="background:rgba(120,100,70,.13);box-shadow:inset 2px 0 0 #8c2f25"><span class="mini-dot" style="background:#8c2f25"></span><i style="width:52%;background:rgba(90,70,50,.3)"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#8c2f25"></span><i style="width:44%;background:rgba(90,70,50,.18)"></i></div>
-              <div class="mini-ghead"><i style="background:#5a6e52"></i><b style="width:26px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#5a6e52"></span><i style="width:58%;background:rgba(90,70,50,.18)"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#5a6e52"></span><i style="width:42%;background:rgba(90,70,50,.18)"></i></div>
-              <div class="mini-ghead"><i style="background:#3f5e78"></i><b style="width:30px;background:rgba(90,70,50,.4)"></b><s style="width:12px;background:rgba(90,70,50,.18)"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#3f5e78"></span><i style="width:46%;background:rgba(90,70,50,.18)"></i></div>
-            </div>
-          </div>
+        <div class="theme-shot" style="padding:0;background:#efe9dc;">
+          <img src="shots/theme-ink.png" alt="水墨古风主题" style="width:100%;height:100%;object-fit:cover;object-position:top;">
         </div>
         <div class="theme-meta">
           <h3>水墨古风 · Ink</h3>
@@ -1208,20 +969,8 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
         </div>
       </div>
       <div class="theme-card reveal" style="transition-delay:.16s">
-        <div class="theme-shot" style="background:linear-gradient(135deg,#dbe7fa,#eef4fd);">
-          <div class="mini" style="background:#f2f7ff;border:1px solid rgba(60,100,180,.2);">
-            <div class="mini-bar" style="background:linear-gradient(135deg,#2B50A5,#4C71C6);"><div class="mini-search" style="background:rgba(255,255,255,.9);"><i style="background:rgba(43,80,165,.4)"></i></div></div>
-            <div class="mini-list" style="background:linear-gradient(180deg,#eaf2fd,#f7fbff);">
-              <div class="mini-ghead"><i style="background:#4C71C6"></i><b style="width:34px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
-              <div class="mini-row" style="background:rgba(76,113,198,.14);box-shadow:inset 2px 0 0 #4C71C6"><span class="mini-dot" style="background:#4C71C6"></span><i style="width:50%;background:#c2d4ef"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#4C71C6"></span><i style="width:40%;background:#d5e3f6"></i></div>
-              <div class="mini-ghead"><i style="background:#7ba3e0"></i><b style="width:26px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#7ba3e0"></span><i style="width:57%;background:#d5e3f6"></i></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#7ba3e0"></span><i style="width:45%;background:#d5e3f6"></i></div>
-              <div class="mini-ghead"><i style="background:#E66A28"></i><b style="width:30px;background:#a9c1e8"></b><s style="width:12px;background:#d5e3f6"></s></div>
-              <div class="mini-row"><span class="mini-dot" style="background:#E66A28"></span><i style="width:48%;background:#d5e3f6"></i></div>
-            </div>
-          </div>
+        <div class="theme-shot" style="padding:0;background:linear-gradient(135deg,#dbe7fa,#eef4fd);">
+          <img src="shots/theme-sky.png" alt="蓝天颗粒主题" style="width:100%;height:100%;object-fit:cover;object-position:top;">
         </div>
         <div class="theme-meta">
           <h3>蓝天颗粒 · Sky</h3>
@@ -1236,7 +985,7 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
       <button class="sw" style="background:#34A853;--swc:#34A853" title="绿" data-accent="#34A853"></button>
       <button class="sw" style="background:#E66A28;--swc:#E66A28" title="橙" data-accent="#E66A28"></button>
       <button class="sw" style="background:#E55375;--swc:#E55375" title="玫红" data-accent="#E55375"></button>
-      <span style="font-size:11.5px;color:var(--text-3);">← 点一点,全站跟着换(包括上面的 live demo)</span>
+      <span style="font-size:11.5px;color:var(--text-3);">← 点一点,全站强调色跟着换</span>
     </div>
   </div>
 </section>
@@ -1334,243 +1083,6 @@ footer { border-top: 1px solid var(--hairline); padding: 40px 0; }
 </footer>
 
 <script>
-/* ============================================================
-   LIVE DEMO — 模拟产品弹窗的搜索/选择/视图切换交互
-   ============================================================ */
-(function () {
-  const TABS = [
-    { g:'前端', gc:'#387BE5', t:'订单管理后台 — 测试环境',   u:'test.order.example.com', f:'订', fc:'#387BE5', tag:{txt:'刚刚', cls:'hot'},  py:'dingdanguanlihoutai' },
-    { g:'前端', gc:'#387BE5', t:'订单管理后台 — 生产环境',   u:'order.example.com',      f:'订', fc:'#387BE5', tag:{txt:'今天', cls:'mid'},  py:'dingdanguanlihoutai' },
-    { g:'前端', gc:'#387BE5', t:'Tab Group Search · GitHub', u:'github.com',             f:'G',  fc:'#24292f', tag:{txt:'小时内', cls:'info'}, media:true, playing:true },
-    { g:'前端', gc:'#387BE5', t:'React 官方文档 · Hooks',    u:'react.dev',              f:'⚛', fc:'#087ea4', tag:{txt:'今天', cls:'mid'} },
-    { g:'设计', gc:'#34A853', t:'Figma · 弹窗改版 v2',       u:'figma.com',              f:'F',  fc:'#a259ff', tag:{txt:'小时内', cls:'info'} },
-    { g:'设计', gc:'#34A853', t:'落地页灵感收集板',           u:'dribbble.com',           f:'D',  fc:'#ea4c89', tag:{txt:'昨天', cls:'stale'} },
-    { g:'设计', gc:'#34A853', t:'主题 token 对照表',          u:'notion.site',            f:'N',  fc:'#191919', tag:{txt:'💤', cls:'zzz'} },
-    { g:'文档', gc:'#E66A28', t:'需求评审 v3(终版)',         u:'docs.example.com',       f:'需', fc:'#E66A28', tag:{txt:'小时内', cls:'info'}, py:'xuqiupingshen', dup:2 },
-    { g:'文档', gc:'#E66A28', t:'Q4 OKR 草稿',               u:'docs.example.com',       f:'O',  fc:'#E66A28', tag:{txt:'今天', cls:'mid'},    py:'okrcaogao' },
-    { g:'文档', gc:'#E66A28', t:'技术方案:规则引擎设计',      u:'wiki.example.com',       f:'技', fc:'#E66A28', tag:{txt:'昨天', cls:'stale'}, py:'jishufangan' },
-    { g:'Others', gc:'#9ca3af', t:'每日推荐 · 私人 FM',      u:'music.163.com',          f:'♪', fc:'#E55375', tag:{txt:'今天', cls:'mid'}, media:true },
-    { g:'Others', gc:'#9ca3af', t:'机票价格日历',            u:'flights.example.com',    f:'✈', fc:'#0ea5e9', tag:{txt:'💤', cls:'zzz'} },
-  ];
-  const BOOKMARKS = [
-    { t:'React 官方文档 · 中文', u:'zh-hans.react.dev', f:'⚛', fc:'#087ea4' },
-    { t:'MDN Web Docs',          u:'developer.mozilla.org', f:'M', fc:'#1b1b1b' },
-    { t:'Chrome Extensions API', u:'developer.chrome.com',  f:'C', fc:'#4285f4' },
-    { t:'订单域服务等级协议',     u:'wiki.example.com',      f:'订', fc:'#387BE5' },
-  ];
-  const HISTORY = [
-    { t:'Chrome 插件 icon 设计参考', u:'dribbble.com', f:'D', fc:'#ea4c89' },
-    { t:'pinyin 码点表实现思路',     u:'stackoverflow.com', f:'S', fc:'#f48024' },
-    { t:'订单管理后台 — 预发环境',   u:'staging.order.example.com', f:'订', fc:'#387BE5' },
-  ];
-
-  const input = document.getElementById('demoInput');
-  const list = document.getElementById('demoList');
-  const emptyEl = document.getElementById('demoEmpty');
-  const undoEl = document.getElementById('demoUndo');
-  const cmdChip = document.getElementById('demoCmdChip');
-  const tabsBtns = Array.from(document.querySelectorAll('.demo-tab'));
-  const demo = document.getElementById('demo');
-
-  let view = 'group';         // group | recent | window
-  let query = '';
-  let sel = 0;                // flat index of selection
-  let visible = [];           // rows currently rendered (data refs)
-  let removed = new Set();    // indices removed via ⌫
-  let undoTimer = null;
-
-  function norm(s){ return (s||'').toLowerCase(); }
-
-  function matchTab(tab, q) {
-    if (!q) return true;
-    const nq = norm(q);
-    // 全拼/首字母
-    if (tab.py && (tab.py.includes(nq) || pinyinInitialsHit(tab, nq))) return true;
-    return norm(tab.t).includes(nq) || norm(tab.g).includes(nq) || norm(tab.u).includes(nq);
-  }
-  function pinyinInitialsHit(tab, q) {
-    // 首字母命中:把标题里的汉字逐个和 query 对齐由真实引擎做;这里做简化演示:
-    // 用预置的首字母串
-    const initials = { 'dingdanguanlihoutai':'ddglht', 'xuqiupingshen':'xqps', 'jishufangan':'jsfa', 'okrcaogao':'okrcg' };
-    const ini = initials[tab.py] || '';
-    return ini && ini.includes(q);
-  }
-
-  function hi(text, q) {
-    if (!q) return esc(text);
-    const i = norm(text).indexOf(norm(q));
-    if (i < 0) return esc(text);
-    return esc(text.slice(0,i)) + '<mark>' + esc(text.slice(i, i+q.length)) + '</mark>' + esc(text.slice(i+q.length));
-  }
-  function esc(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-  function cmdOf(q){ const m = q.match(/^([bhr])\s*(.*)$/i); return m ? { c:m[1].toLowerCase(), rest:m[2] } : null; }
-
-  function collect() {
-    visible = [];
-    const q = query.trim();
-    const cmd = cmdOf(q);
-    cmdChip.classList.toggle('show', !!cmd);
-    if (cmd) cmdChip.textContent = '/' + cmd.c;
-
-    if (cmd && cmd.c === 'b') {
-      BOOKMARKS.forEach(b => { if (!q.slice(2).trim() || norm(b.t).includes(norm(q.slice(2).trim())) || norm(b.u).includes(norm(q.slice(2).trim()))) visible.push({ ...b, src:'书签' }); });
-    } else if (cmd && cmd.c === 'h') {
-      HISTORY.forEach(b => { if (!q.slice(2).trim() || norm(b.t).includes(norm(q.slice(2).trim())) || norm(b.u).includes(norm(q.slice(2).trim()))) visible.push({ ...b, src:'历史', dim:true }); });
-    } else if (cmd && cmd.c === 'r') {
-      visible = [
-        { t:'刚关闭:订单管理后台 — 预发环境', u:'staging.order.example.com', f:'订', fc:'#387BE5', src:'3 分钟前' },
-        { t:'刚关闭:发布会有哪些看点', u:'bilibili.com', f:'B', fc:'#00a1d6', src:'1 小时前' },
-      ];
-    } else {
-      const pool = TABS.map((t, i) => ({ ...t, _i: i })).filter(t => !removed.has(t._i));
-      const matched = pool.filter(t => matchTab(t, q));
-      if (view === 'group') {
-        const groups = [];
-        matched.forEach(t => {
-          let g = groups.find(g => g.name === t.g);
-          if (!g) { g = { name: t.g, color: t.gc, items: [] }; groups.push(g); }
-          g.items.push(t);
-        });
-        const flat = [];
-        groups.forEach(g => { flat.push({ __group: g }); g.items.forEach(it => flat.push(it)); });
-        visible = flat;
-      } else if (view === 'recent') {
-        visible = [...matched].sort((a,b) => (tagRank(a.tag) - tagRank(b.tag)));
-      } else {
-        visible = matched.filter(t => t.g !== 'Others').concat(matched.filter(t => t.g === 'Others'));
-      }
-    }
-    if (sel >= rows().length) sel = Math.max(0, rows().length - 1);
-    if (sel < 0) sel = 0;
-  }
-
-  function tagRank(tag) {
-    if (!tag) return 9;
-    return { hot:0, info:1, mid:2, stale:3, zzz:4 }[tag.cls] ?? 9;
-  }
-
-  function rows(){ return visible.filter(v => !v.__group); }
-
-  function render() {
-    collect();
-    const q = query.trim();
-    const cmd = cmdOf(q);
-    const subQ = cmd ? q.slice(2).trim() : q;
-    let html = '';
-    let rIdx = -1;
-    visible.forEach(item => {
-      if (item.__group) {
-        const g = item.__group;
-        html += `<div class="ghead" style="--gc:${g.color}"><span class="gdot"></span>${esc(g.name)}<span class="gcount">${g.items.length}</span><span class="gchev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div>`;
-        return;
-      }
-      rIdx++;
-      const isSel = rIdx === sel;
-      const tag = item.tag ? `<span class="ttag ${item.tag.cls}">${item.tag.txt}</span>` : '';
-      const src = item.src ? `<span class="ttag mid">${esc(item.src)}</span>` : '';
-      const dup = item.dup ? `<span class="dup">${item.dup}</span>` : '';
-      const media = item.media ? `<button class="mbtn" tabindex="-1" title="${item.playing?'暂停':'播放'}(演示)"><svg viewBox="0 0 24 24">${item.playing?'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>':'<path d="M7 4.5l13 7.5-13 7.5z"/>'}</svg></button>` : '';
-      const dim = item.dim ? ' style="opacity:.62"' : '';
-      html += `<div class="trow${isSel?' sel':''}"${dim} data-r="${rIdx}">
-        <span class="fav" style="background:${item.fc||'#e8eaf0'}">${esc(item.f||'')}${dup}</span>
-        <span class="t">${hi(item.t, subQ)}</span>
-        ${tag}${src}${media}
-        <span class="u">${esc(item.u||'')}</span>
-      </div>`;
-    });
-    list.innerHTML = html;
-    emptyEl.classList.toggle('show', rows().length === 0);
-
-    list.querySelectorAll('.trow').forEach(el => {
-      el.addEventListener('mouseenter', () => { sel = +el.dataset.r; render(); });
-      el.addEventListener('click', () => { sel = +el.dataset.r; flashSwitch(); });
-    });
-    const selEl = list.querySelector('.trow.sel');
-    if (selEl) selEl.scrollIntoView({ block:'nearest' });
-  }
-
-  function flashSwitch() {
-    const r = rows()[sel];
-    if (!r) return;
-    demo.style.boxShadow = '0 0 0 3px rgba(56,123,229,.55), 0 18px 60px -8px rgba(8,15,40,.35)';
-    input.value = ''; query = ''; sel = 0;
-    setTimeout(() => { demo.style.boxShadow = ''; render(); }, 240);
-    render();
-  }
-
-  function deleteSel() {
-    const r = rows()[sel];
-    if (!r || r._i === undefined) return;
-    removed.add(r._i);
-    render();
-    undoEl.classList.add('show');
-    clearTimeout(undoTimer);
-    undoTimer = setTimeout(() => undoEl.classList.remove('show'), 6000);
-  }
-  function undoDel() {
-    removed.clear();
-    undoEl.classList.remove('show');
-    render();
-  }
-
-  input.addEventListener('input', () => { query = input.value; sel = 0; render(); });
-  input.addEventListener('keydown', onKey);
-  demo.addEventListener('keydown', onKey);
-  undoEl.querySelector('.undo-btn').addEventListener('click', undoDel);
-
-  function onKey(e) {
-    const n = rows().length;
-    if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, n - 1); render(); e.preventDefault(); }
-    else if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); render(); e.preventDefault(); }
-    else if (e.key === 'Enter') { flashSwitch(); e.preventDefault(); }
-    else if (e.key === 'Tab') { cycleView(); e.preventDefault(); }
-    else if ((e.metaKey || e.ctrlKey) && (e.key === 'Backspace' || e.key === 'Delete')) { deleteSel(); e.preventDefault(); }
-    else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { undoDel(); e.preventDefault(); }
-    else if (e.key === 'Escape') { if (query) { input.value=''; query=''; sel=0; render(); } e.preventDefault(); }
-  }
-
-  function cycleView() {
-    const order = ['group','recent','window'];
-    view = order[(order.indexOf(view) + 1) % 3];
-    tabsBtns.forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    sel = 0; render();
-  }
-  tabsBtns.forEach(b => b.addEventListener('click', () => { view = b.dataset.view; tabsBtns.forEach(x => x.classList.toggle('active', x === b)); sel = 0; render(); input.focus(); }));
-
-  /* 自动打字引导:仅在用户未交互过时播放 */
-  let interacted = false;
-  ['pointerdown','keydown'].forEach(ev => demo.addEventListener(ev, () => { interacted = true; }, { capture:true }));
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  async function autotype() {
-    await sleep(1800);
-    if (interacted) return;
-    const target = 'dingdan';
-    input.placeholder = '';
-    for (const ch of target) {
-      if (interacted) { input.placeholder = '搜索标签页 / 拼音 / 组名 / 域名'; return; }
-      input.value += ch; query = input.value; sel = 0; render();
-      await sleep(150);
-    }
-    await sleep(3400);
-    if (interacted) return;
-    // 清除,恢复原位
-    for (let i = 0; i < target.length; i++) {
-      if (interacted) return;
-      input.value = input.value.slice(0, -1); query = input.value; render();
-      await sleep(55);
-    }
-    input.placeholder = '搜索标签页 / 拼音 / 组名 / 域名';
-  }
-
-  render();
-  // 等 demo 滚进视口后再开始引导
-  const io = new IntersectionObserver(entries => {
-    entries.forEach(en => { if (en.isIntersecting) { autotype(); io.disconnect(); } });
-  }, { threshold: 0.4 });
-  io.observe(demo);
-})();
-
 /* ============================================================
    突出色切换(全站联动)
    ============================================================ */
