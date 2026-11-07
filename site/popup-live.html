@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="linear">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=480, initial-scale=1">
+<title>Tab Group Search · 真实样式演示</title>
+<!-- 产品真实样式表: 从 popup.html 原样提取, 未做任何改写 -->
+<link rel="stylesheet" href="assets/popup.css">
+<!-- 展示环境浅色锁定: 从 popup.css 的浅色 token 原样搬出, 只为避免访客系统暗色时弹窗变黑 -->
+<link rel="stylesheet" href="assets/light-lock.css">
+<style>
+  /* 只补两条展示环境所需: 关掉浏览器给 iframe 的默认焦点环, 以及滚动条在浅色下的观感 */
+  html, body { width: 480px; height: 520px; }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(8,9,10,0.14); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(8,9,10,0.24); }
+</style>
+</head>
+<body>
+<script>
+(async function () {
+  const params = new URLSearchParams(location.search);
+  const stateName = params.get('state') || 'group';
+  const theme = params.get('theme') || 'linear';
+  const scheme = params.get('scheme') || 'light';
+  const accent = params.get('accent') || '';
+  const interactive = params.get('static') !== '1';
+
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.scheme = scheme;
+  if (accent) document.documentElement.dataset.accent = accent;
+
+  const [states, favicons] = await Promise.all([
+    fetch('assets/states.json').then(r => r.json()),
+    fetch('assets/favicons.json').then(r => r.json()),
+  ]);
+
+  function inject(name) {
+    const st = states[name] || states.group;
+    let html = st.html;
+    // 还原内联 favicon(data URI 已抽出共享表)
+    html = html.replace(/__FAV:([a-f0-9]+)__/g, (_, k) => favicons[k] || '');
+    document.body.innerHTML = html;
+    document.body.classList.add('entrance');
+  }
+
+  inject(stateName);
+
+  if (!interactive) return;
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+  /* ---------- 视图切换: 换预渲染快照 + 同步 tab 高亮 ---------- */
+  const VIEW_STATE = { '分组': 'group', '最近使用': 'recent', '当前窗口': 'window' };
+  $$('.view-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = VIEW_STATE[btn.textContent.trim()];
+      if (!name) return;
+      inject(name);
+      bindAll();
+      const again = $$('.view-tab').find(b => b.textContent.trim() === btn.textContent.trim());
+      again?.classList.add('active');
+      $$('.view-tab').forEach(b => { if (b !== again) b.classList.remove('active'); });
+    });
+  });
+
+  /* ---------- 搜索: 真过滤 + 真高亮(用产品自己的 <mark>) ---------- */
+  const search = $('#search');
+  let query = '';
+  function applySearch() {
+    const q = query.trim().toLowerCase();
+    const results = $('#results');
+    if (!results) return;
+    const rows = $$('.tab-item', results);
+    // 记录每行所属的组名(真实 DOM 的行本身不带组信息)
+    let currentGroup = '';
+    const groupOf = new Map();
+    for (const node of results.children) {
+      if (node.classList?.contains('group-header')) {
+        currentGroup = node.textContent.trim();
+      } else if (node.classList?.contains('tab-item')) {
+        groupOf.set(node, currentGroup);
+      }
+    }
+    // 简易拼音映射(演示用, 覆盖截图数据集里的中文标题)
+    const PY = [
+      ['知乎', 'zhihu'], ['如何评价', 'ruhepingjia'], ['系统地学习', 'xitongdixuexi'],
+      ['拼音码点表', 'pinyinmadianbiao'], ['方法速查', 'fangfasucha'], ['快速上手', 'kuaisushangshou'],
+      ['响应式基础', 'xiangyingshijichu'], ['每日推荐', 'meirituijian'], ['热搜榜', 'resoubang'],
+      ['发现', 'faxian'], ['机票酒店', 'jipiaojiudian'], ['车票预订', 'chepiaoyuding'],
+      ['购物车', 'gouwuche'], ['收件箱', 'shoujianxiang'], ['日历', 'rili'], ['翻译', 'fanyi'],
+      ['首页', 'shouye'], ['效率工具', 'xiaolvgongju'], ['科技爱好者周刊', 'kejiaiaozhezhoukan'],
+      ['题库', 'tiku'], ['书单', 'shudan'], ['中文输入法', 'zhongwenshurufa'],
+    ];
+    function withPinyin(s) {
+      let out = s;
+      for (const [zh, py] of PY) if (s.includes(zh)) out += ' ' + py;
+      return out.toLowerCase();
+    }
+    rows.forEach(row => {
+      const titleEl = $('.title', row);
+      if (!titleEl) return;
+      if (titleEl.dataset.orig == null) titleEl.dataset.orig = titleEl.innerHTML;
+      titleEl.innerHTML = titleEl.dataset.orig;
+      row.style.display = '';
+      row.classList.remove('hidden-by-search');
+    });
+    $$('.group-header', results).forEach(h => { h.style.display = ''; });
+
+    if (!q) { syncGroupCounts(); return; }
+
+    rows.forEach(row => {
+      const titleEl = $('.title', row);
+      const text = (titleEl?.dataset.fullTitle || titleEl?.textContent || '');
+      const urlEl = $('.url', row);
+      const hay = withPinyin(text + ' ' + (urlEl?.textContent || '') + ' ' + (groupOf.get(row) || ''));
+      if (!hay.includes(q)) {
+        row.style.display = 'none';
+        row.classList.add('hidden-by-search');
+        return;
+      }
+      if (titleEl) {
+        const lower = titleEl.textContent.toLowerCase();
+        const i = lower.indexOf(q);
+        if (i >= 0) {
+          const raw = titleEl.textContent;
+          titleEl.innerHTML =
+            esc(raw.slice(0, i)) + '<mark>' + esc(raw.slice(i, i + q.length)) + '</mark>' + esc(raw.slice(i + q.length));
+        } else {
+          // 拼音命中时, 标题不高亮(与真实产品一致)
+        }
+      }
+    });
+
+    $$('.group-header', results).forEach(h => {
+      let n = h.nextElementSibling, any = false;
+      while (n && !n.classList.contains('group-header')) {
+        if (n.classList.contains('tab-item') && !n.classList.contains('hidden-by-search')) any = true;
+        n = n.nextElementSibling;
+      }
+      h.style.display = any ? '' : 'none';
+    });
+    syncGroupCounts();
+  }
+  function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function syncGroupCounts() {
+    const results = $('#results');
+    if (!results) return;
+    $$('.group-header', results).forEach(h => {
+      let n = h.nextElementSibling, n2 = 0;
+      while (n && !n.classList.contains('group-header')) {
+        if (n.classList.contains('tab-item') && !n.classList.contains('hidden-by-search')) n2++;
+        n = n.nextElementSibling;
+      }
+      const c = $('.group-count', h);
+      if (c) c.textContent = String(n2);
+    });
+  }
+  search?.addEventListener('input', () => { query = search.value; applySearch(); });
+
+  /* ---------- 键盘: ↑↓ 选中 / Enter / ←→ 折叠 / Tab 换视图 ---------- */
+  function visibleRows() { return $$('.tab-item').filter(r => r.style.display !== 'none'); }
+  function moveSel(d) {
+    const rows = visibleRows();
+    if (!rows.length) return;
+    let i = rows.findIndex(r => r.classList.contains('active'));
+    i = i < 0 ? 0 : Math.min(Math.max(i + d, 0), rows.length - 1);
+    rows.forEach(r => r.classList.remove('active'));
+    rows[i].classList.add('active');
+    rows[i].scrollIntoView({ block: 'nearest' });
+  }
+  function focusedHeader() {
+    return $('.group-header.collapsed') || null;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { moveSel(1); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { moveSel(-1); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      const row = $('.tab-item.active');
+      if (row) {
+        row.animate([{ transform: 'scale(1)' }, { transform: 'scale(0.985)' }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' });
+      }
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      if (search && search.value) { search.value = ''; query = ''; applySearch(); }
+      e.preventDefault();
+    }
+  });
+
+  /* ---------- 分组折叠: 真实 .collapsed + 隐藏组内行 ---------- */
+  function bindGroups() {
+    $$('.group-header').forEach(h => {
+      h.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return; // 组头上的按钮(归档/菜单)不触发折叠
+        const collapsed = h.classList.toggle('collapsed');
+        // 同步冻结"组内行"的显示
+        let n = h.nextElementSibling;
+        while (n && !n.classList.contains('group-header')) {
+          if (n.classList.contains('tab-item')) {
+            n.style.display = collapsed ? 'none' : (n.classList.contains('hidden-by-search') ? 'none' : '');
+          }
+          n = n.nextElementSibling;
+        }
+      });
+      h.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        h.classList.toggle('collapsed');
+        let n = h.nextElementSibling;
+        const collapsed = h.classList.contains('collapsed');
+        while (n && !n.classList.contains('group-header')) {
+          if (n.classList.contains('tab-item')) n.style.display = collapsed ? 'none' : '';
+          n = n.nextElementSibling;
+        }
+      });
+    });
+  }
+
+  /* ---------- 行 hover / 点击选中 ---------- */
+  function bindRows() {
+    $$('.tab-item').forEach(row => {
+      row.addEventListener('mouseenter', () => {
+        $$('.tab-item').forEach(r => r.classList.remove('active'));
+        row.classList.add('active');
+      });
+    });
+  }
+
+  function bindAll() { bindRows(); bindGroups(); applySearch(); }
+  bindAll();
+
+  // 演示态: 首次载入时用假输入法打一段拼音, 展示真实高亮(仅 group 状态, 且用户未交互)
+  if (stateName === 'group' && search && params.get('demo') !== '0') {
+    let touched = false;
+    ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { touched = true; }, { capture: true, once: true }));
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    (async () => {
+      await sleep(1400);
+      if (touched) return;
+      for (const ch of 'zhihu') {
+        if (touched) return;
+        search.value += ch; query = search.value; applySearch();
+        await sleep(140);
+      }
+      await sleep(4200);
+      if (touched) return;
+      search.value = ''; query = ''; applySearch();
+    })();
+  }
+})();
+</script>
+</body>
+</html>

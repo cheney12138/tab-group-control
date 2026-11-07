@@ -1,0 +1,47 @@
+/* 由 popup.css 提取: 展示环境强制浅色(站点本身是浅色主题), 不改产品任何一处样式 */
+html[data-scheme="light"] { color-scheme: light; }
+html[data-scheme="light"][data-theme="linear"] {
+      color-scheme: light;
+      --bg: #f9f9fb; --surface: #ffffff; --fill: rgba(8, 9, 10, 0.05); --fill-2: rgba(8, 9, 10, 0.08);
+      --text: #08090a; --text-2: #5e6b7a; --text-3: #9ca3af; --placeholder: rgba(8, 9, 10, 0.44);
+      --hairline: rgba(8, 9, 10, 0.08); --header-line: rgba(8, 9, 10, 0.05); --hover: rgba(8, 9, 10, 0.04);
+      --accent: #2563eb; --accent-hi: #3b82f6;
+      --tint: color-mix(in srgb, var(--accent) 12%, transparent); --tint-2: color-mix(in srgb, var(--accent) 18%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 35%, transparent);
+      --danger: #dc2626; --danger-solid: #dc2626; --danger-bg: rgba(220, 38, 38, 0.09);
+      --amber: #b45309;
+      --seg-active: #ffffff; --seg-shadow: none;
+      --header-bg: #f9f9fb; --header-hover: rgba(8, 9, 10, 0.04);
+      --pop-bg: #ffffff; --shadow-pop: 0 1px 2px rgba(8, 9, 10, 0.18), 0 4px 14px rgba(8, 9, 10, 0.06);
+      --dot-ring: rgba(8, 9, 10, 0.06); --btn-2: #5e6b7a;
+      --media-btn-bg: #ffffff; --media-btn-shadow: 0 1px 3px rgba(8, 9, 10, 0.16);
+      --push-shadow: 0 1px 2px rgba(8, 9, 10, 0.14), 0 4px 12px rgba(8, 9, 10, 0.05);
+      --search-bg: #ffffff; --search-bg-focus: #ffffff; --plate-bg: #f9f9fb;
+      --tag-hot-c: #15803d;   --tag-hot-bg: rgba(22, 163, 74, 0.12);
+      --tag-info-c: #5e6ad2;  --tag-info-bg: rgba(94, 106, 210, 0.10);
+      --tag-mid-c: #5e6b7a;   --tag-mid-bg: rgba(8, 9, 10, 0.06);
+      --tag-stale-c: #b45309; --tag-stale-bg: rgba(180, 83, 9, 0.12);
+      --tag-zombie-c: #dc2626; --tag-zombie-bg: rgba(220, 38, 38, 0.10);
+      --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px;
+      --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 99px;
+      --fs-xs: 10.5px; --fs-sm: 11px; --fs-md: 12.5px; --fs-lg: 13px;
+      --gutter: 16px;
+      --card-shadow: 0 1px 2px rgba(8, 9, 10, 0.06); --card-shadow-hover: 0 1px 2px rgba(8, 9, 10, 0.10);
+}
+html[data-scheme="light"][data-theme="linear"] {
+      --accent: #387BE5;
+      --accent-hi: #2768cc;
+      --tint: color-mix(in srgb, var(--accent) 12%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 18%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+html[data-scheme="light"][data-theme="linear"][data-accent="blue"] { --accent: #387BE5; --accent-hi: #2768cc; }
+html[data-scheme="light"][data-theme="linear"][data-accent="cyan"] { --accent: #1BA39C; --accent-hi: #12827c; }
+html[data-scheme="light"][data-theme="linear"][data-accent="green"] { --accent: #34A853; --accent-hi: #278641; }
+html[data-scheme="light"][data-theme="linear"][data-accent="orange"] { --accent: #E66A28; --accent-hi: #c75215; }
+html[data-scheme="light"][data-theme="linear"][data-accent="rose"] { --accent: #E55375; --accent-hi: #c93b5c; }
+html[data-scheme="light"][data-theme="linear"][data-accent="blue"] { --accent: #8AB4F8; --accent-hi: #a8c7fa; }
+html[data-scheme="light"][data-theme="linear"][data-accent="cyan"] { --accent: #78D9EC; --accent-hi: #a0e5f3; }
+html[data-scheme="light"][data-theme="linear"][data-accent="green"] { --accent: #81C995; --accent-hi: #a3d9b3; }
+html[data-scheme="light"][data-theme="linear"][data-accent="orange"] { --accent: #FCAD70; --accent-hi: #fdc396; }
+html[data-scheme="light"][data-theme="linear"][data-accent="rose"] { --accent: #F28B82; --accent-hi: #f6ada7; }
