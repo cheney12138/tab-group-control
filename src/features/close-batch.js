@@ -15,8 +15,10 @@
 // 关闭次序: **先把快照写进 session,最后才 remove** —— 靶子含激活标签时
 // Chrome 会当场杀掉 popup(settings.js 的归档路径同款前车之鉴),慢一步就没撤销了。
 
+import { resultsEl } from '../core/dom.js';
 import { tabItemByTabId, recentlyRestoredTabs } from '../core/store.js';
 import { pushUndo, renderUndoBanner, persistUndoBatch } from './undo.js';
+import { collapseRows } from './row-anim.js';
 
 let actions = null; // initCloseBatch 注入: { refreshData, render, dropTabs }
 export function initCloseBatch(injected) { actions = injected; }
@@ -97,6 +99,17 @@ export function computeTargets(scope, kind, anchorTabId) {
   return { ids, count: ids.length };
 }
 
+// 行节点快照: 批量关闭前把要关的那些行找出来, 交给收起动画。
+// 找不到行(不在当前视图里/已重渲染)就跳过 —— 动画是可选装饰, 不能挡着关标签
+function rowsOf(ids) {
+  const rows = [];
+  for (const id of ids) {
+    const row = resultsEl.querySelector(`.tab-item[data-tab-id="${id}"]`);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
 // 执行。返回真正下手的标签数(0 = 没动)
 export async function runCloseBatch(scope, targetIds) {
   if (!scope || !targetIds.length) return 0;
@@ -116,6 +129,9 @@ export async function runCloseBatch(scope, targetIds) {
   await persistUndoBatch(snapshots);
 
   const ids = targets.map(t => t.id);
+  // 多行一起收起(70ms 错峰)。数据层还没动, 但动画只是行的退场 ——
+  // remove 紧随其后, 不等动画演完
+  const anim = collapseRows(rowsOf(ids), { stagger: 70 });
   try {
     await chrome.tabs.remove(ids);
   } catch (e) {
@@ -132,7 +148,52 @@ export async function runCloseBatch(scope, targetIds) {
   }
   actions.dropTabs?.(new Set(ids));
   renderUndoBanner();
+  await anim; // 收起演完才重绘(节点随重绘退场)
   await actions.refreshData({ forceFresh: true });
   actions.render();
   return ids.length;
+}
+
+// ⌘⌫ 关闭一组标签(多选删除)。与 runCloseBatch 的差别:
+//   - 靶子是**行成员**(代表 + 同 URL 副本已由调用方摊平), 不经分组作用域
+//   - 快照按 state.allTabs 的行条目取(与单行 closeTab 同一份数据)
+// 顺序与 runCloseBatch 一致: 快照先落 session, 再 remove —— 靶子含激活标签时
+// popup 会被当场杀掉, remove 之后的代码可能一行都不执行。
+export async function closeTabsByIds(ids) {
+  const list = [...new Set(ids)].filter(id => Number.isInteger(id) && id > 0);
+  if (!list.length) return 0;
+
+  const snapshots = [];
+  for (const id of list) {
+    const item = tabItemByTabId(id);
+    if (!item) continue; // 副本在 state.allTabs 里没有自己的行(快照以行为单位)
+    snapshots.push({
+      tab: item.tab,
+      groupTitle: item.group?.title || null,
+      groupColor: item.group?.color || null,
+      windowId: item.tab.windowId,
+    });
+  }
+  for (const snap of snapshots) pushUndo(snap);
+
+  // 收起动画先开演(多选是"一次关一堆", 70ms 错峰让退场读成一片)
+  const anim = collapseRows(rowsOf(list), { stagger: 70 });
+  await persistUndoBatch(snapshots);
+
+  try {
+    await chrome.tabs.remove(list);
+  } catch (e) {
+    console.error('批量关闭失败(部分标签可能已不存在):', e);
+  }
+
+  if (!actions) {
+    console.error('[TGS] initCloseBatch 未被调用: 标签已关闭, 但撤销条与列表刷新都没执行');
+    return list.length;
+  }
+  actions.dropTabs?.(new Set(list));
+  renderUndoBanner();
+  await anim;
+  await actions.refreshData({ forceFresh: true });
+  actions.render();
+  return list.length;
 }

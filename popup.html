@@ -1841,6 +1841,74 @@
       opacity: 1;
       transform: translate(-50%, 0);
     }
+    /* ============================================================
+     * 多选提示条(Shift 点选 / ⇧↑↓ 进入多选后浮现): 与拖拽提示同一族
+     * (底部悬浮胶囊), 区别是它带计数徽 + 键位, 一直挂到选择清空。
+     * pointer-events: none —— 它只交代状态, 不接点击。
+     * ============================================================ */
+    .multi-hint {
+      position: fixed;
+      left: 50%;
+      bottom: 16px;
+      transform: translate(-50%, 10px);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px 5px 8px;
+      border-radius: var(--r-full);
+      background: var(--pop-bg);
+      border: 1px solid var(--hairline);
+      box-shadow: var(--shadow-pop);
+      color: var(--text-2);
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.14s ease, transform 0.2s var(--ease-spring);
+      z-index: 130;
+    }
+    body.multi-mode .multi-hint {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    /* 计数徽: 实底 accent + pop-bg 文字。
+     * 用 pop-bg 当"反色"是刻意的 —— 亮主题下是白字, 暗主题下自动变成深字, 不用
+     * 额外开一个 --on-accent token(三套主题的 pop-bg 都够亮/够暗) */
+    .multi-hint-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: var(--r-full);
+      background: var(--accent);
+      color: var(--pop-bg);
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .multi-hint-sep {
+      width: 1px;
+      height: 11px;
+      margin: 0 2px;
+      background: var(--hairline);
+    }
+    .multi-hint-act {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-2);
+    }
+    .multi-hint .kbd + .kbd { margin-left: 3px; }
+    /* 提示条会压在最后一行上方: 多选期间让【滚动定位】多给 56px 底部余量,
+     * scrollIntoView(block:'nearest') 就不会把刚选中那行塞进胶囊底下
+     * (实测余量 46px 时行底边恰好顶到胶囊上沿, 56px 留出 ~10px 呼吸)。
+     * 用 scroll-padding 而不是 padding-bottom —— 后者会改变布局, 关掉时整列表跳一下 */
+    body.multi-mode #results { scroll-padding-bottom: 56px; }
+    /* 底部弹起的推送条(撤销/清理提示)与多选条叠在同一位置: 多选期间往上让一格 */
+    body.multi-mode:not(.settings-open) .push-stack { bottom: 58px; }
     .group-header.drop-target {
       background: color-mix(in srgb, var(--group-c, var(--accent)) 16%, transparent) !important;
       outline: 1.5px dashed var(--group-c, var(--accent));
@@ -1875,6 +1943,58 @@
     }
     .tab-item.locating { animation: locate-flash 0.6s ease 2; }
     .tab-item.locating::before { opacity: 1; }
+    /* 删除中的行: 高度量算后的收起(见 features/row-anim.js)。
+     * 只在 .closing 期间挂过渡 —— 常态行不加 height/padding 过渡, 避免重渲染/换视图时
+     * 被浏览器接上一段莫名其妙的"慢慢变高"。
+     * .expanding 是它的逆动作(撤销删除/⌘Z 恢复的行从这里展开回来): **共用同一条
+     * 过渡声明**, 同一行"删掉再撤销"才读成同一段动作倒放。两者的起点/终点都由
+     * row-anim.js 的内联样式给, CSS 只负责"挂上过渡"。
+     * 必须写在 .tab-item.active 之后: 两者选择器权重相同(.tab-item.X), 后者会覆盖 transition。 */
+    .tab-item.closing,
+    .tab-item.expanding {
+      transition:
+        height 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.3s ease,
+        transform 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      will-change: height, opacity, transform;
+    }
+    /* ============================================================
+     * 多选行(Shift 点选 / ⇧↑↓): "被勾上" = 主题色淡底 + 1px 内描边
+     * + 左侧 3px 实心竖条。竖条用绝对定位 —— 勾选不会把内容推开(行不跳)。
+     * 与 .active(键盘光标: 渐变洗染 + scale 上浮)分工: 光标管"当前在哪",
+     * 多选管"选中了哪些", 两者可叠加; 叠加时只加强描边, 底色仍交给主题的
+     * .active 洗染(主题资产不抢)。
+     * ============================================================ */
+    .tab-item.multi-selected {
+      background: var(--tint);
+      box-shadow: inset 0 0 0 1px var(--ring);
+    }
+    .tab-item.multi-selected:hover { background: var(--tint-2); }
+    .tab-item.multi-selected::after {
+      content: '';
+      position: absolute;
+      left: 2px;
+      top: 7px;
+      bottom: 7px;
+      width: 3px;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+    /* 光标停在选中行上(⇧↑↓ 的端点): 两套视觉语言叠加 ——
+     * 保留 .active 的渐变洗染 + 上浮 + 投影(否则"光标在哪"在多选块里失去落点),
+     * 再加一层更实的描边。底色必须在这里重新声明: .multi-selected 的平底色与
+     * .active 的渐变同权重，写在后面的会把渐变盖掉(实测: 叠加态丢了光标感) */
+    .tab-item.multi-selected.active {
+      background: linear-gradient(to right,
+        color-mix(in srgb, var(--accent) 16%, transparent),
+        color-mix(in srgb, var(--accent) 7%, transparent) 50%,
+        color-mix(in srgb, var(--accent) 3%, transparent) 88%);
+      box-shadow: inset 0 0 0 1.5px var(--ring),
+                  0 2px 8px color-mix(in srgb, var(--accent) 10%, transparent);
+    }
     .tab-item .icon-wrap { transition: transform 0.15s ease; }
     .tab-item img {
       width: 16px;
@@ -1927,6 +2047,8 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      /* 复制浮标出现时给标题让出右侧空间(见 .copy-badge); 过渡让让位/收回不跳 */
+      transition: padding-right 0.2s ease;
     }
     /* 休眠徽标: 标题里 💤 前缀剥离后的小降权角标,信息保留但不抢标题视觉 */
     .sleep-mark {
@@ -2059,6 +2181,138 @@
     .close-btn:hover {
       background: var(--danger-solid);
       color: #fff;
+    }
+    /* ============================================================
+     * 复制 URL 的行内浮标(⌘C): 浮在被复制那一行的右端(时间戳槽位上方 ——
+     * 选中行的时间戳本来就 opacity: 0, 不会两个东西叠在一起)。
+     * linear 是 token 化的白胶囊; ink 在下方把底色换成形状底图(墨点);
+     * sky 仍用徽章,只把圆角调圆、阴影调柔(云的柔,不画云) ——
+     * 三套主题共用同一套尺寸/入场语言。
+     * 入场只有 opacity + 微微上浮(合成器属性), 不弹跳 —— 这是"回执", 不是"报喜"。
+     * 时长 2s 后自动退场(见 render.js 的 showCopyBadge / cancelCopyBadge)。
+     * ============================================================ */
+    .copy-badge {
+      position: absolute;
+      right: 36px; /* 让开行尾的关闭按钮(8px + 20px + 8px 呼吸) */
+      top: 50%;
+      transform: translateY(calc(-50% + 4px)) scale(0.97);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px 3px 7px;
+      border-radius: 9px;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      box-shadow: 0 2px 10px rgba(8, 20, 60, 0.14), 0 1px 2px rgba(8, 9, 10, 0.06);
+      color: var(--text-2);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      line-height: 1.6;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 4;
+      transition: opacity 0.22s ease, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .copy-badge.show {
+      opacity: 1;
+      transform: translateY(-50%) scale(1);
+    }
+    /* 浮标浮在行右端时, 标题**让位**而不是被盖住: 给 .tab-info 右内边距,
+     * 标题/URL 的省略号提前收好, 浮标落下时下面永远是空白(不遮行内容)。
+     * 用 .tab-info 的内边距而不是行 padding-right —— 后者要跟三套主题的
+     * html[data-theme=…] .tab-item padding 打选择器权重架, 前者没人动过, 天然干净。 */
+    .tab-item:has(.copy-badge) .tab-info { padding-right: 92px; }
+    .copy-badge svg {
+      width: 11px;
+      height: 11px;
+      flex-shrink: 0;
+      stroke: var(--accent);
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    /* ---- ink: 胶囊换成"墨点" ----
+     * 形状不走 border-radius(圆角矩形再怎么调也读成规整胶囊), 走 ::before 的
+     * 底图: 外扩 7/9px 后画布约 124×43, 与 SVG viewBox 240×80 的 3.0 比例接近,
+     * preserveAspectRatio=none 拉伸时几乎不畸变。本体只留文字/图标, 形状永远
+     * 比文字盒大一圈 —— 这是"文字不露头"的根, 不是靠调 padding 碰运气。
+     * 本体尺寸比 linear 大一号(6px 13px 内边距 / 28px 最小高), 文字四周的
+     * 墨底因此至少有 6px, 图标与字不会顶到形状边缘。 */
+    html[data-theme="ink"] .copy-badge {
+      min-height: 28px;
+      padding: 6px 13px;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+    html[data-theme="ink"] .copy-badge::before {
+      content: "";
+      position: absolute;
+      inset: -7px -9px;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 100% 100%;
+      pointer-events: none;
+      z-index: -1;
+    }
+    /* ink: 墨滴落在宣纸上
+     * 三层结构: ① 大位移 + 高斯模糊的淡墨晕(毛边, 像纸纤维吃墨)
+     *          ② 手绘墨块 + 深色湿边(不规则轮廓完全盖住文字, 白字才有反差)
+     *          ③ 右侧/下方几颗飞溅墨点(打破"一枚椭圆"的规整感)
+     * 字改宋体 + 0.05em 字距: 小字号宋体在墨底上比无衬线更像刻/印出来的字,
+     * 与线性主题的无衬线浮标在气质上分开。 */
+    html[data-theme="ink"] .copy-badge {
+      color: #FBF3E7;
+      font-family: "Songti SC", "STSong", "SimSun", "宋体", serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-shadow: 0 0.5px 1px rgba(18, 14, 12, 0.45);
+    }
+    html[data-theme="ink"] .copy-badge::before {
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 80' preserveAspectRatio='none'><defs><radialGradient id='g' cx='46%' cy='42%' r='64%'><stop offset='0' stop-color='%23141110'/><stop offset='0.62' stop-color='%232B2622'/><stop offset='1' stop-color='%232B2622' stop-opacity='0.84'/></radialGradient><filter id='w' x='-30%' y='-50%' width='160%' height='200%'><feTurbulence type='fractalNoise' baseFrequency='0.018 0.04' numOctaves='3' seed='9' result='n'/><feDisplacementMap in='SourceGraphic' in2='n' scale='8' xChannelSelector='R' yChannelSelector='G'/><feGaussianBlur stdDeviation='3.2'/></filter><filter id='c' x='-30%' y='-50%' width='160%' height='200%'><feTurbulence type='fractalNoise' baseFrequency='0.09 0.15' numOctaves='3' seed='4' result='n'/><feDisplacementMap in='SourceGraphic' in2='n' scale='5.5' xChannelSelector='R' yChannelSelector='G'/><feGaussianBlur stdDeviation='0.35'/></filter></defs><g fill='%232B2622'><g filter='url(%23w)' opacity='0.32'><ellipse cx='120' cy='40' rx='103' ry='24'/><ellipse cx='58' cy='45' rx='30' ry='16'/><ellipse cx='196' cy='37' rx='28' ry='15'/></g><g filter='url(%23c)' opacity='0.96'><g transform='translate(0 6.4) scale(1 0.84)'><path fill='none' stroke='%23120E0C' stroke-width='1.4' opacity='0.55' d='M24 42 C22 30, 34 21, 50 20 C68 14, 88 18, 106 18 C126 14, 148 16, 166 22 C184 21, 200 28, 206 38 C212 48, 208 58, 196 61 C180 66, 162 62, 144 64 C124 68, 104 63, 84 65 C62 67, 42 62, 32 54 C26 50, 24 46, 24 42 Z'/><path fill='url(%23g)' d='M24 42 C22 30, 34 21, 50 20 C68 14, 88 18, 106 18 C126 14, 148 16, 166 22 C184 21, 200 28, 206 38 C212 48, 208 58, 196 61 C180 66, 162 62, 144 64 C124 68, 104 63, 84 65 C62 67, 42 62, 32 54 C26 50, 24 46, 24 42 Z'/></g><circle cx='204' cy='66' r='3.6'/><circle cx='216' cy='55' r='2.6' opacity='0.9'/><circle cx='219' cy='66' r='1.7' opacity='0.75'/><circle cx='193' cy='73' r='1.5' opacity='0.65'/><ellipse cx='211' cy='44' rx='2.6' ry='1.5' opacity='0.6' transform='rotate(-24 211 44)'/><circle cx='32' cy='57' r='2.4' opacity='0.5'/></g></g></svg>");
+      mix-blend-mode: multiply;
+      opacity: 0.98;
+    }
+    html[data-theme="ink"] .copy-badge svg {
+      width: 12px;
+      height: 12px;
+      stroke: #FBF3E7;
+      stroke-width: 2;
+    }
+    /* sky: 徽章, 但不照抄 linear 的胶囊 —— "云"的柔靠三处细活, 不靠画云朵
+     * (手绘云在 100×27 的小尺寸上怎么画都读成卡通/墨点, 已废弃):
+     *   ① 圆角 12px(linear 9px): 近半圆, 读成"一朵软的东西"而不是"一个控件"
+     *   ② 阴影走云层深蓝墨 rgba(31,52,110) 而非中性黑, 色相留在天空里;
+     *      再加 1px 内顶光, 白面才有"受光的云"的层次(不超过一层)
+     *   ③ 面用 --surface(云白), 描边用 --hairline, 字降到 --text-2:
+     *      浮标是回执不是告警, 不该比标题更重
+     * 图标留在 --accent(天空本色), 是这枚徽章上唯一的高饱和点。 */
+    html[data-theme="sky"] .copy-badge {
+      border-radius: 12px;
+      padding: 4px 12px;
+      box-shadow: 0 2px 10px rgba(31, 52, 110, 0.12),
+                  0 1px 3px rgba(31, 52, 110, 0.08),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      letter-spacing: 0.02em;
+    }
+    html[data-theme="sky"] .copy-badge svg {
+      width: 11px;
+      height: 11px;
+      stroke: var(--accent);
+    }
+    /* 标题让位。注意 .tab-info 右边还有时间戳兄弟节点占位, 所以这个值不是"浮标宽度",
+     * 实测长标题才定得准: 146px 会白让出一大条空白。三个值 = 各自浮标宽度 + 常量,
+     * 长标题实测的"浮标左缘 - 标题右缘"缝隙: linear 16.7px / ink 12.8px / sky 15.9px
+     * (视觉节奏一致, 差 3px 看不出来)。sky 的徽章比 linear 胶囊宽 8.9px, 故 92→100。 */
+    html[data-theme="ink"] .tab-item:has(.copy-badge) .tab-info { padding-right: 106px; }
+    html[data-theme="sky"] .tab-item:has(.copy-badge) .tab-info { padding-right: 100px; }
+    @media (prefers-reduced-motion: reduce) {
+      .copy-badge { transform: translateY(-50%); transition: opacity 0.2s ease; }
+      .copy-badge.show { transform: translateY(-50%); }
     }
     /* 最近使用时间 tag 五档: 当前 > 热门(10分钟) > 今日 / 近期 > 僵尸。
      * 颜色用 Apple 系统色的文字/淡底组合,冷暖渐进 */
@@ -2676,6 +2930,23 @@
     html[data-theme="ink"] .tab-item:hover {
       background: rgba(43, 38, 34, 0.035);
     }
+    /* 多选行: 选择态优先于 hover(主题里 .tab-item:hover 的特权比基础层高,
+     * 不在这里跟一手, 墨主题下鼠标一划过多选行底色就掉了) */
+    html[data-theme="ink"] .tab-item.multi-selected:hover {
+      background: var(--tint-2);
+    }
+    /* 多选提示条在 ink 下: 宣纸底 + 墨线 + **裸宋键位**(与帮助卡同一口径 ——
+     * 墨纸上的等宽灰底键帽是外来件), 胶囊改小方角 —— 纸片上不出现药丸外形 */
+    html[data-theme="ink"] .multi-hint {
+      border-radius: 8px;
+      border-color: var(--line);
+    }
+    html[data-theme="ink"] .multi-hint .kbd {
+      background: none; padding: 0; border-radius: 0;
+      font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", "宋体", serif;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+    }
+    html[data-theme="ink"] .multi-hint .kbd + .kbd { margin-left: 5px; }
     html[data-theme="ink"] .tab-item.active {
       background: radial-gradient(140px 40px at 0% 50%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 80%), rgba(43, 38, 34, 0.035);
     }
@@ -2971,6 +3242,17 @@
       background: var(--fill-2);
       font-family: ui-monospace, SFMono-Regular, "Noto Serif SC", serif;
       letter-spacing: 0.01em;
+    }
+    /* 多选提示条在 sky 下: 云白面板(走 --pop-bg 的云白 hi, 不用纯白) + 蓝调边 + 圆语言键帽 */
+    html[data-theme="sky"] .multi-hint {
+      background: var(--surface);
+      border-color: rgba(31, 52, 110, 0.12);
+    }
+    html[data-theme="sky"] .multi-hint .kbd {
+      border-radius: 999px;
+      padding: 1px 7px;
+      background: var(--fill-2);
+      font-family: ui-monospace, SFMono-Regular, "Noto Serif SC", serif;
     }
 
     /* ============================================================
@@ -3310,6 +3592,7 @@
               <tr><td><span class="kbd">Enter</span></td><td>切换到选中标签</td></tr>
               <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">C</span></td><td>复制选中标签的 URL</td></tr>
               <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">⌫</span></td><td>删除选中项(有重复时先逐份删副本)</td></tr>
+              <tr><td><span class="kbd">⇧</span><span class="kbd">点击</span></td><td>多选标签(⇧↑↓ 连续选, 再按一次取消)</td></tr>
               <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">Z</span></td><td>撤销刚才的关闭</td></tr>
               <tr><td><span class="kbd"><span class="k-c"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></td><td>清理 7 天未用的标签</td></tr>
               <tr><td><span class="kbd">Esc</span></td><td>清空搜索词 / 关闭</td></tr>
@@ -3328,6 +3611,16 @@
   </div>
   <div id="results"></div>
   <div id="dragHint" class="drag-hint" aria-hidden="true">拖到分组上移动 · 拖到面板外新建窗口</div>
+  <!-- 多选提示条(Shift 点选 / ⇧↑↓ 进入多选): 行数 + 两个动作键位。
+       纯键盘驱动(⌘⌫ 关闭 / Esc 取消), 所以 pointer-events: none。 -->
+  <div id="multiHint" class="multi-hint" role="status" aria-live="polite" aria-hidden="true">
+    <span class="multi-hint-label">已选</span>
+    <span id="multiHintCount" class="multi-hint-count">0</span>
+    <span class="multi-hint-label">行</span>
+    <span class="multi-hint-sep" aria-hidden="true"></span>
+    <span class="multi-hint-act"><span class="kbd"><span class="k-c"></span></span><span class="kbd">⌫</span>关闭</span>
+    <span class="multi-hint-act"><span class="kbd">Esc</span>取消</span>
+  </div>
   <div id="pushStack" class="push-stack"></div>
   <script src="pinyin-data.js"></script>
   <script src="rules-match.js"></script>

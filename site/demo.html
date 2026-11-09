@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Tab Group Search · 演示</title>
-<meta name="description" content="Tab Group Search 8 屏演示:⌘E 唤起 · 拼音秒搜 · ↑↓ 切换 · 自动分组 · 右键批量 · 整组归档。">
+<title>Tidy · 演示</title>
+<meta name="description" content="Tidy 14 屏演示:⌘E 唤起 · 拼音秒搜 · slash 命令 · 全键盘操作 · 多窗口 · 拖拽 · 媒体控制 · 最近使用 · 归档 · 主题 · 规则引擎 · 备份恢复。">
 <meta name="theme-color" content="#f9f9fb">
 <style>
 /* ============================================================
@@ -82,9 +82,7 @@ kbd {
 .slide.exit-up { opacity: 0; transform: translateY(-18px); }
 .slide.enter-up { transition: none; transform: translateY(18px); }
 .slide.enter-down { transition: none; transform: translateY(-18px); }
-.slide.dark { background: var(--ink); color: #fff; }
-.slide.dark .narr h2 { color: #fff; }
-.slide.dark .narr p { color: rgba(255,255,255,.62); }
+
 
 /* 两栏: 文字 + 舞台 */
 .slide.two {
@@ -235,14 +233,14 @@ kbd {
   width: 58px; height: 58px; border-radius: 14px;
   display: grid; place-items: center;
   font-size: 21px; font-weight: 600; color: #fff;
-  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.05));
-  border: 1px solid rgba(255,255,255,.22);
-  box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.16);
+  background: linear-gradient(180deg, #3a3f47, #1e2126);
+  border: 1px solid rgba(8,9,10,.15);
+  box-shadow: 0 8px 24px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.12);
   position: relative;
 }
 .kbd-hint .keycap::after {
   content: ''; position: absolute; inset: -8px; border-radius: 20px;
-  border: 1px solid rgba(138,180,248,.5);
+  border: 1px solid rgba(56,123,229,.4);
   animation: ring 1.6s ease-out infinite;
 }
 .kbd-hint .keycap.dim::after { display: none; }
@@ -250,7 +248,7 @@ kbd {
   0% { transform: scale(.92); opacity: .8; }
   100% { transform: scale(1.28); opacity: 0; }
 }
-.kbd-hint .cap-txt { font-size: 13px; color: rgba(255,255,255,.55); letter-spacing: .02em; }
+.kbd-hint .cap-txt { font-size: 13px; color: var(--text-2); letter-spacing: .02em; }
 
 /* ============================================================
    Popup replica — 逐条复制自 site/index.html(.pop-*)
@@ -284,7 +282,7 @@ kbd {
   position: absolute; left: 4px; bottom: 4px; width: 36px; height: 2.5px;
   border-radius: 99px; background: var(--accent);
   transform-origin: 0 50%;
-  transition: transform .28s cubic-bezier(.3,.9,.3,1);
+  transition: transform .28s cubic-bezier(.3,.9,.3,1), width .28s cubic-bezier(.3,.9,.3,1);
   z-index: 0;
 }
 .pop-search {
@@ -545,6 +543,721 @@ kbd {
 .popdock.shrink { transform: scale(calc(var(--s, 1) * .95)); opacity: 0; }
 
 /* ============================================================
+   归档屏 — 漫画分镜
+   格 1 / 格 2 斜切并排(clip-path 梯形), 格 3 底部通栏
+   深色纸面作画框, 格间留白即「墨线」
+   ============================================================ */
+.slide.two.wide { grid-template-columns: 300px minmax(0, 1000px); }
+
+.comic {
+  --ink: #17181b;
+  --gut: 7px;
+  --slant: 16px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1.35fr 1.15fr;
+  gap: var(--gut) 0;
+  padding: var(--gut);
+  background: var(--ink);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 28px 72px -34px rgba(8,15,40,.5), 0 3px 10px rgba(8,9,10,.07);
+}
+.cp {
+  position: relative;
+  min-width: 0; min-height: 0;
+  background: var(--surface);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(26px) scale(.99);
+  transition: opacity .58s var(--ease-out), transform .7s var(--ease-out);
+}
+.cp.in { opacity: 1; transform: none; }
+.cp-1 {
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
+  transition-delay: .02s;
+}
+.cp-2 {
+  clip-path: polygon(var(--slant) 0, 100% 0, 100% 100%, 0 100%);
+  transition-delay: .1s;
+}
+.cp-3 { grid-column: 1 / -1; transition-delay: .19s; }
+
+/* 格内编号 + 说明 */
+.cp-tag {
+  position: absolute; left: 15px; top: 13px; z-index: 5;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.cp-tag i {
+  flex: none; width: 16px; height: 16px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--ink); color: #fff;
+  font-family: var(--mono); font-size: 9.5px; font-style: normal;
+  font-weight: 700; letter-spacing: 0;
+}
+.cp-2 .cp-tag { left: 28px; }
+
+/* 格内舞台: 内容按 --s 等比缩放后居中 */
+.cp-body {
+  position: absolute; inset: 38px 12px 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.cp-1 .cp-body { right: 22px; }   /* 右边缘让开斜切 */
+.cp-2 .cp-body { left: 26px; }    /* 左边缘让开斜切 */
+.cp-zoom {
+  position: relative; flex: none;
+  width: 480px;
+  transform: scale(var(--s, 1));
+  transform-origin: center center;
+}
+
+/* 格 1: 弹窗缩到格内尺寸 */
+.cp-1 .popdrop { position: static; display: block; opacity: 1; transform: none; }
+.cp-1 .popdock { transform: none; height: auto; width: 480px; }
+.cp-1 .popdock .pop { height: auto; }
+.cp-1 .pop-list { flex: none; }
+
+/* 格 2: 迷你浏览器窗口 */
+.mini-bwin {
+  width: 480px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 18px 44px -24px rgba(8,20,60,.3), 0 1px 3px rgba(8,9,10,.05);
+}
+.mini-bwin .bwin-bar { border-radius: 0; }
+.mini-bwin .tabstrip { border-radius: 0; }
+.mini-body { padding: 20px 22px 22px; background: var(--surface); }
+
+/* 漫画批注贴纸 */
+.cp-note {
+  position: absolute; right: 16px; bottom: 14px; z-index: 4;
+  padding: 5px 11px 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--ink); border-radius: 4px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .01em; color: var(--ink);
+  box-shadow: 3px 3px 0 rgba(23,24,27,.12);
+  opacity: 0; transform: rotate(-2.5deg) translateY(8px) scale(.94);
+  transition: opacity .4s ease, transform .52s var(--ease-spring);
+  pointer-events: none;
+}
+.cp-note.show { opacity: 1; transform: rotate(-2.5deg) translateY(0) scale(1); }
+
+/* 格 3: 设置面板(可放宽) */
+.cp-3 .cp-zoom { width: 620px; }
+.cp-3 .settings-panel { max-width: none; }
+
+/* ============================================================
+   屏 4 / 屏 5 — 键盘流漫画
+   页 A(cmd3): 三格(上二斜切 + 底通栏)
+   页 B(quad): 四格 2×2 直角(格间留白即墨线)
+   ============================================================ */
+.comic.cmd3 .cp-zoom { width: 430px; }
+.comic.cmd3 .cp-3 .cp-zoom { width: 820px; }         /* 通栏格撑满, 与上排同等字号 */
+
+.comic.quad {
+  grid-template-rows: 1fr 1fr;
+  gap: var(--gut);
+}
+.comic.quad .cp { clip-path: none; }
+.comic.quad .cp-1 { transition-delay: .02s; }
+.comic.quad .cp-2 { transition-delay: .09s; }
+.comic.quad .cp-3 { grid-column: auto; transition-delay: .16s; }
+.comic.quad .cp-4 { transition-delay: .23s; }
+.comic.quad .cp-1 .cp-body { right: 12px; }
+.comic.quad .cp-2 .cp-body { left: 12px; }
+.comic.quad .cp-zoom,
+.comic.quad .cp-3 .cp-zoom { width: 430px; }
+
+/* --- 命令面板(格内, 复用 .pop-search / .pop-fav / .pop-push) --- */
+.cmdp {
+  position: relative; width: 100%;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  overflow: hidden;
+  box-shadow: 0 18px 44px -26px rgba(8,20,60,.32), 0 1px 3px rgba(8,9,10,.05);
+}
+/* 四格屏统一面板高度: 行删掉后面板不缩水, 四格缩放比也不会各跳各的 */
+.comic.quad .cmdp { height: 340px; }
+.cmdp-head { flex: none; padding: 11px 12px 10px; background: rgba(8,9,10,.014); border-bottom: 1px solid var(--hairline); }
+.cmdp .pop-search { height: 32px; }
+.cmdp .pop-field { font-family: var(--mono); font-size: 12px; }
+.cmdp .field-ph { font-family: var(--font); font-size: 12.5px; }
+.cmdp-list { flex: 1; padding: 5px 0 6px; }
+/* /h 历史 · /r 最近关闭: 结果源整体降级 —— 它们是「翻旧账」的次级列表,
+   不是当前窗口的主列表, 与真实产品的观感一致 */
+.cmdp-list.dim { opacity: .55; }
+/* 推送条要浮在底栏之上, 不要压在提示文字上 */
+.cmdp .pop-push { bottom: 42px; }
+
+.cmd-ghead {
+  display: flex; align-items: center; gap: 8px;
+  margin: 3px 9px 3px; padding: 3px 4px 6px;
+  font-size: 12px; font-weight: 600;
+}
+.cmd-ghead .pop-gdot { height: 14px; }
+.cmd-ghead .pop-gcount { margin-left: auto; }
+
+.cmd-row {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 7px; padding: 7px 9px;
+  border-radius: 8px;
+  transition: opacity .34s ease, transform .42s var(--ease-out), background .14s ease, box-shadow .14s ease;
+}
+.cmd-row.pending { opacity: 0; transform: translateY(8px); }
+.cmd-row.reveal { transition-delay: calc(var(--i, 0) * 65ms); }
+.cmd-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.cmd-main b { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-main em { font-style: normal; font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-row.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent) 4%, transparent) 52%, transparent 88%);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: scale(1.015);
+}
+.cmd-row.stale .cmd-main em { color: var(--amber); }
+.cmdp-foot {
+  flex: none;
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 13px; border-top: 1px solid var(--hairline);
+  background: rgba(8,9,10,.012);
+  font-size: 10.5px; color: var(--text-3); letter-spacing: .01em;
+}
+.cmdp-foot kbd { font-size: 9.5px; padding: 1px 5px; }
+
+/* 复制到剪贴板的浮标(贴在选中行右端) ——
+   走弹窗自己的浮层语言(pop-bg + hairline + 圆角 + 淡投影), 不用反色黑标:
+   它和 pop-push 是同族, 只是落点在行内 */
+.cmd-copy {
+  position: absolute; right: 9px; top: 50%; z-index: 6;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px 4px 7px; border-radius: 9px;
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--hairline);
+  font-size: 10.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(8,20,60,.14), 0 1px 2px rgba(8,9,10,.06);
+  opacity: 0; pointer-events: none;
+  transform: translateY(-50%) translateY(5px) scale(.96);
+  transition: opacity .22s ease, transform .36s var(--ease-out);
+}
+.cmd-copy.show { opacity: 1; transform: translateY(-50%) scale(1); }
+.cmd-copy svg { width: 11px; height: 11px; flex: none; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 动作触发时点燃编号圈(键帽只留旁白里的一份, 避免同一格重复两次快捷键) */
+.cp-tag { transition: color .22s ease; }
+.cp-tag i { transition: background .22s ease, transform .26s var(--ease-spring); }
+.cp-tag.press { color: var(--text); }
+.cp-tag.press i { background: var(--accent); transform: scale(1.14); }
+
+.pop-push .push-undo { transition: transform .16s ease, opacity .16s ease; }
+.pop-push .push-undo.press { transform: scale(.93); opacity: .65; }
+
+/* 设置面板 mock */
+.settings-panel {
+  position: relative;
+  width: 100%; max-width: 420px; margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  box-shadow: 0 18px 60px -8px rgba(8,15,40,.28), 0 2px 8px rgba(8,9,10,.08);
+  overflow: hidden;
+}
+.sp-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 18px 0;
+  font-size: 15px; font-weight: 700;
+}
+.sp-close {
+  margin-left: auto; width: 26px; height: 26px;
+  border: 0; border-radius: 50%;
+  background: var(--fill); color: var(--text-3);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px;
+}
+.sp-tabs {
+  display: flex; gap: 0; padding: 12px 18px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.sp-tab {
+  border: 0; background: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; color: var(--text-2);
+  padding: 8px 12px 10px; position: relative;
+  transition: color .15s;
+}
+.sp-tab.active { color: var(--text); font-weight: 600; }
+.sp-tab.active::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 2.5px; border-radius: 99px; background: var(--accent);
+}
+.sp-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 99px; background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 600; margin-left: 4px;
+  vertical-align: 1px;
+  transition: transform .3s var(--ease-spring);
+}
+.sp-pill.bump { transform: scale(1.4); }
+.sp-body { padding: 14px 18px 18px; }
+.sp-arc-list { display: flex; flex-direction: column; gap: 8px; }
+.sp-arc-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--hairline);
+  transition: background .12s, opacity .42s ease, transform .5s var(--ease-out);
+}
+.sp-arc-item.pending { opacity: 0; transform: translateY(-10px) scale(.97); }
+.sp-arc-item.arrive { animation: freshPop .8s var(--ease-out); }
+@keyframes freshPop {
+  0% { background: color-mix(in srgb, var(--green) 24%, var(--bg)); transform: translateY(-4px) scale(1.015); }
+  100% { background: color-mix(in srgb, var(--green) 6%, var(--bg)); transform: none; }
+}
+.sp-arc-item.fresh {
+  background: color-mix(in srgb, var(--green) 6%, var(--bg));
+  border-color: color-mix(in srgb, var(--green) 18%, var(--hairline));
+}
+.sp-arc-dot { width: 3.5px; height: 20px; border-radius: 99px; background: var(--gc); flex: none; }
+.sp-arc-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.sp-arc-main b { font-size: 12.5px; font-weight: 600; }
+.sp-arc-main em { font-style: normal; font-size: 11px; color: var(--text-3); }
+.sp-arc-btn {
+  flex: none; font-size: 11.5px; font-weight: 600; color: var(--accent);
+  background: var(--tint); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  padding: 5px 12px; border-radius: 99px; cursor: pointer;
+  transition: background .12s, transform .12s;
+}
+.sp-arc-btn:hover { background: var(--tint-2); }
+.sp-arc-btn:active { transform: scale(.96); }
+
+/* ============================================================
+   新增功能屏 — 通用画布(自管舞台, 整体等比缩放)
+   .cvs 固定设计稿尺寸(内联 width), 由 fitScaled() 写 --s
+   ============================================================ */
+.cvs {
+  position: absolute; left: 50%; top: 0;
+  padding-bottom: 46px;
+  transform: translateX(-50%) scale(var(--s, 1));
+  transform-origin: top center;
+}
+.cvs-toast {
+  position: absolute; left: 50%; bottom: 0; z-index: 30;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 15px; font-size: 12.5px; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 13px; box-shadow: var(--shadow-pop);
+  white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transform: translate(-50%, 10px);
+  transition: opacity .2s, transform .32s var(--ease-spring);
+}
+.cvs-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.cvs-toast b { color: var(--text); font-weight: 600; }
+.cvs-toast svg { width: 13px; height: 13px; flex: none; stroke: var(--green); fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ============================================================
+   屏 5 — 多窗口: 两个并排浏览器窗口 + 居中弹窗
+   ============================================================ */
+.duo { position: relative; width: 620px; height: 660px; }
+.mw-slot {
+  position: absolute; top: 28px; width: 292px;
+  transition: opacity .5s ease, filter .45s ease, transform .55s var(--ease-out);
+}
+.mw-a { left: 6px; z-index: 3; }
+.mw-b { right: 6px; z-index: 2; }
+.mw-slot.dim { opacity: .4; filter: grayscale(1); transform: translateY(4px) scale(.985); }
+.mw-cap {
+  position: absolute; left: 2px; bottom: calc(100% + 8px);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .01em;
+  color: var(--text-3); white-space: nowrap;
+  transition: color .4s;
+}
+.mw-cap i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.mw-a .mw-cap { color: var(--accent); }
+.mw-win {
+  position: relative; overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: 12px;
+  box-shadow: 0 16px 40px -22px rgba(8,20,60,.32), 0 1px 3px rgba(8,9,10,.05);
+}
+.mw-win .bwin-bar { padding: 8px 10px; }
+.mw-win .browser-url { font-size: 10.5px; padding: 4px 8px; margin-left: 4px; }
+.mw-win .tabstrip { height: 30px; padding: 6px 10px 0; gap: 2px; }
+.mw-win .chip, .mw-win .gchip { font-size: 9.5px; padding: 5px 8px 6px; max-width: 104px; gap: 4px; }
+.mw-win .gchip i { width: 5px; height: 5px; }
+.mw-win .gchip em { font-size: 8.5px; }
+.mw-ghost { padding: 16px 18px 18px; background: var(--surface); }
+.mw-ghost .ghost-line { height: 7px; margin-bottom: 9px; border-radius: 4px; }
+.mw-ghost .ghost-block { height: 54px; margin-top: 12px; border-radius: 7px; }
+.duo-note {
+  position: absolute; right: 26px; top: 150px; z-index: 4;
+  padding: 4px 10px 5px;
+  background: var(--surface); border: 1.5px solid var(--ink); border-radius: 4px;
+  font-size: 10.5px; font-weight: 700; color: var(--ink);
+  box-shadow: 3px 3px 0 rgba(23,24,27,.12);
+  transform: rotate(-2.5deg);
+  opacity: 0; transition: opacity .4s ease;
+}
+.duo-note.show { opacity: 1; }
+.duo .popdrop { top: 190px; z-index: 6; }
+.duo .popdock { width: 480px; height: 430px; }
+.duo .popdock .pop { width: 480px; height: 430px; }
+.duo-count {
+  position: absolute; left: 0; right: 0; top: 632px;
+  text-align: center; font-size: 11px; letter-spacing: .01em;
+  color: var(--text-3);
+  opacity: 0; transition: opacity .45s ease;
+}
+.duo-count.show { opacity: 1; }
+.duo-count b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   屏 7 — 拖拽排序
+   ============================================================ */
+.pop-row.dragging {
+  position: relative; z-index: 20;
+  background: var(--surface) !important;
+  box-shadow: 0 14px 34px -10px rgba(8,15,40,.35), 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
+  cursor: grabbing;
+  transition: transform .38s cubic-bezier(.3,.9,.35,1), box-shadow .3s ease;
+}
+.pop-row.dragging .pop-time { opacity: 0; }
+.pop-ghead.dropzone {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: -1px;
+}
+.pop-drag-hint {
+  position: absolute; left: 50%; bottom: 12px; z-index: 26;
+  padding: 6px 13px; border-radius: 99px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-pop);
+  font-size: 11px; color: var(--text-2); white-space: nowrap;
+  opacity: 0; transform: translate(-50%, 10px);
+  transition: opacity .18s ease, transform .3s var(--ease-spring);
+  pointer-events: none;
+}
+.pop-drag-hint.show { opacity: 1; transform: translate(-50%, 0); }
+.pop-row.landed { animation: land .55s var(--ease-spring); }
+@keyframes land {
+  0% { transform: scale(1.03); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  100% { transform: none; }
+}
+
+/* ============================================================
+   屏 8 — 媒体控制
+   ============================================================ */
+.pop-media {
+  flex: none; margin-left: 6px;
+  width: 22px; height: 22px; border: 0; border-radius: 50%;
+  background: var(--tint); color: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background .16s, color .16s, box-shadow .3s, transform .2s var(--ease-spring);
+}
+.pop-media svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pop-media.attn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+.pop-media.muted { background: var(--fill); color: var(--text-3); box-shadow: none; }
+.pop-media.press { transform: scale(.86); }
+.media-eq { display: inline-flex; align-items: flex-end; justify-content: center; gap: 2px; height: 11px; }
+.media-eq i { width: 2px; border-radius: 1px; background: currentColor; animation: eq 900ms ease-in-out infinite; }
+.media-eq i:nth-child(1) { height: 5px; animation-delay: -.2s; }
+.media-eq i:nth-child(2) { height: 10px; animation-delay: -.5s; }
+.media-eq i:nth-child(3) { height: 7px; animation-delay: -.75s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+.chip .chip-media {
+  display: inline-block; width: 11px; height: 11px; margin-left: 5px;
+  border: 1px solid currentColor; border-radius: 50%;
+  position: relative; vertical-align: -1px; color: var(--text-3);
+}
+.chip .chip-media::after {
+  content: ''; position: absolute; left: -1px; right: -1px; top: 50%; height: 1px;
+  background: currentColor; transform: rotate(-45deg);
+}
+.chip.muted { color: var(--text-3); }
+
+/* ============================================================
+   屏 11 — 主题系统(三格斜分)
+   三格平行斜切(斜率一致 ⇒ 斜缝宽度恒定, 读起来是一条斜墨线)。
+   每格底色就是该主题的页面底, 格内只摆一块「局部」——
+   搜索框 + 一组 + 两三行, 底缘渐隐, 是裁下来的一角, 不是三张小窗。
+   ============================================================ */
+.comic.trio {
+  --slant: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr;
+}
+.comic.trio .cp-1 { clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); transition-delay: .02s; }
+.comic.trio .cp-2 { clip-path: polygon(var(--slant) 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); transition-delay: .12s; }
+.comic.trio .cp-3 { grid-column: auto; clip-path: polygon(var(--slant) 0, 100% 0, 100% 100%, 0 100%); transition-delay: .22s; }
+.comic.trio .cp-tag { left: 26px; color: var(--text-2); }
+.comic.trio .cp-tag i { background: var(--accent); }   /* 徽标 = 该主题的强调色 */
+.comic.trio .cp-1 .cp-tag { left: 15px; }
+.comic.trio .cp-body { inset: 42px 26px 14px; }
+.comic.trio .cp-1 .cp-body { left: 12px; }             /* 左/右让开斜切 */
+.comic.trio .cp-3 .cp-body { right: 12px; }
+.comic.trio .cp-zoom { width: 240px; }
+
+/* 每格底色 / token = 该主题自己的页面底(逐值取自 popup 的 :root[data-theme]) */
+.cp.t-linear {
+  --bg: #f9f9fb; --surface: #ffffff;
+  --fill: rgba(8,9,10,.05); --hairline: rgba(8,9,10,.08);
+  --text: #08090a; --text-2: #5e6b7a; --text-3: #9ca3af;
+  --accent: #387BE5; --tint: rgba(56,123,229,.12);
+  background: var(--bg);
+}
+.cp.t-ink {
+  --bg: #F3EEE4; --surface: #FBF7EE;
+  --fill: #ECE4D4; --hairline: rgba(43,38,34,.16);
+  --text: #2B2622; --text-2: #6B625A; --text-3: #857B6E;
+  --accent: #B23A2E; --tint: rgba(178,58,46,.09);
+  background:
+    radial-gradient(120% 90% at 15% 0%, rgba(178,58,46,.055), transparent 62%),
+    var(--bg);
+}
+.cp.t-sky {
+  --bg: #E4EAF7; --surface: #F2F5FC;
+  --fill: rgba(31,52,110,.07); --hairline: rgba(31,52,110,.14);
+  --text: #16224A; --text-2: #46538A; --text-3: #7C89B4;
+  --accent: #3D63BE; --tint: rgba(61,99,190,.12);
+  background: linear-gradient(160deg, #DDE6F8, #E4EAF7 46%, #EFF3FC);
+}
+
+/* 格内「局部」: 一块被裁下来的弹窗局部 */
+.tfrag {
+  width: 240px;
+  padding: 11px 12px 26px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px -26px rgba(8,20,60,.42), 0 1px 3px rgba(8,9,10,.05);
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, rgba(0,0,0,.72) 85%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 62%, rgba(0,0,0,.72) 85%, transparent 100%);
+  transition: transform .55s var(--ease-out), box-shadow .5s ease, border-color .4s ease;
+}
+.tfrag.pick {
+  transform: translateY(-6px);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--hairline));
+  box-shadow: 0 22px 44px -26px color-mix(in srgb, var(--accent) 55%, rgba(8,20,60,.45)),
+              0 0 0 2px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.tfrag-tabs { display: flex; gap: 11px; padding: 0 1px; font-size: 10px; color: var(--text-3); }
+.tfrag-tabs b { position: relative; color: var(--text); font-weight: 600; }
+.tfrag-tabs b::after { content: ''; position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; border-radius: 2px; background: var(--accent); }
+.tfrag-search {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 11px; height: 27px; padding: 0 8px;
+  border-radius: 8px; background: var(--fill); color: var(--text-3); font-size: 10.5px;
+}
+.tfrag-search svg { width: 10px; height: 10px; flex: none; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.tfrag-search .caret { width: 1.4px; height: 11px; margin-left: 1px; background: var(--accent); }
+.tfrag-ghead { display: flex; align-items: center; gap: 6px; margin: 12px 1px 4px; font-size: 10.5px; font-weight: 700; }
+.tfrag-ghead i { width: 3px; height: 11px; border-radius: 99px; background: var(--accent); flex: none; }
+.tfrag-ghead em { margin-left: auto; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--text-2); background: var(--fill); border-radius: 4px; padding: 0 5px; }
+.tfrag-row { display: flex; align-items: center; gap: 7px; padding: 5px 6px; border-radius: 6px; font-size: 10.5px; color: var(--text); }
+.tfrag-row.on { background: color-mix(in srgb, var(--accent) 13%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+.tfrag-row .fav { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.tfrag-row .tt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tfrag-row .tm { flex: none; font-size: 9px; color: var(--text-3); }
+.tfrag-row.on .tm { color: var(--accent); }
+
+/* Ink: 宣纸 + 宋体 + 方角;Sky: 云白 + 更圆的角 */
+.cp.t-ink .tfrag { font-family: "Songti SC", "STSong", "SimSun", Georgia, serif; border-radius: 9px; }
+.cp.t-ink .tfrag-tabs b::after { height: 1.5px; }
+.cp.t-ink .tfrag-search { border-radius: 4px; }
+.cp.t-sky .tfrag { border-radius: 20px; }
+.cp.t-sky .tfrag-search { border-radius: 13px; }
+
+/* ============================================================
+   屏 12 / 13 — 设置面板(规则编辑器 / 备份恢复)
+   ============================================================ */
+.sp-actions {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg);
+}
+.sp-actions .grow { flex: 1; }
+.sp-btn {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 7px 13px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--hairline);
+  background: var(--surface); color: var(--text);
+  transition: background .15s, transform .12s;
+}
+.sp-btn.primary { background: var(--ink); color: #fff; border-color: transparent; }
+.sp-btn:active, .sp-btn.press { transform: scale(.96); }
+
+.sbox-mini {
+  border: 1px solid var(--hairline); border-radius: 10px;
+  background: var(--bg); padding: 2px 12px; margin-bottom: 12px;
+}
+.srow { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 12.5px; }
+.srow + .srow { border-top: 1px solid var(--hairline); }
+.slabel { color: var(--text); font-weight: 500; }
+.toggle {
+  margin-left: auto; flex: none;
+  width: 32px; height: 19px; border-radius: 99px;
+  background: var(--fill-2); position: relative;
+  transition: background .2s;
+}
+.toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(8,9,10,.25);
+  transition: transform .22s var(--ease-spring);
+}
+.toggle.on { background: var(--accent); }
+.toggle.on::after { transform: translateX(13px); }
+
+.rules-head-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.rules-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.dirty-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--amber);
+  opacity: 0; transform: scale(.4);
+  transition: opacity .2s, transform .25s var(--ease-spring);
+}
+.dirty-dot.show { opacity: 1; transform: none; }
+.rules-io-link {
+  font-family: inherit; font-size: 10.5px; font-weight: 600;
+  color: var(--accent); background: var(--tint);
+  border: 0; border-radius: 99px; padding: 4px 9px;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s;
+}
+.rules-io-link:hover { background: var(--tint-2); }
+.rule-list { display: flex; flex-direction: column; gap: 8px; }
+.rule-g {
+  border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 9px 11px 11px; background: var(--surface);
+}
+.rule-g-head { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+.rule-g-dot { width: 3px; height: 14px; border-radius: 99px; background: var(--gc, var(--accent)); flex: none; }
+.rule-gcount { margin-left: auto; font-size: 10.5px; color: var(--text-2); background: var(--fill); border-radius: 4px; padding: 0 5px; font-variant-numeric: tabular-nums; }
+.rule-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.rule-chip {
+  font-size: 10.5px; font-family: var(--mono); color: var(--text-2);
+  background: var(--fill); border: 1px solid var(--hairline);
+  border-radius: 99px; padding: 2px 8px; white-space: nowrap;
+}
+.rule-chip.fresh {
+  color: var(--accent); background: var(--tint);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: chipIn .5s var(--ease-spring);
+}
+@keyframes chipIn { from { opacity: 0; transform: translateY(5px) scale(.9); } }
+/* 规则标题行右侧: 添加域名(浅蓝小按钮) + 导入/导出(无边框灰图标) */
+.rules-io-links { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.rules-io-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 0; border-radius: 7px;
+  background: none; color: var(--text-3); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.rules-io-icon:hover { background: var(--hover); color: var(--accent); }
+.rules-io-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 「＋ 添加域名」的弹层(真实产品: 把当前标签页域名加进某个分组)
+   规格对齐 popup 的 .group-pop: 240px / pop-bg / hairline / r-md / shadow-pop */
+.group-pop {
+  position: absolute; z-index: 40; width: 240px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  opacity: 0; transform: translateY(-4px) scale(.97); transform-origin: top right;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .26s var(--ease-out);
+}
+.group-pop.show { opacity: 1; transform: none; pointer-events: auto; }
+.group-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.group-pop-title { font-size: 12px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+.group-pop-close { border: 0; background: none; color: var(--text-3); font-size: 12px; padding: 2px 4px; border-radius: 5px; cursor: pointer; }
+.group-pop-zone {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 2px 7px; font-size: 10.5px; color: var(--text-2);
+}
+.zone-switch {
+  margin-left: auto; flex: none; position: relative;
+  width: 26px; height: 15px; border-radius: 99px; background: var(--fill-2);
+}
+.zone-switch i { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(8,9,10,.25); }
+.group-pop-list { display: flex; flex-direction: column; border-top: 1px solid var(--hairline); padding-top: 4px; }
+.group-pop-item {
+  border: 0; background: none; text-align: left; cursor: pointer;
+  font-family: inherit; font-size: 12px; color: var(--text);
+  padding: 7px 8px; border-radius: 7px;
+  transition: background .12s, color .12s, transform .12s;
+}
+.group-pop-item + .group-pop-item { margin-top: 1px; }
+.group-pop-item.hot { background: var(--tint); color: var(--accent); }
+.group-pop-item.press { transform: scale(.98); }
+.group-pop-new { display: flex; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--hairline); align-items: center; }
+.gpn-field {
+  flex: 1; min-width: 0; height: 26px; display: flex; align-items: center;
+  padding: 0 8px; border-radius: 7px;
+  border: 1px solid var(--hairline); background: var(--bg);
+  font-size: 11px; color: var(--placeholder);
+}
+.gpn-add {
+  flex: none; height: 26px; padding: 0 10px; border-radius: 7px;
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600;
+  background: var(--fill); color: var(--text-2);
+}
+
+.bk-pos { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.bk-input {
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-2);
+  background: var(--fill); border: 1px solid var(--hairline);
+  border-radius: 6px; padding: 3px 7px; white-space: nowrap;
+}
+.bk-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); }
+.bk-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
+.bk-dot.spinning { animation: bkPulse .8s ease-in-out infinite; }
+@keyframes bkPulse { 0%, 100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
+.bk-state.flash { animation: stateFlash 1.3s ease; }
+@keyframes stateFlash { 0%, 45% { color: var(--green); } }
+.sp-note { font-size: 10.5px; line-height: 1.6; color: var(--text-3); padding: 2px 2px 0; }
+.filemenu {
+  position: absolute; left: 0; bottom: 0; z-index: 40;
+  width: 258px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 11px;
+  box-shadow: 0 18px 44px -12px rgba(8,15,40,.35), 0 2px 6px rgba(8,9,10,.1);
+  opacity: 0; transform: translateY(6px) scale(.97); transform-origin: bottom right;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .22s var(--ease-spring);
+}
+.filemenu.show { opacity: 1; transform: none; pointer-events: auto; }
+.filemenu-head { padding: 6px 9px 5px; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.file-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: 7px;
+  font-size: 11.5px; color: var(--text); white-space: nowrap;
+  transition: background .12s, color .12s, transform .12s;
+}
+.file-item svg { width: 13px; height: 13px; flex: none; stroke: var(--text-3); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.file-item em { font-style: normal; margin-left: auto; font-size: 10px; color: var(--text-3); }
+.file-item.hot { background: var(--accent); color: #fff; }
+.file-item.hot svg { stroke: #fff; }
+.file-item.hot em { color: rgba(255,255,255,.75); }
+.filemenu-note {
+  margin-top: 4px; padding: 6px 9px 2px;
+  border-top: 1px solid var(--hairline);
+  font-size: 10px; line-height: 1.5; color: var(--text-3);
+}
+
+/* ============================================================
    第 1 屏 / 第 8 屏 — 居中版式
    ============================================================ */
 .slide.center { grid-template-columns: minmax(0, 760px); justify-content: center; text-align: center; justify-items: center; }
@@ -553,12 +1266,11 @@ kbd {
 .open-in h1 {
   margin-top: 26px; font-size: clamp(30px, 4vw, 46px); font-weight: 700;
   letter-spacing: -.035em; line-height: 1.1;
-  background: linear-gradient(180deg, #fff, rgba(255,255,255,.62));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--text);
 }
 .open-in .open-sub {
   margin-top: 14px; font-size: clamp(14px, 1.3vw, 17px);
-  color: rgba(255,255,255,.55); letter-spacing: .01em;
+  color: var(--text-2); letter-spacing: .01em;
 }
 .open-in .open-hint {
   margin-top: 46px; display: inline-flex; align-items: center; gap: 10px;
@@ -582,23 +1294,8 @@ kbd {
 .slide.active .open-in > *:nth-child(4) { transition-delay: .42s; }
 .slide.active .open-in > *:nth-child(5) { transition-delay: .42s; }
 
-/* 收尾 */
-.strip-float {
-  display: flex; align-items: flex-end; gap: 3px;
-  padding: 8px 10px 0; height: 40px;
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px -12px rgba(8,15,40,.22), 0 1px 2px rgba(8,9,10,.05);
-  margin-bottom: 34px; overflow: hidden; max-width: 100%;
-}
-.outro h2 { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.2; letter-spacing: -.03em; font-weight: 700; }
-.outro h2 .grad {
-  background: linear-gradient(100deg, var(--accent), #6f9df0 60%, #34A853);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.outro p { margin-top: 16px; font-size: 14.5px; color: var(--text-2); }
-.outro-actions { margin-top: 30px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+/* ============================================================
+   收尾 — 工作流闭环动画(搜索 → 切换 → 归档 → 恢复 → 再搜索)
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 13.5px; font-weight: 600; text-decoration: none;
@@ -610,14 +1307,6 @@ kbd {
 .btn-ghost { color: var(--text); background: var(--surface); border: 1px solid var(--hairline); }
 .btn-ghost:hover { background: var(--hover); transform: translateY(-1px); }
 .btn svg { width: 15px; height: 15px; }
-.outro .outro-meta { margin-top: 26px; font-size: 12px; color: var(--text-3); display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-.outro > * { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .7s var(--ease-out); }
-.slide.active .outro > * { opacity: 1; transform: none; }
-.slide.active .outro > *:nth-child(1) { transition-delay: .05s; }
-.slide.active .outro > *:nth-child(2) { transition-delay: .14s; }
-.slide.active .outro > *:nth-child(3) { transition-delay: .22s; }
-.slide.active .outro > *:nth-child(4) { transition-delay: .30s; }
-.slide.active .outro > *:nth-child(5) { transition-delay: .38s; }
 
 /* ============================================================
    HUD — 进度圆点
@@ -682,6 +1371,12 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
   .bwin-body { height: 330px; }
   .bwin { height: 408px; }
   .ctxmenu { width: 206px; }
+  .loop-slide { padding: 18px 16px 72px; }
+  .loop { gap: 12px; max-width: 100%; }
+  .loop-head p { font-size: 12px; margin-top: 7px; }
+  .loop-steps .st { font-size: 11.5px; padding: 4px 9px 4px 5px; }
+  .loop-steps .st i { width: 15px; height: 15px; font-size: 9px; }
+  .loop-foot .btn { padding: 7px 14px; font-size: 12.5px; }
 }
 @media (max-width: 620px) {
   .hud-hint, .hud-brand { display: none; }
@@ -700,6 +1395,45 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
   .open-in h1 { font-size: 30px; }
   .open-in .open-sub { font-size: 14px; }
   .hud { padding-bottom: 18px; }
+  .loop-slide { padding: 14px 10px 68px; }
+  .loop { gap: 10px; }
+  .loop-head h2 { font-size: 19px; }
+  .loop-head p { font-size: 11.5px; margin-top: 5px; }
+  .loop-steps { gap: 0; }
+  .loop-steps .st { font-size: 11px; padding: 4px 8px 4px 4px; gap: 5px; }
+  .loop-steps .st i { width: 14px; height: 14px; font-size: 8.5px; }
+  .loop-steps .sep { display: none; }
+  .loop-foot .loop-tag { width: 100%; justify-content: center; margin: 0; }
+}
+@media (max-height: 800px) and (min-width: 901px) {
+  .loop-slide { padding-top: 14px; padding-bottom: 66px; }
+  .loop { gap: 11px; }
+  .loop-head h2 { font-size: clamp(20px, 2vw, 26px); }
+  .loop-head p { font-size: 12px; margin-top: 6px; }
+}
+@media (max-width: 1200px) {
+  .slide.two.wide { grid-template-columns: 270px minmax(0, 1fr); column-gap: 30px; }
+}
+@media (max-width: 900px) {
+  .slide.two.wide { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .comic {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    gap: var(--gut);
+  }
+  .comic .cp { clip-path: none; border-radius: 10px; }
+  .comic.quad { grid-template-rows: auto; }         /* 四格屏竖排时按内容高 */
+  .comic.cmd3 .cp-3 .cp-zoom { width: 480px; }      /* 通栏格在竖屏回到普通宽度, 三格同缩放 */
+  .cp-note { display: none; }                       /* 竖屏不挂批注贴纸 */
+  .mini-body > *:nth-child(n+5) { display: none; }   /* 竖屏省高度 */
+
+  /* 主题屏: 竖屏回到直角三格堆叠, 局部卡收窄, 省掉一行 */
+  .comic.trio { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .comic.trio .cp, .comic.trio .cp-1, .comic.trio .cp-2, .comic.trio .cp-3 { clip-path: none; }
+  .comic.trio .cp-3 { grid-column: auto; }
+  .comic.trio .cp-tag, .comic.trio .cp-1 .cp-tag { left: 15px; }
+  .comic.trio .cp-body, .comic.trio .cp-1 .cp-body, .comic.trio .cp-3 .cp-body { inset: 34px 12px 10px; }
+  .comic.trio .tfrag-row:nth-child(5) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .06s !important; }
@@ -711,34 +1445,18 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
 <div class="deck" id="deck">
 
   <!-- ============ 1 · 开场 ============ -->
-  <section class="slide center dark" data-i="0" data-theme="dark">
+  <section class="slide center" data-i="0">
     <div class="open-in">
-      <svg class="mark-svg" viewBox="0 0 64 64" aria-label="Tab Group Search" width="76" height="76">
-        <defs>
-          <linearGradient id="mg1" x1="0" y1="0" x2="0.3" y2="1">
-            <stop offset="0" stop-color="#252932"/><stop offset="1" stop-color="#08090b"/>
-          </linearGradient>
-          <linearGradient id="mg2" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#e8f0ff"/><stop offset=".45" stop-color="#7fa9f2"/><stop offset="1" stop-color="#3a7ee6"/>
-          </linearGradient>
-          <filter id="mglow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.8"/>
-          </filter>
-        </defs>
-        <rect x="1.5" y="1.5" width="61" height="61" rx="15.5" fill="url(#mg1)"/>
-        <rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="rgba(255,255,255,.10)"/>
-        <text x="32" y="41.5" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="700" font-size="25" fill="url(#mg2)" filter="url(#mglow)" opacity=".6">tab</text>
-        <text x="32" y="41.5" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="700" font-size="25" fill="url(#mg2)">tab</text>
-      </svg>
-      <h1>Tab Group Search</h1>
+      <img class="mark-svg" src="img/icon-128.png" alt="Tidy" width="76" height="76" style="filter: drop-shadow(0 18px 40px rgba(56,123,229,.35)); border-radius: 17px;">
+      <h1>Tidy</h1>
       <p class="open-sub">一个弹窗，管好几百个标签页</p>
-      <div class="open-hint"><kbd>空格</kbd> 开始 · 共 8 屏</div>
-      <div class="open-hint touch-only">轻触 / 左右滑动 继续 · 共 8 屏</div>
+
+      <div class="open-hint touch-only">轻触 / 左右滑动 继续 · 共 14 屏</div>
     </div>
   </section>
 
   <!-- ============ 2 · 唤起 ============ -->
-  <section class="slide two dark" data-i="1" data-theme="dark">
+  <section class="slide two" data-i="1">
     <div class="narr">
       <div class="eyebrow">01 — 唤起</div>
       <h2>⌘E 唤起，<br>即点即搜</h2>
@@ -759,70 +1477,132 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     <div class="stage" data-stage="2"></div>
   </section>
 
-  <!-- ============ 4 · 切换 ============ -->
-  <section class="slide two" data-i="3">
+  <!-- ============ 4 · Slash 命令(漫画分镜) ============ -->
+  <section class="slide two wide" data-i="3">
     <div class="narr">
-      <div class="eyebrow">03 — 切换</div>
-      <h2>↑↓ 选中，<br>Enter 切换</h2>
-      <p>列表按热度排序，选中即跳转。手不用离开主键区，切换比翻标签栏快一个量级。</p>
-      <div class="narr-foot"><span class="tag">即点即开 &lt;50ms</span><span class="tag">热度排序</span></div>
+      <div class="eyebrow">03 — Slash 命令</div>
+      <h2>三个命令，<br>搜遍浏览器</h2>
+      <p>书签、历史、最近关闭，不用离开键盘。输入即搜，结果即点即开。</p>
+      <div class="narr-foot"><span class="tag">QuicKey 同款</span><span class="tag">三源搜索</span></div>
     </div>
-    <div class="stage" data-stage="3"></div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 scene3 + fitComic 接管 -->
+    <div class="stage stage-split stage-comic" data-stage="3"></div>
   </section>
 
-  <!-- ============ 5 · 自动分组 ============ -->
-  <section class="slide two" data-i="4">
+  <!-- ============ 5 · 键盘流(漫画分镜) ============ -->
+  <section class="slide two wide" data-i="4">
     <div class="narr">
-      <div class="eyebrow">04 — 自动分组</div>
-      <h2>规则引擎自动分组，<br>标签栏永远整齐</h2>
-      <p>按域名和路径前缀匹配，新标签落地即归位。同域多项目按路径各自进组，不会混在一起。</p>
-      <div class="narr-foot"><span class="tag">域名 + 路径前缀</span><span class="tag">落地即归位</span></div>
+      <div class="eyebrow">04 — 键盘流</div>
+      <h2>手不离键，<br>效率拉满</h2>
+      <p>删除、撤销、复制、清理，全在键盘上完成。每个动作都有反馈，每个操作都可逆。</p>
+      <div class="narr-foot"><span class="tag">全键盘操作</span><span class="tag">可逆设计</span></div>
     </div>
-    <div class="stage" data-stage="4"></div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 scene4 + fitComic 接管 -->
+    <div class="stage stage-split stage-comic" data-stage="4"></div>
   </section>
 
-  <!-- ============ 6 · 批量操作 ============ -->
+  <!-- ============ 6 · 多窗口管理 ============ -->
   <section class="slide two" data-i="5">
     <div class="narr">
-      <div class="eyebrow">05 — 批量操作</div>
+      <div class="eyebrow">05 — 多窗口</div>
+      <h2>当前窗口，<br>只看这一屏</h2>
+      <p>多个浏览器窗口并行时，只看当前窗口的标签。不被其他窗口干扰，专注当下工作。</p>
+      <div class="narr-foot"><span class="tag">窗口隔离</span><span class="tag">专注模式</span></div>
+    </div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 sceneMulti + fitScaled 接管 -->
+    <div class="stage stage-split" data-stage="5"></div>
+  </section>
+
+  <!-- ============ 7 · 批量操作 ============ -->
+  <section class="slide two" data-i="6">
+    <div class="narr">
+      <div class="eyebrow">06 — 批量操作</div>
       <h2>右键批量操作，<br>一键清理</h2>
       <p>关闭整组、归档整组、固定标签页，都在右键菜单里。批量动作全部可 ⌘Z 撤销。</p>
       <div class="narr-foot"><span class="tag">关闭整组</span><span class="tag">⌘Z 可撤销</span></div>
     </div>
-    <div class="stage" data-stage="5"></div>
+    <div class="stage" data-stage="6"></div>
   </section>
 
-  <!-- ============ 7 · 归档 ============ -->
-  <section class="slide two" data-i="6">
+  <!-- ============ 8 · 拖拽排序 ============ -->
+  <section class="slide two" data-i="7">
     <div class="narr">
-      <div class="eyebrow">06 — 归档</div>
+      <div class="eyebrow">07 — 拖拽整理</div>
+      <h2>拖一下，<br>标签归位</h2>
+      <p>标签在分组间自由拖拽，整理就像摆积木。拖起来，放下去，就归好类了。</p>
+      <div class="narr-foot"><span class="tag">自由拖拽</span><span class="tag">即时归组</span></div>
+    </div>
+    <div class="stage" data-stage="7"></div>
+  </section>
+
+  <!-- ============ 9 · 媒体控制 ============ -->
+  <section class="slide two" data-i="8">
+    <div class="narr">
+      <div class="eyebrow">08 — 媒体控制</div>
+      <h2>谁在播放？<br>一键静音</h2>
+      <p>正在播放视频或音乐的标签页会显示喇叭图标。点一下静音，再点一下恢复，不用找播放页面。</p>
+      <div class="narr-foot"><span class="tag">媒体感知</span><span class="tag">一键静音</span></div>
+    </div>
+    <div class="stage" data-stage="8"></div>
+  </section>
+
+  <!-- ============ 10 · 最近使用 ============ -->
+  <section class="slide two" data-i="9">
+    <div class="narr">
+      <div class="eyebrow">09 — 最近使用</div>
+      <h2>接着刚才的活，<br>跨分组平铺</h2>
+      <p>按上次访问时间倒序，分组头暂时隐去。<kbd>Tab</kbd> 在分组 / 最近使用 / 当前窗口之间切换，找刚放下的那件事。</p>
+      <div class="narr-foot"><span class="tag">按访问时间</span><span class="tag">Tab 切换视图</span></div>
+    </div>
+    <div class="stage" data-stage="9"></div>
+  </section>
+
+  <!-- ============ 11 · 归档(漫画分镜) ============ -->
+  <section class="slide two wide" data-i="10">
+    <div class="narr">
+      <div class="eyebrow">10 — 归档</div>
       <h2>整组归档，<br>随时还原</h2>
       <p>收进仓库，不占标签栏也不丢现场。需要时一键重新打开整组，链接和顺序都在。</p>
       <div class="narr-foot"><span class="tag">仓库收纳</span><span class="tag">整组还原</span></div>
     </div>
-    <div class="stage" data-stage="6"></div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 sceneArchive + fitComic 接管 -->
+    <div class="stage stage-split stage-comic" data-stage="10"></div>
   </section>
 
-  <!-- ============ 8 · 收尾 ============ -->
-  <section class="slide center" data-i="7">
-    <div class="outro">
-      <div class="strip-float" id="stripOutro"></div>
-      <h2>几百个标签页，<br><span class="grad">一个弹窗管好</span></h2>
-      <p>搜索切换 · 自动分组 · 批量操作 · 整组归档 —— 纯本地运行，零网络请求。</p>
-      <div class="outro-actions">
-        <a class="btn btn-primary" href="index.html#install">免费安装
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </a>
-        <a class="btn btn-ghost" href="https://github.com/cheney12138/tab-group-control" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.75 2.69 1.25 3.34.95.11-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
-          GitHub
-        </a>
-      </div>
-      <div class="outro-meta">
-        <span>空格 / → 下一屏 · ← 回退</span>
-        <span>R 重播本屏</span>
-      </div>
+  <!-- ============ 12 · 主题系统(三格分镜) ============ -->
+  <section class="slide two wide" data-i="11">
+    <div class="narr">
+      <div class="eyebrow">11 — 主题</div>
+      <h2>Linear / Ink / Sky<br>你的风格</h2>
+      <p>三套精心调校的主题：极简的 Linear、宣纸朱红的 Ink、云白色的 Sky。一键切换，找到最顺眼的那款。</p>
+      <div class="narr-foot"><span class="tag">三套主题</span><span class="tag">一键切换</span></div>
     </div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 sceneTheme + fitComic 接管 -->
+    <div class="stage stage-split stage-comic" data-stage="11"></div>
+  </section>
+
+  <!-- ============ 13 · 设置 · 规则编辑器 ============ -->
+  <section class="slide two" data-i="12">
+    <div class="narr">
+      <div class="eyebrow">12 — 规则引擎</div>
+      <h2>域名 + 路径，<br>自动分组</h2>
+      <p>按域名和路径前缀设置规则，新标签打开时自动归入对应分组。一次配置，永久生效。</p>
+      <div class="narr-foot"><span class="tag">域名匹配</span><span class="tag">路径前缀</span></div>
+    </div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 sceneRules + fitScaled 接管 -->
+    <div class="stage stage-split" data-stage="12"></div>
+  </section>
+
+  <!-- ============ 14 · 设置 · 备份恢复 ============ -->
+  <section class="slide two" data-i="13">
+    <div class="narr">
+      <div class="eyebrow">13 — 备份恢复</div>
+      <h2>换电脑？<br>配置带走</h2>
+      <p>分组规则、开关、外观偏好，自动写一份 JSON 到「下载」目录，同名覆盖。重装或换电脑，选回这份文件就恢复。</p>
+      <div class="narr-foot"><span class="tag">同名覆盖</span><span class="tag">归档卡不备份</span></div>
+    </div>
+    <!-- stage-split: 自管舞台标记(引擎跳过统一重置), 尺寸由 sceneBackup + fitScaled 接管 -->
+    <div class="stage stage-split" data-stage="13"></div>
   </section>
 
 </div>
@@ -830,14 +1610,8 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
 <div class="hud">
   <div class="dots" id="dots"></div>
 </div>
-<div class="hud-brand">
-  <svg viewBox="0 0 64 64" aria-hidden="true">
-    <rect x="1.5" y="1.5" width="61" height="61" rx="15.5" fill="#111318"/>
-    <text x="32" y="41.5" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="700" font-size="25" fill="#7fa9f2">tab</text>
-  </svg>
-  Tab Group Search <em>· 演示</em>
-</div>
-<div class="hud-hint">空格 / → 下一屏 · ← 回退 · Home / End</div>
+
+
 
 <script>
 (function () {
@@ -879,7 +1653,16 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     box: '<svg viewBox="0 0 24 24"><path d="M3 8h18v12H3z"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
     folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
     pin: '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></svg>',
-    refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>'
+    refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>',
+    undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a6 6 0 0 1 0 12h-3"/></svg>',
+    copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 5H5a2 2 0 0 0-2 2v10"/></svg>',
+    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9.5 7V4.8h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10.5 10.5v6M13.5 10.5v6"/></svg>',
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L20.5 20.5"/></svg>',
+    muted: '<svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>',
+    check: '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg>',
+    file: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
+    imp: '<svg viewBox="0 0 20 20"><path d="M10 3v9m0 0L6.5 8.5M10 12l3.5-3.5M4 15.5h12"/></svg>',
+    exp: '<svg viewBox="0 0 20 20"><path d="M10 14V4m0 0L6.5 7.5M10 4l3.5 3.5M4 15.5h12"/></svg>'
   };
 
   /* ============================================================
@@ -887,7 +1670,7 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
      ============================================================ */
   const GROUPS = [
     { name: '工作', color: '#387BE5', rows: [
-      { t:'Tab Group Search · GitHub', host:'github.com', svg:'gh', fc:'#24292f', time:'1 小时内', cls:'today', win:true },
+      { t:'Tidy · GitHub', host:'github.com', svg:'gh', fc:'#24292f', time:'1 小时内', cls:'today', win:true },
       { t:'Pull requests · facebook/react', host:'github.com', svg:'gh', fc:'#24292f', time:'1 小时内', cls:'today', win:true },
       { t:'Stack Overflow · 拼音码点表实现思路', host:'stackoverflow.com', f:'S', fc:'#f48024', time:'1 小时内', cls:'today' },
       { t:'MDN · Array.prototype 方法速查', host:'developer.mozilla.org', f:'M', fc:'#1b1b1b', time:'3 小时', cls:'today', win:true },
@@ -1042,6 +1825,7 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
       + (r.svg === 'gh' ? ICO.gh : esc(r.f))
       + '</span>'
       + '<span class="pop-title">' + titleHTML(r, q) + '</span>'
+      + (r.media ? '<button class="pop-media" tabindex="-1" aria-label="静音"><span class="media-eq"><i></i><i></i><i></i></span></button>' : '')
       + '<span class="pop-time ' + (r.cls || '') + '">' + esc(r.time) + '</span>'
       + '<button class="pop-close" tabindex="-1">' + ICO.close + '</button>'
       + '</div>';
@@ -1081,13 +1865,122 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     rows.forEach(r => r.classList.toggle('active', Number(r.dataset.i) === i));
   }
 
+  /* 瞬时落一段样式: 关掉过渡 → 写值 → 强制回流 → 还原过渡。
+     用来「无补间」地切换到初始态, 否则会被上一条状态反向过渡一次(鬼影)。 */
+  function snap(el, styles) {
+    el.style.transition = 'none';
+    for (const k in styles) el.style.setProperty(k, styles[k]);
+    void el.offsetHeight;
+    el.style.transition = '';
+  }
+
+  /* ============================================================
+     2.5 新增屏共用小组件
+     ============================================================ */
+  /* 画布: .cvs 是固定设计稿尺寸(内联 width), 整体缩放进舞台 */
+  function fitScaled(stage) {
+    const cvs = $('.cvs', stage);
+    if (!cvs) return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = stage.clientWidth || 480;
+    const narr = $('.narr', stage.closest('.slide'));
+    const avail = Math.max(300, vh - (vw <= 900 ? (narr ? narr.offsetHeight : 0) + 156 : 196));
+    const s = Math.max(0.34, Math.min(1.06, (w - 8) / cvs.offsetWidth, avail / cvs.offsetHeight));
+    cvs.style.setProperty('--s', s.toFixed(4));
+    stage.style.height = Math.round(cvs.offsetHeight * s) + 'px';
+  }
+
+  /* 标签栏 / 组计数 */
+  function setStrip(strip, items) { strip.innerHTML = items.map(chipHTML).join(''); }
+  function setGchip(strip, name, n, bump) {
+    const el = $('.gchip[data-g="' + name + '"]', strip);
+    if (!el) return;
+    el.dataset.n = n;
+    const em = $('em', el);
+    if (em) em.textContent = n;
+    if (bump) { el.classList.add('bump'); setTimeout(() => el.classList.remove('bump'), 340); }
+  }
+  function setCount(pop, name, n) {
+    const head = $('.pop-ghead[data-group="' + name + '"]', pop);
+    if (!head) return;
+    const c = $('.pop-gcount', head);
+    if (c) { c.textContent = n; c.classList.add('bump'); setTimeout(() => c.classList.remove('bump'), 360); }
+  }
+
+  /* 弹窗顶部 tab 滑块: 按目标 tab 的宽度与偏移落位 */
+  function moveTabSlider(pop, idx) {
+    const tabs = $$('.pop-tab', pop);
+    const sl = $('.pop-slider', pop);
+    const t = tabs[idx];
+    if (!sl || !t) return;
+    sl.style.width = t.offsetWidth + 'px';
+    sl.style.transform = 'translateX(' + Math.round(t.offsetLeft - 4) + 'px)';
+  }
+
+  /* 设置面板壳: 规则编辑器 / 备份恢复共用 */
+  function spHTML(o) {
+    return '<div class="settings-panel">'
+      + '<div class="sp-head">设置<button class="sp-close" tabindex="-1">✕</button></div>'
+      + '<div class="sp-tabs">'
+      +   ['分组', '已归档', '功能'].map(t =>
+            '<button class="sp-tab' + (t === o.tab ? ' active' : '') + '" tabindex="-1">' + t + '</button>'
+          ).join('')
+      + '</div>'
+      + '<div class="sp-body">' + o.body + '</div>'
+      + (o.actions ? '<div class="sp-actions">' + o.actions + '</div>' : '')
+      + (o.extra || '')
+      + '</div>';
+  }
+
+  function cvsToast(root, html, opts) {
+    const el = $('.cvs-toast', root);
+    if (!el) return;
+    el.innerHTML = (opts && opts.ok ? ICO.check : '') + '<span>' + html + '</span>';
+    el.classList.add('show');
+  }
+  function cvsToastOff(root) { const el = $('.cvs-toast', root); if (el) el.classList.remove('show'); }
+
+  /* ---------- 多窗口: 窗口壳 ---------- */
+  function mwWinHTML(cls, cap, url, strips) {
+    return '<div class="mw-slot mw-' + cls + '">'
+      + '<div class="mw-cap"><i></i>' + esc(cap) + '</div>'
+      + '<div class="mw-win">'
+      +   '<div class="bwin-bar"><span class="b-dot r"></span><span class="b-dot y"></span><span class="b-dot g"></span>'
+      +     '<div class="browser-url">' + ICO.lock + '<span class="url-txt">' + esc(url) + '</span></div>'
+      +   '</div>'
+      +   '<div class="tabstrip">' + strips.map(chipHTML).join('') + '</div>'
+      +   '<div class="mw-ghost"><div class="ghost-line w60"></div><div class="ghost-line w80"></div><div class="ghost-block"></div></div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  /* ---------- 主题: 格内的「局部」(搜索框 + 一组 + 两三行) ---------- */
+  function tfragHTML(rows) {
+    return '<div class="tfrag">'
+      + '<div class="tfrag-tabs"><b>分组</b><span>最近使用</span><span>当前窗口</span></div>'
+      + '<div class="tfrag-search">' + ICO.search + '<span>搜索标签页…</span><i class="caret"></i></div>'
+      + '<div class="tfrag-ghead"><i></i>工作<em>12</em></div>'
+      + rows.map(r => '<div class="tfrag-row' + (r.on ? ' on' : '') + '">'
+          + '<span class="fav" style="background:' + r.fc + '"></span>'
+          + '<span class="tt">' + esc(r.t) + '</span>'
+          + '<span class="tm">' + esc(r.tm) + '</span></div>').join('')
+      + '</div>';
+  }
+  function trioPanel(n, cap, theme, rows, note) {
+    return '<div class="cp cp-' + n + ' t-' + theme + '">'
+      + '<div class="cp-tag"><i>' + n + '</i>' + esc(cap) + '</div>'
+      + '<div class="cp-body"><div class="cp-zoom">' + tfragHTML(rows) + '</div></div>'
+      + (note ? '<div class="cp-note">' + esc(note) + '</div>' : '')
+      + '</div>';
+  }
+
   /* ============================================================
      3. 构建舞台
      ============================================================ */
   const slides = $$('.slide');
   slides.forEach(s => {
     const stage = $('.stage', s);
-    if (!stage) return;
+    if (!stage || stage.classList.contains('stage-split')) return; /* 分镜屏(scene6)自己管理 */
     stage.innerHTML =
       bwinHTML('newtab', STRIP_BASE) +
       '<div class="kbd-hint"><div class="keys">'
@@ -1105,23 +1998,91 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
       + '</div>');
   });
 
-  /* 收尾页浮动标签条 */
-  $('#stripOutro').innerHTML = [
-    { k:'g', name:'工作', color:'#387BE5', count:1 },
-    { k:'t', name:'MDN · Array' },
-    { k:'g', name:'娱乐', color:'#E66A28', count:3 },
-    { k:'t', name:'bilibili' },
-    { k:'g', name:'Others', color:'#9ca3af', count:2 },
-    { k:'t', name:'＋' }
-  ].map(chipHTML).join('');
+  /* 收尾页已删除 */
 
   /* ============================================================
      4. 尺寸自适应(弹窗等比缩放)
      ============================================================ */
+  /* 分镜屏(归档)尺寸: 画框高度 + 每格内容缩放比 */
+  function fitComic(stage) {
+    const comic = $('.comic', stage);
+    if (!comic) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = stage.clientWidth || comic.clientWidth || 900;
+    const stacked = vw <= 900;
+    const cps = $$('.cp', comic);
+
+    if (stacked) {
+      /* 移动端: 各格竖向堆叠, 统一缩放比让整页落在一屏内; 宽面板额外受列宽约束 */
+      const narr = $('.narr', stage.closest('.slide'));
+      comic.style.height = 'auto';
+      stage.style.height = 'auto';
+      const zooms = cps.map(cp => $('.cp-zoom', cp));
+      const zhs = zooms.map(z => (z ? z.offsetHeight : 0));
+      const fixed = cps.length * 50 + 8 * (cps.length - 1);
+      const avail = Math.max(320, vh - (narr ? narr.offsetHeight : 0) - 132);
+      const total = zhs.reduce((a, b) => a + b, 0) || 1;
+      const s = Math.max(0.34, Math.min(1, (avail - fixed) / total));
+      cps.forEach((cp, i) => {
+        const body = $('.cp-body', cp);
+        const z = zooms[i];
+        const sw = (body && z && z.offsetWidth) ? body.clientWidth / z.offsetWidth : s;
+        const si = Math.min(s, sw);            /* 通栏格(820 宽)不能横向撞出格 */
+        cp.style.setProperty('--s', si.toFixed(4));
+        cp.style.height = Math.round(50 + zhs[i] * si) + 'px';
+      });
+      return;
+    }
+
+    /* 三格并排(主题屏): 画框贴着卡片高度, 不留整块空白 */
+    if (comic.classList.contains('trio')) {
+      cps.forEach(cp => { cp.style.height = ''; });
+      const arr = cps.map(cp => {
+        const body = $('.cp-body', cp);
+        const zoom = $('.cp-zoom', cp);
+        if (!body || !zoom) return null;
+        return { cp, zoom, s: Math.max(0.3, Math.min(body.clientWidth / zoom.offsetWidth, 1.16)) };
+      }).filter(Boolean);
+      if (!arr.length) return;
+      const need = Math.max(...arr.map(a => a.zoom.offsetHeight * a.s + 88));
+      const H = Math.max(300, Math.min(vh - 196, Math.round(need)));
+      arr.forEach(a => {
+        const s = Math.min(a.s, (H - 96) / a.zoom.offsetHeight);
+        a.cp.style.setProperty('--s', s.toFixed(4));
+      });
+      comic.style.height = H + 'px';
+      stage.style.height = H + 'px';
+      return;
+    }
+
+    /* 桌面端: 画框按 7:10 比例, 高度不超出可视区 */
+    const H = Math.max(420, Math.min(vh - 168, Math.round(w * 0.72)));
+    comic.style.height = H + 'px';
+    stage.style.height = H + 'px';
+    cps.forEach(cp => {
+      cp.style.height = '';
+      const body = $('.cp-body', cp);
+      const zoom = $('.cp-zoom', cp);
+      if (!body || !zoom) return;
+      const s = Math.max(0.3, Math.min(
+        body.clientWidth / zoom.offsetWidth,
+        body.clientHeight / zoom.offsetHeight,
+        1.16
+      ));
+      cp.style.setProperty('--s', s.toFixed(4));
+    });
+  }
+
   function fitStages() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     $$('.stage').forEach(stage => {
+      if (stage.classList.contains('stage-split')) {
+        /* 分镜屏(归档): 由 scene6 注入内容后自己算尺寸 */
+        if (stage._fit) stage._fit();
+        return;
+      }
       const bwin = $('.bwin', stage);
       const w = stage.clientWidth || 640;
       const isMobile = vw <= 900;
@@ -1167,13 +2128,27 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     p.drawer.classList.remove('up');
     p.bar.classList.remove('flash');
     $$('.ctx-item', p.menu).forEach(el => el.classList.remove('hot', 'press'));
+    $$('.pop-drag-hint', p.pop).forEach(el => el.remove());
+    /* 视图 tab 回「分组」: 第 10 屏会把滑块推到「最近使用」,
+       倒回去重播前面的屏时不能让它停在别的 tab 上 */
+    const vtabs = $$('.pop-tab', p.pop);
+    vtabs.forEach((t, i) => t.classList.toggle('active', i === 0));
+    const vsl = $('.pop-slider', p.pop);
+    if (vsl && vtabs[0]) {
+      vsl.style.width = vtabs[0].offsetWidth + 'px';
+      vsl.style.transform = 'translateX(' + Math.round(vtabs[0].offsetLeft - 4) + 'px)';
+    }
+    const vlist = $('.pop-list', p.pop);
+    if (vlist) { vlist.style.transition = ''; vlist.style.opacity = ''; vlist.style.transform = ''; }
+    $$('.pop-ghead', p.pop).forEach(el => el.classList.remove('dropzone'));
+    $$('.chip-media', p.strip).forEach(el => el.remove());
     $$('.pop-row', p.stage).forEach(el => {
       el.style.height = ''; el.style.opacity = ''; el.style.paddingTop = ''; el.style.paddingBottom = '';
       el.style.overflow = ''; el.style.transform = ''; el.style.transition = '';
       el.classList.remove('active', 'flash', 'pressed');
     });
     $$('.chip.new-tab', p.strip).forEach(el => el.remove());
-    $$('.chip', p.strip).forEach(el => { el.classList.remove('on', 'new-tab', 'ctx'); el.removeAttribute('style'); });
+    $$('.chip', p.strip).forEach(el => { el.classList.remove('on', 'new-tab', 'ctx', 'muted'); el.removeAttribute('style'); });
     $$('.gchip', p.strip).forEach(el => {
       el.classList.remove('bump', 'glow');
       el.setAttribute('style', '--gc:' + el.dataset.gc);
@@ -1197,24 +2172,24 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
   async function scene1(sig, slide) {
     const p = parts(slide);
     slide.classList.add('dark');
-    p.bwin.style.opacity = '0';
-    p.bwin.style.transform = 'translateY(14px)';
-    p.drop.style.opacity = '0';
-    p.drop.style.transform = 'translateY(-118%)';
+    /* 初始态必须「瞬时」落地: resetStage 刚写过「已就位」(opacity 1 / transform none),
+       若直接赋值, 浏览器会把弹窗从就位处反向补间到 -118% —— 就是那道往上飞出去的鬼影。 */
+    snap(p.bwin, { opacity: '0', transform: 'translateY(14px)' });
+    snap(p.drop, { opacity: '0', transform: 'translateY(-118%)' });
     renderList(p.pop, GROUPS, '');
-    await wait(sig, 260);
+    await wait(sig, 260 * 1.5);
     p.hint.classList.add('show');
-    await wait(sig, 1050);
+    await wait(sig, 1050 * 1.5);
     p.hint.classList.remove('show');
     slide.classList.remove('dark');
-    setHudDark(false);
-    await wait(sig, 280);
+    // setHudDark(false);
+    await wait(sig, 280 * 1.5);
     p.bwin.style.opacity = '1';
     p.bwin.style.transform = 'none';
-    await wait(sig, 380);
+    await wait(sig, 380 * 1.5);
     p.drop.style.opacity = '1';
     p.drop.style.transform = 'none';
-    await wait(sig, 820);
+    await wait(sig, 820 * 1.5);
     setSel($$('.pop-row', p.pop), 0);
   }
 
@@ -1223,117 +2198,387 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     const p = parts(slide);
     renderList(p.pop, GROUPS, '');
     setField(p.pop, '', true);
-    await wait(sig, 620);
+    await wait(sig, 620 * 1.5);
     for (const ch of ['z', 'h', 'i', 'h', 'u']) {
       const q = $('.field-txt', p.pop).textContent + ch;
       setField(p.pop, q, true);
       renderList(p.pop, GROUPS, q);
-      await wait(sig, ch === 'u' ? 260 : 175);
+      await wait(sig, ch === 'u' ? 260 * 1.5 : 175 * 1.5);
     }
     setSel($$('.pop-row', p.pop), 0);
     const n = $$('.pop-row', p.pop).length;
     toast(p.pop, '命中 ' + n + ' 个标签页 · ↑↓ 选择', { info: true });
-    await wait(sig, 900);
+    await wait(sig, 900 * 1.5);
     setField(p.pop, 'zhihu', false);
   }
 
-  /* ---------- 屏 4: 切换 ---------- */
+  /* ============================================================
+     屏 4 / 屏 5 — 命令面板(两屏共用的小组件)
+     cmdp = 弹窗的裁剪版: 搜索框 + 结果列表 + 底部提示
+     ============================================================ */
+  function cmdRow(o) {
+    return '<div class="cmd-row' + (o.cls ? ' ' + o.cls : '') + '" style="--i:' + (o.i || 0) + '">'
+      + '<span class="pop-fav" style="background:' + o.fc + '">' + (o.svg ? ICO[o.svg] : esc(o.f)) + '</span>'
+      + '<span class="cmd-main"><b>' + esc(o.t) + '</b><em>' + esc(o.sub || '') + '</em></span>'
+      + (o.right || '')
+      + '</div>';
+  }
+
+  function cmdPanelHTML(o) {
+    return '<div class="cmdp pop--focus">'
+      + '<div class="cmdp-head"><div class="pop-search">'
+      +   '<button class="pop-src" tabindex="-1">' + o.icon + '</button>'
+      +   '<span class="pop-field"><span class="field-txt"></span><span class="field-ph">' + esc(o.ph) + '</span><i class="field-caret"></i></span>'
+      +   '<button class="pop-gear" tabindex="-1">' + ICO.gear + '</button>'
+      + '</div></div>'
+      + '<div class="cmdp-list' + (o.dim ? ' dim' : '') + '">' + (o.head || '') + o.rows + '</div>'
+      + (o.foot ? '<div class="cmdp-foot">' + o.foot + '</div>' : '')
+      + (o.toast ? '<div class="pop-push"><span class="push-txt"></span><span class="push-undo">' + o.toast + '</span></div>' : '')
+      + '</div>';
+  }
+
+  /* 列表逐行入场: 加 .reveal 吃延迟 → 摘 .pending → 收掉延迟, 后续动作恢复即时 */
+  function revealCmdRows(root) {
+    const rows = $$('.cmd-row.pending', root);
+    rows.forEach(el => el.classList.add('reveal'));
+    rows.forEach(el => el.classList.remove('pending'));
+    setTimeout(() => rows.forEach(el => el.classList.remove('reveal')), 900);
+  }
+
+  /* 逐字输入 slash 命令 */
+  async function typeCmd(sig, root, txt, per) {
+    setField(root, '', true);
+    await wait(sig, 130 * 1.5);
+    let cur = '';
+    for (const ch of txt) {
+      cur += ch;
+      setField(root, cur, true);
+      await wait(sig, per || 150);
+    }
+  }
+
+  /* 行收起(高度 + 透明度一起收, 不留空隙)
+     ------------------------------------------------------------
+     这段是真实插件该照抄的删除动画规格(docs/motion.md 同步记录):
+       几何   height → 0、padding-top/bottom → 0(先写当前 px 再收到 0, 否则不插值)
+       可见   opacity → 0
+       位移   translateX(16px) —— 往外滑走, 与右侧关闭按钮的方向同源
+       时长   height/padding/transform 340ms, opacity 300ms
+       缓动   ease-out(收尾不弹, 不是 spring)
+       级联   多行同时收时逐行 +70ms(其余场景用 base 参数控制起点)
+     收完再 remove(): 保留 0 高节点会让 :hover / 焦点顺序里多出一个幽灵行 */
+  function collapseCmdRows(rows, base) {
+    rows.forEach((el, i) => {
+      const h = el.offsetHeight;
+      el.style.height = h + 'px';
+      el.style.overflow = 'hidden';
+      el.style.transition = 'opacity .3s ease, height .34s ease, padding .34s ease, transform .34s ease';
+      el.style.transitionDelay = ((base || 0) + i * 70) + 'ms';
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(16px)';
+      requestAnimationFrame(() => {
+        el.style.height = '0px';
+        el.style.paddingTop = '0';
+        el.style.paddingBottom = '0';
+      });
+    });
+  }
+
+  /* ---------- 屏 4: Slash 命令(三格分镜) ---------- */
   async function scene3(sig, slide) {
-    const p = parts(slide);
-    renderList(p.pop, GROUPS, 'zhihu');
-    setField(p.pop, 'zhihu', false);
-    let rows = $$('.pop-row', p.pop);
-    setSel(rows, 0);
-    await wait(sig, 700);
-    setSel(rows, 1);
-    await wait(sig, 480);
-    setSel(rows, 2);
-    await wait(sig, 700);
-    rows[2].classList.add('pressed');
-    await wait(sig, 200);
-    p.dock.classList.add('shrink');
-    await wait(sig, 340);
-    /* 切到该标签: 标签栏 + 地址栏同步 */
-    const chip = $('.chip[data-t="知乎"]', p.strip);
-    if (chip) chip.classList.add('on');
-    p.url.textContent = 'zhihu.com/question/20792145';
-    p.bar.classList.add('flash');
-    await wait(sig, 240);
-    p.bar.classList.remove('flash');
+    const stage = $('.stage', slide);
+
+    /* ---- 格 1: /b 搜书签 ---- */
+    const rowsB = [
+      { t:'MDN Web Docs', sub:'developer.mozilla.org · 书签栏', f:'M', fc:'#1b1b1b' },
+      { t:'GitHub', sub:'github.com · 书签栏', svg:'gh', fc:'#24292f' },
+      { t:'知乎 · 发现更大的世界', sub:'zhihu.com · 阅读清单', f:'知', fc:'#0084FF' },
+      { t:'Hacker News', sub:'news.ycombinator.com · 其他书签', f:'Y', fc:'#f26522' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
+
+    /* ---- 格 2: /h 搜历史(整体半透明降级) ---- */
+    const rowsH = [
+      { t:'如何系统地学习一门新语言 · 知乎', sub:'zhihu.com · 2 天前', f:'知', fc:'#0084FF' },
+      { t:'React 19 新特性一览', sub:'react.dev · 3 天前', f:'R', fc:'#087ea4' },
+      { t:'前端工程化实践 · 掘金', sub:'juejin.cn · 4 天前', f:'掘', fc:'#1e80ff' },
+      { t:'Core Web Vitals 实战', sub:'web.dev · 5 天前', f:'W', fc:'#1a73e8' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
+
+    /* ---- 格 3: /r 最近关闭(同样整体降级, 结果只是可点开的数据源) ---- */
+    const rowsR = [
+      { t:'GitHub · 项目面板', sub:'github.com/projects · 刚刚关闭', svg:'gh', fc:'#24292f' },
+      { t:'知乎 · 前端面试题整理', sub:'zhihu.com/question/4501… · 3 分钟前', f:'知', fc:'#0084FF' },
+      { t:'bilibili · 发布会有哪些看点', sub:'bilibili.com/video/BV1… · 12 分钟前', f:'B', fc:'#00a1d6' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
+
+    stage.innerHTML =
+      '<div class="comic cmd3">'
+
+      + '<div class="cp cp-1">'
+      +   '<div class="cp-tag"><i>1</i>/b · 搜书签</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.book, ph:'搜索书签…', rows: rowsB,
+          foot: '<kbd>/b</kbd>书签栏 + 其他书签 · 共 12 条' })
+      +   '</div></div>'
+      + '</div>'
+
+      + '<div class="cp cp-2">'
+      +   '<div class="cp-tag"><i>2</i>/h · 搜历史</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.history, ph:'搜索历史…', rows: rowsH, dim: true,
+          foot: '<kbd>/h</kbd>浏览记录倒序 · 已打开的页面不计入' })
+      +   '</div></div>'
+      + '</div>'
+
+      + '<div class="cp cp-3">'
+      +   '<div class="cp-tag"><i>3</i>/r · 最近关闭</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.undo, ph:'搜索最近关闭…', rows: rowsR, dim: true,
+          foot: '<kbd>/r</kbd>最近关闭 · 找回刚关的页面' })
+      +   '</div></div>'
+      + '</div>'
+
+      + '</div>';
+
+    const cps = $$('.cp', stage);
+    stage._fit = () => fitComic(stage);
+    fitComic(stage);
+    void stage.offsetHeight;                 /* 先落初始态, 再加 .in 触发过渡 */
+    cps.forEach(cp => cp.classList.add('in'));
+    await wait(sig, 700 * 1.5);
+
+    const cp1 = $('.cp-1', stage), cp2 = $('.cp-2', stage), cp3 = $('.cp-3', stage);
+
+    /* ① /b → 书签列表 */
+    await typeCmd(sig, cp1, '/b');
+    await wait(sig, 150 * 1.5);
+    revealCmdRows(cp1);
+    await wait(sig, 520 * 1.5);
+
+    /* ② /h → 历史列表(半透明) */
+    await typeCmd(sig, cp2, '/h');
+    await wait(sig, 150 * 1.5);
+    revealCmdRows(cp2);
+    await wait(sig, 520 * 1.5);
+
+    /* ③ /r → 最近关闭(结果直接 Ctrl/Enter 打开, 没有额外的「恢复」按钮) */
+    await typeCmd(sig, cp3, '/r');
+    await wait(sig, 150 * 1.5);
+    revealCmdRows(cp3);
+    await wait(sig, 760 * 1.5);
   }
 
-  /* ---------- 屏 5: 自动分组 ---------- */
+  /* ---------- 屏 5: 键盘流(四格分镜) ---------- */
   async function scene4(sig, slide) {
-    const p = parts(slide);
-    const study = GROUPS.filter(g => g.name === '学习');
-    const { rows } = renderList(p.pop, study, '');
-    setField(p.pop, '', false);
-    if (rows[0]) rows[0].classList.add('active');
-    await wait(sig, 620);
+    const stage = $('.stage', slide);
 
-    /* 1. 新标签从右侧滑入 */
-    const strip = p.strip;
-    const newChip = document.createElement('span');
-    newChip.className = 'chip new-tab';
-    newChip.dataset.t = '知乎 · 如何学习新语言';
-    newChip.textContent = '知乎 · 如何学习新语言';
-    strip.appendChild(newChip);
-    await wait(sig, 560);
+    /* ---- 格 1: ⌘Z 撤销删除 ---- */
+    const rows1 = [
+      { t:'知乎 · 如何系统地学习一门新语言', sub:'zhihu.com', f:'知', fc:'#0084FF' },
+      { t:'GitHub · 项目面板', sub:'github.com/projects', svg:'gh', fc:'#24292f' },
+      { t:'MDN · Array.prototype 方法速查', sub:'developer.mozilla.org', f:'M', fc:'#1b1b1b' },
+      { t:'bilibili · 发布会有哪些看点', sub:'bilibili.com', f:'B', fc:'#00a1d6' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
 
-    /* 2. FLIP: 从末尾飞进「学习」组 */
-    const endRect = newChip.getBoundingClientRect();
-    const gchip = $('.gchip[data-g="学习"]', strip);
-    const anchor = $('.chip[data-t="知乎"]', strip);
-    if (gchip && anchor) strip.insertBefore(newChip, anchor);
-    const targetRect = newChip.getBoundingClientRect();
-    const dx = endRect.left - targetRect.left;
-    if (Math.abs(dx) > 1 && newChip.animate) {
-      newChip.animate(
-        [{ transform: 'translateX(' + dx + 'px)', boxShadow: '0 6px 18px -6px rgba(52,168,83,.5)' },
-         { transform: 'none', boxShadow: '0 0 0 0 rgba(52,168,83,0)' }],
-        { duration: 760, easing: 'cubic-bezier(.22,.9,.24,1)', fill: 'none' }
-      );
-    }
-    newChip.style.opacity = '1';
-    await wait(sig, 420);
+    /* ---- 格 2: ⌘⌫ 关闭选中行(单行, 真实产品没有多选) ---- */
+    const rows2 = [
+      { t:'Tidy · GitHub', sub:'github.com/cheney12138', svg:'gh', fc:'#24292f' },
+      { t:'Pull requests · facebook/react', sub:'github.com', svg:'gh', fc:'#24292f' },
+      { t:'Stack Overflow · 拼音码点表', sub:'stackoverflow.com', f:'S', fc:'#f48024' },
+      { t:'MDN · Array.prototype 速查', sub:'developer.mozilla.org', f:'M', fc:'#1b1b1b' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
 
-    /* 3. 组计数 +1 */
-    if (gchip) {
-      const em = $('em', gchip);
-      em.textContent = '7';
-      gchip.classList.add('bump', 'glow');
-      setTimeout(() => gchip.classList.remove('bump'), 320);
-      setTimeout(() => gchip.classList.remove('glow'), 1200);
-    }
-    const head = $('.pop-gcount', p.pop);
-    if (head) {
-      head.textContent = '7';
-      head.classList.add('bump');
-      setTimeout(() => head.classList.remove('bump'), 340);
-    }
-    /* 4. 弹窗里新行落地 */
-    const newRow = {
-      t:'知乎 · 如何学习新语言', host:'zhihu.com', f:'知', fc:'#0084FF',
-      time:'刚刚', cls:'hot', g:'学习', py:[['知乎','zhi hu']]
-    };
-    const list = $('.pop-list', p.pop);
-    const firstRow = $('.pop-row', p.pop);
-    if (firstRow) {
-      firstRow.insertAdjacentHTML('beforebegin', rowHTML(newRow, '', 0).replace('pop-row', 'pop-row flash'));
-      const rows2 = $$('.pop-row', p.pop);
-      rows2.forEach((el, i) => { el.dataset.i = i; });
-    }
-    await wait(sig, 380);
-    toast(p.pop, '已自动归入「学习」· 命中 zhihu.com', { info: true });
+    /* ---- 格 3: ⌘C 复制 URL ---- */
+    const rows3 = [
+      { t:'知乎 · 前端面试题整理', sub:'zhihu.com/question/4501…', f:'知', fc:'#0084FF' },
+      { t:'GitHub · pull requests', sub:'github.com/facebook/react/pulls', svg:'gh', fc:'#24292f',
+        right: '<span class="cmd-copy">' + ICO.copy + 'URL 已复制</span>' },
+      { t:'MDN · Array.prototype 方法速查', sub:'developer.mozilla.org', f:'M', fc:'#1b1b1b' },
+      { t:'Vue.js · 响应式基础', sub:'cn.vuejs.org', f:'V', fc:'#41b883' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending' })).join('');
+
+    /* ---- 格 4: ⌘⇧K 清理无效 ---- */
+    const rows4 = [
+      { t:'Tidy · GitHub', sub:'github.com · 今天打开', svg:'gh', fc:'#24292f' },
+      { t:'Vue 2 迁移指南', sub:'v2.vuejs.org · 9 天未打开', f:'V', fc:'#41b883', cls:'stale' },
+      { t:'机票价格日历', sub:'flights.example.com · 12 天未打开', f:'✈', fc:'#0ea5e9', cls:'stale' },
+      { t:'2023 年度总结', sub:'blog.example.com · 7 天未打开', f:'B', fc:'#8b5cf6', cls:'stale' }
+    ].map((r, i) => cmdRow({ ...r, i, cls: 'pending ' + (r.cls || '') })).join('');
+
+    stage.innerHTML =
+      '<div class="comic quad">'
+
+      /* ① ⌘Z */
+      + '<div class="cp cp-1">'
+      +   '<div class="cp-tag"><i>1</i>⌘Z · 撤销删除</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.undo, ph:'搜索标签页…', rows: rows1, toast:'撤销 <kbd>⌘Z</kbd>',
+          foot: '<kbd>⌘Z</kbd>最近一次删除都可回退' })
+      +   '</div></div>'
+      + '</div>'
+
+      /* ② ⌘⌫ */
+      + '<div class="cp cp-2">'
+      +   '<div class="cp-tag"><i>2</i>⌘⌫ · 关闭标签</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.close, ph:'搜索标签页…', rows: rows2,
+          head: '<div class="cmd-ghead"><span class="pop-gdot" style="--gc:#387BE5"></span>工作<span class="pop-gcount">12</span></div>',
+          toast:'撤销 <kbd>⌘Z</kbd>',
+          foot: '<kbd>⌘⌫</kbd>关闭选中行 · <kbd>⌘Z</kbd>可撤销' })
+      +   '</div></div>'
+      + '</div>'
+
+      /* ③ ⌘C */
+      + '<div class="cp cp-3">'
+      +   '<div class="cp-tag"><i>3</i>⌘C · 复制 URL</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.copy, ph:'搜索标签页…', rows: rows3,
+          foot: '<kbd>⌘C</kbd>选中行 URL 直进剪贴板' })
+      +   '</div></div>'
+      + '</div>'
+
+      /* ④ ⌘⇧K */
+      + '<div class="cp cp-4">'
+      +   '<div class="cp-tag"><i>4</i>⌘⇧K · 清理无效</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      + cmdPanelHTML({ icon: ICO.trash, ph:'搜索标签页…', rows: rows4,
+          toast:'撤销 <kbd>⌘Z</kbd>',
+          foot: '<kbd>⌘⇧K</kbd>只清 7 天未打开的普通标签' })
+      +   '</div></div>'
+      + '</div>'
+
+      + '</div>';
+
+    const cps = $$('.cp', stage);
+    const cp1 = $('.cp-1', stage), cp2 = $('.cp-2', stage);
+    const cp3 = $('.cp-3', stage), cp4 = $('.cp-4', stage);
+    stage._fit = () => fitComic(stage);
+    fitComic(stage);
+    void stage.offsetHeight;
+    cps.forEach(cp => cp.classList.add('in'));
+    /* 四格列表随格体滑入一起补齐(格间 90ms 级联), 不留「空白格」等动作 */
+    [cp1, cp2, cp3, cp4].forEach((cp, i) => setTimeout(() => revealCmdRows(cp), 460 + i * 90));
+    await wait(sig, 1020 * 1.5);
+
+    /* ① ⌘Z: 删一行 → 提示 → 撤销 → 行回来 */
+    const tag1 = $('.cp-tag', cp1);
+    tag1.classList.add('press');
+    await wait(sig, 140 * 1.5);
+    const doomed1 = $$('.cmd-row', cp1)[1];
+    doomed1.style.transition = 'opacity .28s ease, transform .34s var(--ease-out)';
+    doomed1.style.opacity = '0';
+    doomed1.style.transform = 'translateX(-14px) scale(.98)';
+    toast(cp1, '已关闭「GitHub · 项目面板」');
+    await wait(sig, 640 * 1.5);
+    $('.push-undo', cp1).classList.add('press');
+    await wait(sig, 220 * 1.5);
+    $('.push-undo', cp1).classList.remove('press');
+    doomed1.style.opacity = '1';
+    doomed1.style.transform = 'none';
+    toast(cp1, '已撤销 · 标签回到列表', { info: true });
+    tag1.classList.remove('press');
+    await wait(sig, 460 * 1.5);
+    toastOff(cp1);                  /* 定格时不留浮标, 压在行上会像错位 */
+
+    /* ② ⌘⌫: 选中一行 → 关闭 → 计数下降(单行收起动画, 无多选) */
+    const tag2 = $('.cp-tag', cp2);
+    const r2 = $$('.cmd-row', cp2);
+    r2[1].classList.add('active');
+    await wait(sig, 420 * 1.5);
+    tag2.classList.add('press');
+    await wait(sig, 130 * 1.5);
+    tag2.classList.remove('press');
+    collapseCmdRows([r2[1]]);
+    const gc = $('.pop-gcount', cp2);
+    if (gc) { gc.textContent = '11'; gc.classList.add('bump'); setTimeout(() => gc.classList.remove('bump'), 360); }
+    toast(cp2, '已关闭「Pull requests · facebook/react」');
+    await wait(sig, 560 * 1.5);
+    r2[1].remove();                /* 收完再摘掉, 不留 0 高占位 */
+
+    /* ③ ⌘C: 选中行 → URL 进剪贴板 */
+    const tag3 = $('.cp-tag', cp3);
+    const r3 = $$('.cmd-row', cp3);
+    r3[1].classList.remove('reveal');
+    r3[1].classList.add('active');
+    await wait(sig, 300 * 1.5);
+    tag3.classList.add('press');
+    $('.cmd-copy', r3[1]).classList.add('show');
+    await wait(sig, 520 * 1.5);
+    tag3.classList.remove('press');
+    await wait(sig, 200 * 1.5);
+
+    /* ④ ⌘⇧K: 三条失效标签一起清 */
+    const tag4 = $('.cp-tag', cp4);
+    tag4.classList.add('press');
+    collapseCmdRows($$('.cmd-row.stale', cp4));
+    await wait(sig, 440 * 1.5);
+    tag4.classList.remove('press');
+    toast(cp4, '已清理 3 个无效标签', { info: true });
+    await wait(sig, 460 * 1.5);
   }
 
-  /* ---------- 屏 6: 批量操作 ---------- */
-  async function scene5(sig, slide) {
+  /* ---------- 屏 6: 多窗口管理 ---------- */
+  async function sceneMulti(sig, slide) {
+    const stage = $('.stage', slide);
+    stage.innerHTML = '<div class="cvs" style="width:620px"><div class="duo">'
+      + mwWinHTML('a', '窗口 1 · 当前', 'newtab', [STRIP_BASE[0], STRIP_BASE[1], STRIP_BASE[4]])
+      + mwWinHTML('b', '窗口 2 · 12 个标签', 'newtab', [STRIP_BASE[2], STRIP_BASE[3], STRIP_BASE[6]])
+      + '<div class="duo-note">其他窗口 · 不进列表</div>'
+      + popdropHTML()
+      + '<div class="duo-count"></div>'
+      + '</div></div>';
+
+    const pop = $('.duo .pop', stage);
+    const drop = $('.duo .popdrop', stage);
+    const slots = $$('.mw-slot', stage);
+    renderList(pop, GROUPS, '');
+    setField(pop, '', false);
+
+    stage._fit = () => fitScaled(stage);
+    fitScaled(stage);
+
+    /* 两个窗口先入场, 弹窗随后从上方落下 */
+    slots.forEach(el => snap(el, { opacity: '0', transform: 'translateY(14px)' }));
+    snap(drop, { opacity: '0', transform: 'translateY(-26px)' });
+    await wait(sig, 240 * 1.5);
+    slots.forEach((el, i) => {
+      el.style.transitionDelay = (i * 110) + 'ms';
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+    await wait(sig, 540 * 1.5);
+    slots.forEach(el => { el.style.transitionDelay = ''; });
+    drop.style.opacity = '1';
+    drop.style.transform = 'none';
+    await wait(sig, 780 * 1.5);
+
+    /* 切到「当前窗口」视图: 滑块就位 → 列表只留当前窗口的标签 */
+    const tabs = $$('.pop-tab', pop);
+    tabs.forEach((t, i) => t.classList.toggle('active', i === 2));
+    moveTabSlider(pop, 2);
+    await wait(sig, 480 * 1.5);
+
+    const curGroups = GROUPS.map(g => ({
+      name: g.name, color: g.color, rows: g.rows.filter(r => r.win)
+    }));
+    const { rows, n } = renderList(pop, curGroups, '');
+    $('.mw-b', stage).classList.add('dim');
+    $('.duo-note', stage).classList.add('show');
+    await wait(sig, 460 * 1.5);
+    setSel(rows, 0);
+    const count = $('.duo-count', stage);
+    count.innerHTML = '<b>' + n + '</b> 个标签 · 只看当前窗口';
+    count.classList.add('show');
+    await wait(sig, 900 * 1.5);
+  }
+
+  /* ---------- 屏 7: 批量操作 ---------- */
+  async function sceneBatch(sig, slide) {
     const p = parts(slide);
     const work = GROUPS.filter(g => g.name === '工作');
     const { rows } = renderList(p.pop, work, '');
     setField(p.pop, '', false);
-    await wait(sig, 700);
+    await wait(sig, 700 * 1.5);
 
     const row = rows[3];
     const st = p.stage.getBoundingClientRect();
@@ -1351,15 +2596,15 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     p.menu.style.left = Math.max(6, left) + 'px';
     p.menu.style.top = Math.max(6, top) + 'px';
 
-    await wait(sig, 240);
+    await wait(sig, 240 * 1.5);
     p.menu.classList.add('show');
-    await wait(sig, 760);
+    await wait(sig, 760 * 1.5);
     restItem.classList.add('hot');
-    await wait(sig, 620);
+    await wait(sig, 620 * 1.5);
     restItem.classList.add('press');
-    await wait(sig, 220);
+    await wait(sig, 220 * 1.5);
     p.menu.classList.remove('show');
-    await wait(sig, 160);
+    await wait(sig, 160 * 1.5);
 
     /* 其余 11 行逐个淡出 + 收起 */
     const others = rows.filter((el, i) => i !== 3);
@@ -1379,7 +2624,7 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
       });
     });
     row.style.background = '';
-    await wait(sig, 420);
+    await wait(sig, 420 * 1.5);
 
     /* 组计数 12 → 1 */
     const gc = $('.pop-gcount', p.pop);
@@ -1389,99 +2634,568 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
       $('em', gchip).textContent = '1';
       gchip.classList.add('bump'); setTimeout(() => gchip.classList.remove('bump'), 320);
     }
-    await wait(sig, 260);
+    await wait(sig, 260 * 1.5);
     toast(p.pop, '已关闭 11 个标签页');
   }
 
-  /* ---------- 屏 7: 归档 ---------- */
-  async function scene6(sig, slide) {
+  /* ---------- 屏 8: 拖拽排序 ---------- */
+  async function sceneDrag(sig, slide) {
     const p = parts(slide);
-    const study = GROUPS.filter(g => g.name === '学习');
-    const { rows } = renderList(p.pop, study, '');
+    setStrip(p.strip, [
+      { k:'g', name:'工作', color:'#387BE5', count:4 }, { k:'t', name:'MDN · Array' },
+      { k:'g', name:'学习', color:'#34A853', count:3 }, { k:'t', name:'知乎' },
+      { k:'g', name:'娱乐', color:'#E66A28', count:2 }, { k:'t', name:'bilibili' }
+    ]);
+    const groups = [
+      { name:'工作', color:'#387BE5', rows: GROUPS[0].rows.slice(0, 4) },
+      { name:'学习', color:'#34A853', rows: GROUPS[1].rows.slice(0, 3) },
+      { name:'娱乐', color:'#E66A28', rows: GROUPS[2].rows.slice(0, 2) }
+    ];
+    const { rows } = renderList(p.pop, groups, '');
     setField(p.pop, '', false);
-    await wait(sig, 700);
+    await wait(sig, 780 * 1.5);
 
-    /* 右键组头 */
-    const head = $('.pop-ghead', p.pop);
-    const st = p.stage.getBoundingClientRect();
-    const hr = head.getBoundingClientRect();
+    const row = rows[2];
+    const studyHead = $('.pop-ghead[data-group="学习"]', p.pop);
+    if (!row || !studyHead) return;
+
+    /* 拖拽提示条(贴底) */
+    const hint = document.createElement('div');
+    hint.className = 'pop-drag-hint';
+    hint.textContent = '拖到分组上移动 · 拖到窗口外新建窗口';
+    p.pop.appendChild(hint);
+
+    row.classList.add('active');
+    await wait(sig, 360 * 1.5);
+
+    /* 轨迹: 抬起 → 斜向移动 → 落在目标组头上 */
+    const rr = row.getBoundingClientRect();
+    const hr = studyHead.getBoundingClientRect();
+    const dx = Math.round(hr.left - rr.left + 16);
+    const dy = Math.round(hr.top - rr.top + hr.height - 6);
+    row.classList.remove('active');
+    row.classList.add('dragging');
+    hint.classList.add('show');
+    row.style.transform = 'translate(' + Math.round(dx * 0.45) + 'px,' + Math.round(Math.min(dy * 0.4, 26)) + 'px) rotate(-1.6deg) scale(1.03)';
+    await wait(sig, 340 * 1.5);
+    row.style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(-1deg) scale(1.02)';
+    await wait(sig, 380 * 1.5);
+    studyHead.classList.add('dropzone');
+    await wait(sig, 460 * 1.5);
+
+    /* 放下: 节点迁到「学习」组头之后, 瞬时归零位移, 不留飞行残影 */
+    studyHead.classList.remove('dropzone');
+    hint.classList.remove('show');
+    studyHead.insertAdjacentElement('afterend', row);
+    row.classList.remove('dragging');
+    row.style.transition = 'none';
+    row.style.transform = 'none';
+    void row.offsetHeight;
+    row.style.transition = '';
+    row.classList.add('landed');
+    setTimeout(() => row.classList.remove('landed'), 700);
+
+    setCount(p.pop, '工作', 3);
+    setCount(p.pop, '学习', 4);
+    setGchip(p.strip, '工作', 3);
+    setGchip(p.strip, '学习', 4, true);
+    await wait(sig, 380 * 1.5);
+    toast(p.pop, '已移入「学习」· 拖回即可还原', { info: true });
+    await wait(sig, 820 * 1.5);
+    hint.remove();
+  }
+
+  /* ---------- 屏 9: 媒体控制 ---------- */
+  async function sceneMedia(sig, slide) {
+    const p = parts(slide);
+    setStrip(p.strip, [
+      { k:'g', name:'工作', color:'#387BE5', count:3 }, { k:'t', name:'MDN · Array' },
+      { k:'g', name:'学习', color:'#34A853', count:2 }, { k:'t', name:'知乎' },
+      { k:'g', name:'娱乐', color:'#E66A28', count:3 }, { k:'t', name:'bilibili' }
+    ]);
+    const groups = [
+      { name:'工作', color:'#387BE5', rows: GROUPS[0].rows.slice(0, 3) },
+      { name:'学习', color:'#34A853', rows: GROUPS[1].rows.slice(0, 2) },
+      { name:'娱乐', color:'#E66A28', rows: GROUPS[2].rows.map(r =>
+          (r.t.includes('bilibili') || r.t.includes('网易云')) ? { ...r, media: true } : r) }
+    ];
+    const { rows } = renderList(p.pop, groups, '');
+    setField(p.pop, '', false);
+    await wait(sig, 860 * 1.5);
+
+    const target = rows.find(el => $('.pop-title', el).textContent.includes('bilibili'));
+    const btn = target && $('.pop-media', target);
+    if (!btn) return;
+    target.classList.add('active');
+    btn.classList.add('attn');
+    await wait(sig, 560 * 1.5);
+
+    /* 静音 */
+    btn.classList.add('press');
+    await wait(sig, 160 * 1.5);
+    btn.classList.remove('press', 'attn');
+    btn.classList.add('muted');
+    btn.innerHTML = ICO.muted;
+    const chip = $('.chip[data-t="bilibili"]', p.strip);
+    if (chip) {
+      chip.classList.add('muted');
+      chip.insertAdjacentHTML('beforeend', '<span class="chip-media" title="已静音"></span>');
+    }
+    toast(p.pop, '已静音 bilibili · 再点图标恢复');
+    await wait(sig, 1200 * 1.5);
+
+    /* 恢复播放 */
+    btn.classList.add('press');
+    await wait(sig, 150 * 1.5);
+    btn.classList.remove('press', 'muted');
+    btn.innerHTML = '<span class="media-eq"><i></i><i></i><i></i></span>';
+    if (chip) {
+      chip.classList.remove('muted');
+      const cm = $('.chip-media', chip);
+      if (cm) cm.remove();
+    }
+    toast(p.pop, '已恢复播放 · 图标实时反映播放状态', { info: true });
+    await wait(sig, 900 * 1.5);
+  }
+
+  /* ---------- 屏 10: 最近使用(跨分组平铺) ---------- */
+  async function sceneRecent(sig, slide) {
+    const p = parts(slide);
+
+    /* 「前一张」= 分组视图: 列表按组分区、带分组头 */
+    renderList(p.pop, GROUPS, '');
+    setField(p.pop, '', false);
+    await wait(sig, 700 * 1.5);
+
+    /* Tab → 最近使用: 滑块滑过去, 列表整块换成平铺行(分组头消失) */
+    const tabs = $$('.pop-tab', p.pop);
+    tabs.forEach((t, i) => t.classList.toggle('active', i === 1));
+    moveTabSlider(p.pop, 1);
+    await wait(sig, 220 * 1.5);
+
+    const list = $('.pop-list', p.pop);
+    list.style.transition = 'opacity .2s ease, transform .24s var(--ease-out)';
+    list.style.opacity = '0';
+    list.style.transform = 'translateY(6px)';
+    await wait(sig, 220 * 1.5);
+
+    /* 真实排序口径: 跨窗口、按 lastAccessed 倒序; 组头不出现 */
+    const rows = [
+      { t:'bilibili · 发布会有哪些看点', host:'bilibili.com', f:'B', fc:'#00a1d6', time:'刚刚', cls:'hot' },
+      { t:'Tidy · GitHub', host:'github.com', svg:'gh', fc:'#24292f', time:'3 分钟' },
+      { t:'知乎 · 如何系统地学习一门新语言', host:'zhihu.com', f:'知', fc:'#0084FF', time:'28 分钟' },
+      { t:'MDN · Array.prototype 方法速查', host:'developer.mozilla.org', f:'M', fc:'#1b1b1b', time:'1 小时', cls:'today' },
+      { t:'机票价格日历', host:'flights.example.com', f:'✈', fc:'#0ea5e9', time:'今天' },
+      { t:'掘金 · 前端工程化实践', host:'juejin.cn', f:'掘', fc:'#1e80ff', time:'昨天', cls:'recent' },
+      { t:'维基百科 · 汉字拼音对照表', host:'zh.wikipedia.org', f:'W', fc:'#3a3a3a', time:'2 天前', cls:'recent' },
+      { t:'React · Hooks 参考', host:'react.dev', f:'R', fc:'#087ea4', time:'3 天前', cls:'recent' },
+      { t:'Node.js · File System API', host:'nodejs.org', f:'N', fc:'#539e43', time:'5 天前', cls:'recent' },
+      { t:'web.dev · Core Web Vitals', host:'web.dev', f:'W', fc:'#1a73e8', time:'6 天前', cls:'recent' }
+    ];
+    list.innerHTML = rows.map((r, i) => rowHTML(r, '', i)).join('');
+    list.scrollTop = 0;
+    void list.offsetHeight;
+    list.style.opacity = '1';
+    list.style.transform = 'none';
+    await wait(sig, 620 * 1.5);
+
+    /* 视线的落点: 第一行(刚刚用过的那件事) */
+    setSel($$('.pop-row', p.pop), 0);
+    await wait(sig, 320 * 1.5);
+    toast(p.pop, '按上次访问倒序 · 跨分组平铺', { info: true });
+    await wait(sig, 900 * 1.5);
+    toastOff(p.pop);
+  }
+
+  /* ---------- 屏 11: 归档(漫画分镜) ---------- */
+  async function sceneArchive(sig, slide) {
+    const stage = $('.stage', slide);
+    const study = GROUPS.filter(g => g.name === '学习');
+
+    /* ---- 1. 分镜骨架: 格 1/2 斜切并排, 格 3 通栏 ---- */
+    stage.innerHTML =
+      '<div class="comic">'
+
+      /* 格 1 · 弹窗 + 右键归档 */
+      + '<div class="cp cp-1">'
+      +   '<div class="cp-tag"><i>1</i>右键分组头 · 归档整组</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      +     popdropHTML()
+      +     '<div class="ctxmenu">'
+      +       '<div class="ctx-item" data-k="close">' + ICO.x + '关闭此标签页<span class="k">⌘W</span></div>'
+      +       '<div class="ctx-item" data-k="rest">' + ICO.close + '<span class="ctx-lbl">关闭本组其余标签</span></div>'
+      +       '<div class="ctx-sep"></div>'
+      +       '<div class="ctx-item" data-k="archive">' + ICO.box + '<span class="ctx-lbl2">归档「学习」分组</span></div>'
+      +       '<div class="ctx-item" data-k="pin">' + ICO.pin + '固定本组</div>'
+      +       '<div class="ctx-item" data-k="move">' + ICO.folder + '移到分组<span class="k">▸</span></div>'
+      +     '</div>'
+      +   '</div></div>'
+      + '</div>'
+
+      /* 格 2 · 标签栏整组消失 */
+      + '<div class="cp cp-2">'
+      +   '<div class="cp-tag"><i>2</i>整组从标签栏撤离</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      +     '<div class="mini-bwin">'
+      +       '<div class="bwin-bar">'
+      +         '<span class="b-dot r"></span><span class="b-dot y"></span><span class="b-dot g"></span>'
+      +         '<div class="browser-url">' + ICO.lock + '<span class="url-txt">newtab</span></div>'
+      +       '</div>'
+      +       '<div class="tabstrip">' + STRIP_BASE.filter(c => c.name !== 'Others').map(chipHTML).join('') + '</div>'
+      +       '<div class="mini-body">'
+      +         '<div class="ghost-line w60"></div><div class="ghost-line w80"></div><div class="ghost-line w40"></div>'
+      +         '<div class="ghost-block"></div>'
+      +         '<div class="ghost-line w80" style="margin-top:18px"></div>'
+      +       '</div>'
+      +     '</div>'
+      +   '</div></div>'
+      +   '<div class="cp-note">6 个标签 · 整组撤离</div>'
+      + '</div>'
+
+      /* 格 3 · 设置面板「已归档」 */
+      + '<div class="cp cp-3">'
+      +   '<div class="cp-tag"><i>3</i>仓库 · 设置面板「已归档」</div>'
+      +   '<div class="cp-body"><div class="cp-zoom">'
+      +     '<div class="settings-panel">'
+      +       '<div class="sp-head">设置<button class="sp-close">✕</button></div>'
+      +       '<div class="sp-tabs">'
+      +         '<button class="sp-tab">分组</button>'
+      +         '<button class="sp-tab active">已归档<span class="sp-pill">1</span></button>'
+      +         '<button class="sp-tab">功能</button>'
+      +       '</div>'
+      +       '<div class="sp-body"><div class="sp-arc-list">'
+      +         '<div class="sp-arc-item fresh pending">'
+      +           '<span class="sp-arc-dot" style="--gc:#34A853"></span>'
+      +           '<span class="sp-arc-main"><b>学习</b><em>6 个标签 · 刚刚归档 · zhihu.com</em></span>'
+      +           '<button class="sp-arc-btn">重新打开</button>'
+      +         '</div>'
+      +         '<div class="sp-arc-item">'
+      +           '<span class="sp-arc-dot" style="--gc:#9ca3af"></span>'
+      +           '<span class="sp-arc-main"><b>调研</b><em>8 个标签 · 3 天前 · github.com</em></span>'
+      +           '<button class="sp-arc-btn">重新打开</button>'
+      +         '</div>'
+      +       '</div></div>'
+      +     '</div>'
+      +   '</div></div>'
+      +   '<div class="cp-note">链接与顺序都还在</div>'
+      + '</div>'
+
+      + '</div>';
+
+    const comic = $('.comic', stage);
+    const cps = $$('.cp', comic);
+    const pop = $('.cp-1 .pop', stage);
+    const menu = $('.cp-1 .ctxmenu', stage);
+
+    /* ---- 2. 弹窗内容 ---- */
+    renderList(pop, study, '');
+    setField(pop, '', false);
+
+    /* ---- 3. 尺寸 + 三格依次滑入 ---- */
+    const cp3 = $('.cp-3', stage);
+    const fresh = $('.sp-arc-item.fresh', cp3);
+    const list3 = $('.sp-arc-list', cp3);
+    stage._fit = () => fitComic(stage);
+    fitComic(stage);
+    /* 量完含两行的最终高度再抽走待入场行: 初始面板不留空洞, 入场也不改变缩放 */
+    fresh.remove();
+    void stage.offsetHeight;                 /* 先落初始态, 再加 .in 触发过渡 */
+    cps.forEach(cp => cp.classList.add('in'));
+    await wait(sig, 720 * 1.5);
+
+    /* ---- 4. 格 1: 右键组头 → 归档 ---- */
+    const head = $('.pop-ghead', pop);
+    const rows = $$('.pop-row', pop);
     head.style.background = 'var(--hover)';
-    const arcItem = $('.ctx-item[data-k="archive"]', p.menu);
-    $('.ctx-lbl2', arcItem).textContent = '归档「学习」分组';
-    let left = hr.left - st.left + hr.width * 0.4;
-    let top = hr.top - st.top + hr.height;
-    left = Math.min(left, st.width - 232);
-    top = Math.min(top, st.height - 210);
-    p.menu.style.left = Math.max(6, left) + 'px';
-    p.menu.style.top = Math.max(6, top) + 'px';
-    p.menu.classList.add('show');
-    await wait(sig, 820);
-    arcItem.classList.add('hot');
-    await wait(sig, 560);
-    arcItem.classList.add('press');
-    await wait(sig, 200);
-    p.menu.classList.remove('show');
+    await wait(sig, 420 * 1.5);
+
+    const zoom = $('.cp-1 .cp-zoom', stage);
+    const s1 = parseFloat(getComputedStyle($('.cp-1', stage)).getPropertyValue('--s')) || 1;
+    const zr = zoom.getBoundingClientRect();
+    const hr = head.getBoundingClientRect();
+    menu.style.left = Math.round((hr.left - zr.left + hr.width * 0.46) / s1) + 'px';
+    menu.style.top = Math.round((hr.bottom - zr.top + 2) / s1) + 'px';
+    menu.classList.add('show');
+    await wait(sig, 760 * 1.5);
+
+    const arc = $('.ctx-item[data-k="archive"]', menu);
+    arc.classList.add('hot');
+    await wait(sig, 520 * 1.5);
+    arc.classList.add('press');
+    await wait(sig, 210 * 1.5);
+    menu.classList.remove('show');
     head.style.background = '';
+    await wait(sig, 220 * 1.5);
 
     /* 整组缩小 + 下沉 */
-    const groupEls = [head].concat(rows);
-    groupEls.forEach((el, i) => {
-      el.style.transition = 'opacity .42s ease, transform .5s cubic-bezier(.4,0,.7,.2)';
-      el.style.transitionDelay = (i * 34) + 'ms';
+    [head].concat(rows).forEach((el, i) => {
+      el.style.transition = 'opacity .4s ease, transform .48s cubic-bezier(.4,0,.7,.2)';
+      el.style.transitionDelay = (i * 32) + 'ms';
       el.style.transformOrigin = '50% 50%';
-      el.style.transform = 'translateY(30px) scale(.93)';
+      el.style.transform = 'translateY(26px) scale(.94)';
       el.style.opacity = '0';
     });
-    await wait(sig, 460);
+    await wait(sig, 430 * 1.5);
 
-    /* 仓库抽屉浮出 */
-    buildArchive(p.drawer);
-    p.drawer.classList.add('up');
-    $('.pop-empty', p.pop).classList.add('show');
-    $('.pop-empty', p.pop).textContent = '「学习」已归档 · 6 个标签页';
-    /* 标签栏里整组一起消失(组头 + 组内标签) */
-    const gchip = $('.gchip[data-g="学习"]', p.strip);
-    const followers = [];
-    if (gchip) {
-      let n = gchip.nextElementSibling;
-      while (n && n.classList.contains('chip') && followers.length < 2) { followers.push(n); n = n.nextElementSibling; }
-    }
-    [gchip].concat(followers).forEach(el => {
-      if (!el) return;
-      el.style.transition = 'opacity .38s ease, transform .42s ease, max-width .42s ease, padding .42s ease, margin .42s ease';
+    const empty = $('.pop-empty', pop);
+    empty.textContent = '「学习」已归档 · 6 个标签页';
+    empty.classList.add('show');
+    toast(pop, '已归档「学习」· 6 个标签页');
+    await wait(sig, 400 * 1.5);
+
+    /* ---- 5. 格 2: gchip + chip 一起撤离 ---- */
+    const strip = $('.cp-2 .tabstrip', stage);
+    const doomed = [
+      $('.gchip[data-g="学习"]', strip),
+      $('.chip[data-t="知乎"]', strip)
+    ].filter(Boolean);
+    doomed.forEach((el, i) => {
+      el.style.width = el.getBoundingClientRect().width + 'px';
       el.style.overflow = 'hidden';
-      el.style.maxWidth = el.offsetWidth + 'px';
+      el.style.transition = 'opacity .32s ease, transform .44s var(--ease-out), width .44s var(--ease-out), padding .44s var(--ease-out)';
+      el.style.transitionDelay = (i * 90) + 'ms';
       requestAnimationFrame(() => {
         el.style.opacity = '0';
-        el.style.maxWidth = '0px';
+        el.style.width = '0px';
         el.style.paddingLeft = '0px';
         el.style.paddingRight = '0px';
-        el.style.marginRight = '-3px';
-        el.style.transform = 'scale(.9)';
+        el.style.transform = 'translateY(-6px) scale(.82)';
       });
     });
-    await wait(sig, 320);
+    await wait(sig, 200 * 1.5);
+    $('.cp-2 .cp-note', stage).classList.add('show');
+    await wait(sig, 260 * 1.5);
+
+    /* ---- 6. 格 3: 「学习」落进仓库 ---- */
+    list3.insertBefore(fresh, list3.firstChild);
+    void fresh.offsetHeight;                 /* 先以 pending 落一次样式, 再放行过渡 */
+    fresh.classList.remove('pending');
+    fresh.classList.add('arrive');
+    setTimeout(() => fresh.classList.remove('arrive'), 900);
+    const pill = $('.sp-pill', cp3);
+    pill.textContent = '2';
+    pill.classList.add('bump');
+    setTimeout(() => pill.classList.remove('bump'), 360);
+    await wait(sig, 420 * 1.5);
+    $('.cp-3 .cp-note', stage).classList.add('show');
+    await wait(sig, 460 * 1.5);
   }
 
-  function buildArchive(drawer) {
-    drawer.innerHTML =
-      '<div class="drawer-head">仓库<em>2 个分组</em></div>'
-      + '<div class="arc-item fresh">'
-        + '<span class="arc-dot" style="--gc:#34A853"></span>'
-        + '<span class="arc-main"><b>学习</b><em>6 个标签 · 刚刚归档 · zhihu.com</em></span>'
-        + '<button class="arc-btn">重新打开</button>'
-      + '</div>'
-      + '<div class="arc-item">'
-        + '<span class="arc-dot" style="--gc:#9ca3af"></span>'
-        + '<span class="arc-main"><b>调研</b><em>8 个标签 · 3 天前 · github.com</em></span>'
-        + '<button class="arc-btn">重新打开</button>'
+  /* ---------- 屏 12: 主题系统(三格斜分) ---------- */
+  async function sceneTheme(sig, slide) {
+    const stage = $('.stage', slide);
+    /* 局部里放 5 行: 让这块「裁下来的角」顶到格子下沿, 由底缘渐隐收尾 */
+    const rows = [
+      { t:'Tidy · GitHub', fc:'#24292f', tm:'1 小时', on:true },
+      { t:'MDN · Array.prototype 方法速查', fc:'#1b1b1b', tm:'3 小时' },
+      { t:'知乎 · 如何系统地学习一门新语言', fc:'#0084FF', tm:'昨天' },
+      { t:'掘金 · 前端工程化实践', fc:'#1e80ff', tm:'3 天前' },
+      { t:'机票价格日历', fc:'#0ea5e9', tm:'昨天' }
+    ];
+    stage.innerHTML = '<div class="comic trio">'
+      + trioPanel(1, 'Linear · 极简', 'linear', rows)
+      + trioPanel(2, 'Ink · 水墨', 'ink', rows)
+      + trioPanel(3, 'Sky · 云海', 'sky', rows, '一键切换 · 立即生效')
       + '</div>';
+
+    const cps = $$('.cp', stage);
+    const frags = $$('.tfrag', stage);
+    stage._fit = () => fitComic(stage);
+    fitComic(stage);
+    void stage.offsetHeight;
+    cps.forEach(cp => cp.classList.add('in'));
+    await wait(sig, 1000 * 1.5);
+
+    /* 一键切换: 高亮依次划过三格的局部, 停在 Sky */
+    for (let i = 0; i < frags.length; i++) {
+      frags.forEach(f => f.classList.remove('pick'));
+      $$('.cp-tag', stage).forEach(t => t.classList.remove('press'));
+      frags[i].classList.add('pick');
+      $('.cp-tag', cps[i]).classList.add('press');
+      await wait(sig, 560 * 1.5);
+    }
+    const note = $('.cp-note', stage);
+    if (note) note.classList.add('show');
+    await wait(sig, 900 * 1.5);
   }
 
-  /* ---------- 屏 8: 收尾 ---------- */
-  async function scene7() { /* 纯 CSS 入场 */ }
+  /* ---------- 屏 13: 设置 · 规则编辑器 ---------- */
+  async function sceneRules(sig, slide) {
+    const stage = $('.stage', slide);
+    const ruleGroups = [
+      { name:'工作', color:'#387BE5', chips:['github.com', '*.sankuai.com', 'developer.chrome.com'] },
+      { name:'学习', color:'#34A853', chips:['zhihu.com', 'juejin.cn'] },
+      { name:'设计', color:'#8b5cf6', chips:['figma.com', 'dribbble.com'] }
+    ];
+    const body = '<div class="sbox-mini">'
+        + '<label class="srow"><span class="slabel">自动分组</span><span class="toggle on"></span></label>'
+        + '<label class="srow"><span class="slabel">未分组归入 Others</span><span class="toggle on"></span></label>'
+      + '</div>'
+      + '<div class="rules-head-row"><span class="rules-title">按域名自动归类<i class="dirty-dot"></i></span>'
+        + '<div class="rules-io-links">'
+          + '<button class="rules-io-link add-host" tabindex="-1">＋ 添加域名</button>'
+          + '<button class="rules-io-icon" tabindex="-1" aria-label="导入 JSON">' + ICO.imp + '</button>'
+          + '<button class="rules-io-icon" tabindex="-1" aria-label="导出规则">' + ICO.exp + '</button>'
+        + '</div></div>'
+      + '<div class="rule-list">'
+      +   ruleGroups.map(g => '<div class="rule-g" data-g="' + g.name + '">'
+            + '<div class="rule-g-head"><span class="rule-g-dot" style="--gc:' + g.color + '"></span>'
+            + g.name + '<span class="rule-gcount">' + g.chips.length + '</span></div>'
+            + '<div class="rule-chips">' + g.chips.map(c => '<span class="rule-chip">' + esc(c) + '</span>').join('') + '</div>'
+          + '</div>').join('')
+      + '</div>'
+      + '<div class="sp-note">默认精确匹配当前主机 · 含子域写 <b>*.域名</b> · 按板块细分写 <b>域名/路径前缀</b></div>';
 
-  const SCENES = [scene0, scene1, scene2, scene3, scene4, scene5, scene6, scene7];
+    stage.innerHTML = '<div class="cvs" style="width:460px">'
+      + spHTML({ tab:'分组', body,
+          actions: '<button class="sp-btn" tabindex="-1">＋ 新增组</button><span class="grow"></span>'
+            + '<button class="sp-btn primary" tabindex="-1">保存规则</button>' })
+      + '<div class="cvs-toast"></div>'
+      + '</div>';
+
+    stage._fit = () => fitScaled(stage);
+    fitScaled(stage);
+    await wait(sig, 800 * 1.5);
+
+    /* 真实交互: 「＋ 添加域名」不看输入框, 而是拿当前标签页域名开一个弹层,
+       选一个分组就落一枚 chip(添加即保存, 与手工编辑同一条落库口) */
+    const panel = $('.settings-panel', stage);
+    const addBtn = $('.add-host', stage);
+    addBtn.classList.add('press');
+    await wait(sig, 150 * 1.5);
+    addBtn.classList.remove('press');
+
+    const pop = document.createElement('div');
+    pop.className = 'group-pop';
+    pop.innerHTML = '<div class="group-pop-head"><span class="group-pop-title">添加 figma.com</span>'
+        + '<button class="group-pop-close" tabindex="-1" aria-label="关闭">✕</button></div>'
+        + '<div class="group-pop-zone"><span>整站通配（含所有子域）</span><span class="zone-switch"><i></i></span></div>'
+        + '<div class="group-pop-list">'
+        +   ruleGroups.map(g => '<button class="group-pop-item" data-g="' + g.name + '" tabindex="-1">' + g.name + '</button>').join('')
+        + '</div>'
+        + '<div class="group-pop-new"><span class="gpn-field">新建分组名</span><span class="gpn-add">添加</span></div>';
+    panel.appendChild(pop);
+    /* 锚点算法同真实产品: 右对齐按钮, 下沿 +6; 面板整体有 --s 缩放, 除以缩放比还原设计稿坐标 */
+    const pr = panel.getBoundingClientRect();
+    const br = addBtn.getBoundingClientRect();
+    const k = (pr.width / panel.offsetWidth) || 1;
+    pop.style.left = Math.round((br.right - pr.left) / k - 240) + 'px';
+    pop.style.top = Math.round((br.bottom - pr.top) / k + 6) + 'px';
+    void pop.offsetHeight;
+    pop.classList.add('show');
+    await wait(sig, 820 * 1.5);
+
+    /* 指向「设计」组 */
+    const item = $('.group-pop-item[data-g="设计"]', pop);
+    item.classList.add('hot');
+    await wait(sig, 620 * 1.5);
+    item.classList.add('press');
+    await wait(sig, 130 * 1.5);
+    item.classList.remove('press');
+
+    pop.classList.remove('show');
+    await wait(sig, 220 * 1.5);
+    pop.remove();
+
+    /* chip 落进「设计」组, 计数 +1, 自动保存(不打脏点) */
+    const g = $('.rule-g[data-g="设计"]', stage);
+    const chip = document.createElement('span');
+    chip.className = 'rule-chip fresh';
+    chip.textContent = 'figma.com';
+    $('.rule-chips', g).appendChild(chip);
+    $('.rule-gcount', g).textContent = '3';
+    await wait(sig, 260 * 1.5);
+    cvsToast(stage, '<b>已将 figma.com 加入「设计」</b> · 已保存', { ok: true });
+    await wait(sig, 1100 * 1.5);
+  }
+
+  /* ---------- 屏 14: 设置 · 备份恢复 ---------- */
+  async function sceneBackup(sig, slide) {
+    const stage = $('.stage', slide);
+    /* 备份内容口径同真实产品: chrome.storage.local 的规则 + 开关, 加 localStorage 里的外观偏好;
+       归档卡明确不在其中(stash 语义, 卸载即焚) */
+    const body = '<div class="sbox-mini">'
+        + '<label class="srow"><span class="slabel">唤起为独立窗口</span><span class="toggle on"></span></label>'
+        + '<label class="srow"><span class="slabel">显示 URL 行</span><span class="toggle"></span></label>'
+      + '</div>'
+      + '<div class="sbox-mini">'
+        + '<label class="srow"><span class="slabel">自动备份配置</span><span class="toggle on"></span></label>'
+        + '<div class="srow"><span class="slabel">备份位置</span><span class="bk-pos">'
+          + '<span class="bk-input">TGS/自动备份</span><button class="rules-io-link" tabindex="-1">打开目录</button></span></div>'
+        + '<div class="srow"><span class="bk-state"><i class="bk-dot"></i>上次备份 今天 09:12 · 12 组 / 34 域名</span><span class="bk-pos">'
+          + '<button class="rules-io-link" tabindex="-1">文件位置</button>'
+          + '<button class="rules-io-link bk-now" tabindex="-1">立即备份</button></span></div>'
+        + '<div class="srow"><span class="slabel">从备份恢复</span>'
+          + '<button class="rules-io-link bk-restore" tabindex="-1">选择文件…</button></div>'
+      + '</div>'
+      + '<div class="sp-note">规则 / 开关 / 外观写进同一个 JSON · 归档卡不在其中（卸载即焚）</div>';
+
+    stage.innerHTML = '<div class="cvs" style="width:460px">'
+      + spHTML({ tab:'功能', body })
+      + '<div class="cvs-toast"></div>'
+      + '</div>';
+
+    stage._fit = () => fitScaled(stage);
+    fitScaled(stage);
+    await wait(sig, 800 * 1.5);
+
+    /* ① 立即备份 → 状态变成「刚刚」 */
+    const state = $('.bk-state', stage);
+    const now = $('.bk-now', stage);
+    now.classList.add('press');
+    await wait(sig, 160 * 1.5);
+    now.classList.remove('press');
+    state.innerHTML = '<i class="bk-dot spinning"></i>正在写入…';
+    await wait(sig, 640 * 1.5);
+    state.innerHTML = '<i class="bk-dot"></i>上次备份 刚刚 · 12 组 / 34 域名';
+    state.classList.add('flash');
+    cvsToast(stage, '<b>已备份 12 组 / 34 域名</b> → 下载目录/TGS/自动备份', { ok: true });
+    await wait(sig, 1200 * 1.5);
+    state.classList.remove('flash');
+    cvsToastOff(stage);
+
+    /* ② 选择文件 → 选回那份备份 → 恢复完成(真实产品走系统文件选择器,
+       这里用一枚贴着按钮向上展开的浮层示意「选哪份文件」) */
+    const restore = $('.bk-restore', stage);
+    restore.classList.add('press');
+    await wait(sig, 150 * 1.5);
+    restore.classList.remove('press');
+
+    const panel = $('.settings-panel', stage);
+    const menu = document.createElement('div');
+    menu.className = 'filemenu';
+    menu.innerHTML = '<div class="filemenu-head">选择备份文件</div>'
+      + '<div class="file-item">' + ICO.file + 'tab_group_rule_bak.json<em>今天 09:12</em></div>'
+      + '<div class="filemenu-note">固定在「下载」里、同名原地覆盖，所以永远只有这一份</div>';
+    panel.appendChild(menu);
+    const pr = panel.getBoundingClientRect();
+    const br = restore.getBoundingClientRect();
+    const k = (pr.width / panel.offsetWidth) || 1;
+    menu.style.left = Math.round((br.left - pr.left) / k) + 'px';
+    menu.style.bottom = Math.round((pr.bottom - br.top) / k + 6) + 'px';
+    void menu.offsetHeight;
+    menu.classList.add('show');
+    await wait(sig, 680 * 1.5);
+    const file = $('.file-item', menu);
+    file.classList.add('hot');
+    await wait(sig, 640 * 1.5);
+    file.style.transform = 'scale(.98)';
+    await wait(sig, 130 * 1.5);
+    file.style.transform = '';
+    menu.classList.remove('show');
+    await wait(sig, 260 * 1.5);
+    menu.remove();
+    state.innerHTML = '<i class="bk-dot"></i>已恢复 12 组 / 34 域名';
+    state.classList.add('flash');
+    cvsToast(stage, '<b>已恢复 12 组 / 34 域名</b> 与 6 项外观设置', { ok: true });
+    await wait(sig, 1100 * 1.5);
+  }
+
+  const SCENES = [
+    scene0, scene1, scene2, scene3, scene4,
+    sceneMulti, sceneBatch, sceneDrag, sceneMedia, sceneRecent,
+    sceneArchive, sceneTheme, sceneRules, sceneBackup
+  ];
 
   /* ============================================================
      6. 播放控制
@@ -1493,7 +3207,7 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     sigs[i] = sig;
     const slide = slides[i];
     const stage = $('.stage', slide);
-    if (stage) resetStage(parts(slide));
+    if (stage && !stage.classList.contains('stage-split')) resetStage(parts(slide));
     Promise.resolve(SCENES[i](sig, slide)).catch(err => {
       if (err !== ABORT) console.error(err);
     });
@@ -1531,7 +3245,7 @@ body.on-dark .hud-brand { color: rgba(255,255,255,.4); }
     inc.classList.add('active');
     cur = n;
     dots.forEach((d, i) => d.classList.toggle('on', i === n));
-    setHudDark(inc.dataset.theme === 'dark');
+    // setHudDark(inc.dataset.theme === 'dark');
     runScene(n);
     if (out) {
       const o = out;

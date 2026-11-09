@@ -11,6 +11,7 @@ if (IS_STANDALONE) document.documentElement.classList.add('standalone');
 import { groupKey } from './core/format.js';
 import { showToast, resultsEl, rowByTabId, indexOfRow, input } from './core/dom.js';
 import { recentlyRestoredTabs, mediaTabIds, state, collapsed, searchCollapsed, saveCollapsed, activeCollapsed, tabItemByTabId } from './core/store.js';
+import { remapGroupOrder } from './core/group-order.js';
 import { IS_MAC, MOD, DEBUG } from './core/platform.js';
 // features
 import { loadRulesForEdit, isGroupPopOpen, closeGroupPop } from './features/rules.js';
@@ -24,6 +25,7 @@ import { initCloseBatch } from './features/close-batch.js';
 import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
 import { initBackup } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
+import { hasMultiSelection, clearMultiSelection, extendMultiSelection, closeMultiSelection } from './features/multi-select.js';
 import { initBlockCaret, refreshBlockCaret } from './features/caret.js';
 import { initRender, render, closeTab, switchTo, copyTabUrl, endEntrance } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
@@ -251,19 +253,16 @@ document.addEventListener('keydown', (e) => {
   }
   // ⌘C 复制 URL: 提到 isOtherInput 之前,保证在设置面板(焦点在控件上)也能用。
   // 若输入框里有选中文本则放行原生复制。
+  // 只认**选中行**: 没有选中行时连 preventDefault 都不做(把 ⌘C 还给浏览器原生复制),
+  // 也不用"当前窗口的激活标签"兜底 —— 那会让"复制"的对象与屏幕上的光标无关
   if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey)) {
     const sel = window.getSelection();
     if (!(sel && sel.toString())) {
-      let target = null;
       // focusedUnit 是 handleShortcuts 内部变量,这里用 navUnits() 找 active 行
       const anyActiveUnit = navUnits().find(u => u.classList.contains('active'));
-      if (anyActiveUnit && anyActiveUnit.classList.contains('tab-item')) {
-        target = state.filtered.find(f => f.tab.id === Number(anyActiveUnit.dataset.tabId));
-      }
-      if (!target) {
-        target = state.filtered.find(f => f.tab.active
-          && (state.currentWindowId == null || f.tab.windowId === state.currentWindowId));
-      }
+      const target = anyActiveUnit && anyActiveUnit.classList.contains('tab-item')
+        ? state.filtered.find(f => f.tab.id === Number(anyActiveUnit.dataset.tabId))
+        : null;
       if (target) { e.preventDefault(); copyTabUrl(target.tab); }
     }
   }
@@ -358,6 +357,11 @@ function expandCollapsedGroupHeader(headerEl) {
 function handleShortcuts(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
+    // 多选优先: 有选择时 Esc 只取消选择 —— 不清搜索词, 更不关窗
+    if (hasMultiSelection()) {
+      clearMultiSelection();
+      return;
+    }
     if (isSettingsOpen()) {
       closeSettingsPanel();
       return;
@@ -398,6 +402,12 @@ function handleShortcuts(e) {
     // ⚠️ 必须先于任何 .active 增删: 入场窗口内换选中, 旧行会重播 row-enter 而闪烁
     // (病例与机理见 render.js endEntrance 注释); flush=冲掉窗口内排队的追帧补渲染
     endEntrance(true);
+    // ⇧↑↓: 多选区间。光标自己跟着区间端点走(见 multi-select.extendMultiSelection),
+    // 区间从锚点重算 —— 往回走会收窄, 而不是一路叠加
+    if (e.shiftKey) {
+      extendMultiSelection(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
     const next = focusIdx + (e.key === 'ArrowDown' ? 1 : -1);
     if (next < 0 || next >= units.length) return;
     const el = units[next];
@@ -491,7 +501,12 @@ function handleShortcuts(e) {
         }
       }
     }
-    if (shouldDelete && inDeleteTarget) {
+    if (shouldDelete && hasMultiSelection()) {
+      // 多选态: ⌘⌫ 关掉所有选中行(70ms 错峰收起 + 撤销)。
+      // 不要求光标停在标签行上 —— 选择集自己就是靶子
+      e.preventDefault();
+      closeMultiSelection();
+    } else if (shouldDelete && inDeleteTarget) {
       e.preventDefault();
       const target = state.filtered.find(f => f.tab.id === Number(focusedUnit.dataset.tabId));
       if (!target) return; // 行数据已失效(重渲染竞态下旧行还在 DOM), 不动作避免误关
@@ -538,6 +553,8 @@ function remapGroupKey(oldKey, newKey) {
     }
   }
   if (changed) saveCollapsed();
+  // 分区座次同样挂在身份上: 不搬的话, 改个组名会让这个组按"新组"重新插位
+  remapGroupOrder(oldKey, newKey);
 }
 
 // 点按回弹: 快点点按(mousedown/mouseup 落在同一帧)时 :active 还没被画出来就没了 ——

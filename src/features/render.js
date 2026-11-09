@@ -3,18 +3,21 @@
 // 单向依赖: → search(刷新 filtered) / nav(光标) / settings(归档) / dnd(拖拽) /
 // media(媒体按钮) / undo(撤销) / core 各层;不依赖 main。
 import { escapeHtml, relativeTime, timeTier, displayUrl, hostOf, isBadTitle, cleanTitle, getChromeFaviconUrl, groupKey, distinguishingLabels } from '../core/format.js';
+import { groupOrderKey, arrangeGroupKeys, noteGroupOrder } from '../core/group-order.js';
 import { textToPinyin, fuzzyMatch, markText, matchField } from '../core/pinyin.js';
 import { resultsEl, input, showToast, rowByTabId, indexOfRow } from '../core/dom.js';
 import { buildInkBleedSvg, themeAssets } from '../core/colors.js';
 import { state, collapsed, searchCollapsed, saveCollapsed, activeCollapsed, mediaTabIds, tabItemByTabId } from '../core/store.js';
 import { MOD, DEBUG } from '../core/platform.js';
 import { search, searchValue } from './search.js';
-import { setActive, navUnits, scrollPastSticky } from './nav.js';
+import { setActive, navUnits, scrollPastSticky, clearActiveUnit } from './nav.js';
 import { buildMediaControls } from './media.js';
 import { showUndo } from './undo.js';
 import { archiveGroupAction } from './settings.js';
 import { moveTabToGroupAction, beginTabDrag, finishTabDrag } from './dnd.js';
 import { openTabMenu, openGroupMenu, closeContextMenu } from './contextmenu.js';
+import { collapseRows } from './row-anim.js';
+import { syncMultiSelectionUI, toggleMultiSelection } from './multi-select.js';
 
 let actions = null; // initRender 注入: { refreshData, getSettings }
 export function initRender(injected) {
@@ -157,6 +160,7 @@ function emptyMessage() {
 
 export function render() {
   hideTitleTooltip();
+  cancelCopyBadge(); // 全量重绘扔掉节点时, 浮标的定时器要跟着走
   const t0 = performance.now();
   // 记住重渲染前的焦点,重建后尽量恢复
   const prevUnit = navUnits().find(u => u.classList.contains('active'));
@@ -185,6 +189,7 @@ export function render() {
   }
   if (!state.filtered.length) {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
+    syncMultiSelectionUI(); // 列表空了, 选择集也跟着空
     scheduleEntranceEnd();
     return;
   }
@@ -232,6 +237,7 @@ export function render() {
     resultsEl.appendChild(frag);
     // ⚠️ 病例: 本路径早退曾经漏掉 scheduleEntranceEnd —— body.entrance 永远
     // 挂着, 窗口内的重渲染全被排队直到用户输入才冲掉
+    syncMultiSelectionUI(); // 重绘扔掉所有行节点, 选择态类必须重贴
     scheduleEntranceEnd();
     return;
   }
@@ -268,12 +274,13 @@ export function render() {
     resultsEl.appendChild(frag);
     restoreFocus(prevTabId);
     if (DEBUG) console.log(`[TGS] render(搜索) 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
+    syncMultiSelectionUI();
     scheduleEntranceEnd();
     return;
   }
 
   // 浏览模式: 按 (窗口, 分组) 分区,保持最近使用顺序
-  const sections = [];
+  let sections = [];
   const sectionIndex = new Map(); // key -> section
   for (const item of state.filtered) {
     const t = item.tab;
@@ -293,6 +300,26 @@ export function render() {
   const curIdx = sections.findIndex(s2 =>
     s2.items.some(it => it.tab.active && it.tab.windowId === state.currentWindowId));
   if (curIdx > 0) sections.unshift(sections.splice(curIdx, 1)[0]);
+
+  // 分区序的最终裁决: 记账本(core/group-order.js)优先, 数据序只在某个分区**首次出现**
+  // 时决定它插在哪。上面那条"当前组钉顶"因此只在首帧播种时起作用 —— 否则关掉激活标签
+  // 后 Chrome 换了激活标签, 整个列表会当场重排(这正是"批量关闭后跳到别处"的一半病根)。
+  // 另一半病根在时间戳上: 某组最新标签被关 ⇒ 该组 lastAccessed 降级 ⇒ 掉到后面;
+  // 记账本两个都治: 剩下能看见的组不换位, 被清空的组留座 12s 等撤销回来。
+  // 身份键撞车(同窗口允许有两个同名同色的组)时第二个起加序号 —— 不然 Map 会把一个
+  // 分区整块吞掉, 那一组的标签直接从列表里消失。
+  const keyOf = [];
+  const usedKeys = new Map();
+  for (const s of sections) {
+    const base = groupOrderKey(s.windowId, s.group);
+    const n = (usedKeys.get(base) || 0) + 1;
+    usedKeys.set(base, n);
+    keyOf.push(n === 1 ? base : `${base}#${n}`);
+  }
+  const byKey = new Map(sections.map((s, i) => [keyOf[i], s]));
+  const orderedKeys = arrangeGroupKeys(keyOf);
+  sections = orderedKeys.map(k => byKey.get(k));
+  noteGroupOrder(orderedKeys);
 
   // 分区只包含 state.filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
@@ -348,6 +375,9 @@ export function render() {
   }
   restoreFocus(prevTabId);
   if (DEBUG) console.log(`[TGS] render 耗时: ${(performance.now() - t0).toFixed(1)}ms, 行数: ${state.filtered.length}`);
+  // 选择集对着 state.filtered 剪枝 + 重贴 .multi-selected(搜索缩小范围后
+  // 不能把看不见的行留在选择里 —— 否则 ⌘⌫ 会关掉屏幕外的标签)
+  syncMultiSelectionUI();
   scheduleEntranceEnd();
 }
 
@@ -694,7 +724,15 @@ function buildTabRow(item) {
   // 不挂关闭按钮, 避免点了静默无效
   if (!isVirtualItem) row.appendChild(closeBtn);
 
-  row.addEventListener('click', () => switchTo(t));
+  row.addEventListener('click', (e) => {
+    // Shift+点击 = 勾选/取消一行(不切走标签)。选择集存代表 tabId, 见 multi-select.js
+    if (e.shiftKey) {
+      toggleMultiSelection(t.id);
+      input.focus(); // 点击会把焦点带到行上, 抢回搜索框保证 ⌘⌫ / Esc 继续可用
+      return;
+    }
+    switchTo(t);
+  });
 
   // 右键菜单: 虚拟条目(书签/历史, 负 id)不是真实标签, 没有关闭语义
   if (!isVirtualItem) {
@@ -724,6 +762,27 @@ function groupNeighbours(rows, idx) {
           prev && twin(prev) ? Number(prev.dataset.tabId) : null];
 }
 
+// 收起期间把光标挪到还活着的邻居行。正在收起的行只是"还没演完的残影",
+// 不能停光标 —— 连按 ⌘⌫ 落在它身上就是吞键。
+// 顺序与重绘后同一套: 晋升行 → 组内后继 → 组内前驱 → 原地
+function focusWhileClosing(rowIdx, promotedTabId, succId, predId) {
+  const rows = [...resultsEl.querySelectorAll('.tab-item')];
+  const live = r => !r.classList.contains('closing');
+  const idxOf = id => id == null ? -1
+    : rows.findIndex(r => Number(r.dataset.tabId) === id && live(r));
+  let target = idxOf(promotedTabId);
+  if (target < 0) target = idxOf(succId);
+  if (target < 0) target = idxOf(predId);
+  if (target < 0) target = rows.findIndex((r, i) => i >= rowIdx && live(r));
+  if (target < 0) target = rows.map(live).lastIndexOf(true);
+  if (target < 0) {
+    clearActiveUnit();
+    state.activeIndex = -1;
+    return;
+  }
+  setActive(target);
+}
+
 // 关闭标签页并从列表中移除该行,焦点迁移到相邻行; 底部提供限时撤销
 export async function closeTab(tabId) {
   // 防线: 虚拟条目(书签/历史/最近关闭, 负 id)没有关闭语义;
@@ -735,6 +794,7 @@ export async function closeTab(tabId) {
   }
   const rows = [...resultsEl.querySelectorAll('.tab-item')];
   const rowIdx = rows.findIndex(r => Number(r.dataset.tabId) === tabId);
+  const row = rowIdx >= 0 ? rows[rowIdx] : null; // 要收起的那一行(可能不在当前视图里)
   const closed = state.filtered.find(f => f.tab.id === tabId);
   const [succId, predId] = groupNeighbours(rows, rowIdx);
   try {
@@ -764,6 +824,15 @@ export async function closeTab(tabId) {
     state.allTabs = state.allTabs.filter(x => x.tab.id !== tabId);
   }
   search(searchValue()); // 从 state.allTabs 重建 state.filtered(晋升/移除都生效)
+
+  // 行要整条退场才演收起; 晋升副本时行留在原地(只换了代表), 不能收。
+  // 注意 remove 已经在上面落地(弹窗被点外面关掉也不会漏关), 动画只决定
+  // 节点何时退场 —— 绝不能把关闭动作押在动画后面。
+  const willVanish = !!row && !promotedTabId;
+  const anim = willVanish ? collapseRows([row]) : Promise.resolve();
+  // 焦点在收起开始前就离开这一行(跳过 .closing), 连按 ⌘⌫ 每下都落到新行
+  if (willVanish) focusWhileClosing(rowIdx, promotedTabId, succId, predId);
+  await anim; // 收起演完(减弱动态效果时立即 resolve)才重绘
   // 就地重渲染,并让焦点落到被关闭行的相邻行
   render();
   const newRows = [...resultsEl.querySelectorAll('.tab-item')];
@@ -817,13 +886,51 @@ export async function switchTo(tab) {
 }
 
 
-// 复制 tab 的 URL 到剪贴板,轻提示确认(不关弹窗,可连续复制多个)
+// ---- ⌘C 复制 URL 的行内浮标 ----
+// 回执落在**被复制的那一行**上, 而不是底部 toast: 连续复制多个时每次回执都贴着
+// 对应的行, 不用去底部对号。三套主题的样式在 popup.html(.copy-badge)。
+// 状态由 render 持有: render() 开头清场, 全量重绘扔掉节点时定时器也一起走。
+let copyBadgeTimer = 0;
+let copyBadgeNode = null;
+
+export function cancelCopyBadge() {
+  if (copyBadgeTimer) { clearTimeout(copyBadgeTimer); copyBadgeTimer = 0; }
+  if (copyBadgeNode) { copyBadgeNode.remove(); copyBadgeNode = null; }
+}
+
+function showCopyBadge(row) {
+  cancelCopyBadge();
+  const badge = document.createElement('span');
+  badge.className = 'copy-badge';
+  // 图标用 currentColor 描边, 主题只改 stroke 色(见 popup.html)
+  badge.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg><span>URL 已复制</span>';
+  row.appendChild(badge);
+  copyBadgeNode = badge;
+  // 强制一次样式结算再挂 .show: 同一任务内写起点+终点没有插值(浮标会直接
+  // 出现); 不用 rAF —— 弹窗页的 rAF 会被节流, 回执可能迟迟不出现
+  void badge.offsetWidth;
+  badge.classList.add('show');
+  // 2 秒后撤 .show(220ms 淡出), 再摘节点
+  copyBadgeTimer = setTimeout(() => {
+    badge.classList.remove('show');
+    copyBadgeTimer = setTimeout(() => {
+      badge.remove();
+      if (copyBadgeNode === badge) copyBadgeNode = null;
+    }, 240);
+  }, 2000);
+}
+
+// 复制 tab 的 URL 到剪贴板。浮标只出现在**选中行**上: 没有选中行 = 用户没指定
+// 复制对象, 直接不响应(键也不吞 —— 把 ⌘C 还给浏览器原生复制, 见 main.js)
 export async function copyTabUrl(tab) {
   const url = tab.url || '';
+  const row = rowByTabId(tab.id);
+  if (!row || !row.classList.contains('active')) return;
   try {
     await navigator.clipboard.writeText(url);
-    showToast(`已复制: ${displayUrl(url).slice(0, 40)}`);
+    showCopyBadge(row);
   } catch (err) {
+    // 失败必须吵, 且不该挂在某一行上
     console.error('复制失败:', err);
     showToast('复制失败,请重试');
   }

@@ -1,8 +1,10 @@
 // features/undo.js: 撤销关闭(组件)
 // 单关路径 showUndo 入栈+渲染;批量清理 pushUndo 逐个入栈后 renderUndoBanner。
-import { pushBanner, dismissBanner, pushStack } from '../core/dom.js';
+import { pushBanner, dismissBanner, pushStack, resultsEl } from '../core/dom.js';
 import { MOD } from '../core/platform.js';
 import { recentlyRestoredTabs, collapsed, saveCollapsed, searchCollapsed, state } from '../core/store.js';
+import { groupOrderSnapshot, seedGroupOrder } from '../core/group-order.js';
+import { expandRows } from './row-anim.js';
 
 let actions = null; // initUndo 注入: { refreshData, render, focusCurrentTab }
 export function initUndo(injected) { actions = injected; }
@@ -25,7 +27,12 @@ export function pushUndo(snapshot) {
 
 export async function persistUndoBatch(snapshots) {
   try {
-    await chrome.storage.session.set({ [UNDO_SESSION_KEY]: { snapshots, at: Date.now() } });
+    await chrome.storage.session.set({
+      // order: 关闭前的分区次序。目标含激活标签时 popup 会当场死, 撤销发生在**新** popup 里 ——
+      // 那边首帧只看得到"剩下的组", 不知道被清空的组原来站在哪。把记账本一起落下去,
+      // 撤销出来的组才回得到原座位(见 core/group-order.js)
+      [UNDO_SESSION_KEY]: { snapshots, order: groupOrderSnapshot(), at: Date.now() },
+    });
   } catch (e) {
     console.error('撤销快照落 session 失败:', e);
   }
@@ -44,6 +51,8 @@ export async function restoreUndoBatch() {
     if (!pending?.snapshots?.length) return;
     const age = Date.now() - (pending.at || 0);
     if (age >= UNDO_WINDOW_MS) { await clearUndoBatch(); return; }
+    // 先接回分区次序, 再让 undoStack 可撤 —— 撤销触发的那次 render 就要按这个座次落位
+    if (pending.order?.length) seedGroupOrder(pending.order);
     for (const snap of pending.snapshots) {
       if (!undoStack.some(x => x.tab?.id === snap?.tab?.id)) undoStack.push(snap);
     }
@@ -113,22 +122,8 @@ export async function doUndo() {
   const restoredTabIds = [];
   const newlyCreatedIds = [];
   const groupsToExpand = new Set();
-
-  // 获取撤销前当前列表中排在第一位的最新时间
-  const topAccessed = state.allTabs[0]?.tab?.lastAccessed || (Date.now() - 1000);
-
-  // 预先收集当前窗口中各分组已有标签的最大 lastAccessed
-  const groupMaxTimeMap = new Map();
-  for (const item of state.allTabs) {
-    const wId = item.tab?.windowId;
-    const gTitle = item.group?.title || '';
-    const gColor = item.group?.color || '';
-    const key = `${wId}|${gTitle}|${gColor}`;
-    const acc = item.tab?.lastAccessed || 0;
-    if (!groupMaxTimeMap.has(key) || acc > groupMaxTimeMap.get(key)) {
-      groupMaxTimeMap.set(key, acc);
-    }
-  }
+  // 兜底时间戳: 快照缺 lastAccessed 时也不许让恢复的标签顶到全场第一
+  const oldestAccess = state.allTabs[state.allTabs.length - 1]?.tab?.lastAccessed || 1;
 
   for (const snap of undoStack) {
     const t = snap?.tab;
@@ -158,23 +153,23 @@ export async function doUndo() {
       restoredTabIds.push({ tabId: created.id, snap });
       newlyCreatedIds.push(created.id);
 
-      // 计算安全的 lastAccessed:
-      // 若该组已有其他标签，其时间绝不超过已有标签的最大值，分组在全列表中的相对排位完全保持不变；
-      // 若该组无其他标签（整组被关），时间绝不超过全场第一位，绝不顶到第一位。
-      const gKey = `${snap.windowId}|${snap.groupTitle || ''}|${snap.groupColor || ''}`;
-      let safeLastAccessed = snap.tab?.lastAccessed || 1;
-      if (groupMaxTimeMap.has(gKey)) {
-        const groupMax = groupMaxTimeMap.get(gKey);
-        safeLastAccessed = Math.min(safeLastAccessed, groupMax > 1 ? groupMax - 1 : groupMax);
-      } else {
-        safeLastAccessed = Math.min(safeLastAccessed, topAccessed > 1 ? topAccessed - 1000 : 1);
-      }
+      // 恢复的标签带回**原始** lastAccessed —— 组内名次与组的相对时间原封不动地复原。
+      // 旧版把它压到"不超过本组已有最大值, 否则不超过全场第一"(safeLastAccessed):
+      // 那是分组序还从数据推出来的年代留下的补丁, 压一条够用, 压一批就两面崩 ——
+      //   ① 同组多条一起恢复时全被压到同一个上限值 ⇒ 组内名次全乱(谁前谁后看运气)
+      //   ② 整组被清空(Chrome 已回收该组)时只剩"不超过全场第一"这条,
+      //      重建的组一路被压到最底部 ⇒ 撤销后整组跳到列表末尾, 展开动画也在错的地方演
+      // 现在分区序由 core/group-order.js 的记账本掌管(组不乱搬家), 这里只要如实还原,
+      // 组内次序就与关闭前逐行对齐。缺失时间戳的脏快照才走兜底(垫到列表最旧之后)。
+      const restoredAccess = (typeof t.lastAccessed === 'number' && t.lastAccessed > 0)
+        ? t.lastAccessed
+        : oldestAccess;
 
       recentlyRestoredTabs.set(created.id, {
         title: t.title || t.url,
         url: t.url,
         favIconUrl: t.favIconUrl || '',
-        lastAccessed: safeLastAccessed,
+        lastAccessed: restoredAccess,
       });
       if (snap.groupTitle) {
         groupsToExpand.add(`${snap.groupTitle}|${snap.groupColor || 'grey'}`);
@@ -212,6 +207,13 @@ export async function doUndo() {
   // 强制 forceFresh 直查最新标签/分组, 绕过 background 2s 旧快照缓存
   await actions.refreshData({ forceFresh: true });
   actions.render();
+
+  // 展开动画: 在 render **之后**演 —— 恢复的行是这一帧才建出来的, 从 0 高展开
+  // 回自然高度(与删除时的收起同一套参数, 同一行"删掉再撤销"读成同一段倒放)。
+  // 不 await: 演不演不影响后面的光标落位; 减弱动效/入场窗口内 expandRows 自己会落位。
+  expandRows(restoredTabIds
+    .map(({ tabId }) => resultsEl.querySelector(`.tab-item[data-tab-id="${tabId}"]`))
+    .filter(Boolean));
 
   // 保持高亮停留在 [当前tab] (当前激活的标签页), 绝不定位到刚刚 undo 恢复出来的标签
   if (actions.focusCurrentTab) {

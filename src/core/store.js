@@ -11,12 +11,19 @@ export const recentlyRestoredTabs = new Map(); // tabId -> { title, url, favIcon
 // 首帧判断 has-media 并记入曾播放)
 export const mediaTabIds = new Set();
 
+// 多选集合(Shift 点选 / ⇧↑↓ 区间): 成员是**行的代表 tabId**, 不是 DOM 序号 ——
+// 重渲染/搜索都不该改变身份。居民: features/multi-select(增删/剪枝) /
+// features/render(渲染收尾重贴 .multi-selected) / main(⌘⌫/Esc 分支)
+export const multiSelected = new Set();
+
 // 跨域共享的标量状态(会被重新赋值,只能经对象属性读写):
 // activeIndex — 键盘光标位置(main 渲染域/键盘路由 与 features/nav 共享)
 // draggedTabInfo — 当前拖拽中的标签(main 渲染域的 dragstart/drop 与 features/dnd 共享)
+// multiAnchor — 多选锚点(⇧↑↓ 区间从它往外算)
 export const state = {
   activeIndex: -1,
   draggedTabInfo: null,
+  multiAnchor: null,
   // —— 任务 11 状态大迁移: 搜索/渲染/命令/视图的核心状态 ——
   allTabs: [],                 // 全量标签条目(loadTabs 重建)
   filtered: [],                // 当前展示条目(search 重建)
