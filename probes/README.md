@@ -13,7 +13,7 @@
 | `tgs-mouse.mjs` | content.js 鼠标位置跟随 | 3/3 |
 | `tgs-blur.mjs` | 独立窗口失焦自关的守卫(设置/分组弹层期间不自关) | 2/2 |
 | `tgs-discard.mjs` | 休眠(discarded)tab 被点击 → 显式 reload, 不落空白帧 | 2/2 |
-| `tgs-close-copy.mjs` | 删除收起动画(height 340ms 过渡 / 焦点先换行 / 连按不吞键 / 批量 70ms 错峰 / reduced-motion 退化) + ⌘C 行内浮标(三主题 token: ink 墨点底 / sky 徽章 12px 圆角且**无**云朵底图 / 不遮标题 / 2s 自动消失 / **无选中行时不复制不弹浮标也不吞键**) | 60/60 |
+| `tgs-close-copy.mjs` | 删除收起动画(height 340ms 过渡 / 焦点先换行 / 连按不吞键 / 批量 70ms 错峰 / reduced-motion 退化) + ⌘C 行内浮标(三主题 token: ink 墨点底 / sky 徽章 12px 圆角且**无**云朵底图 / **浮标是遮罩不是让位**(文字零位移 + mask 渐隐 + 无 padding 过渡) / 2s 自动消失 / **无选中行时不复制不弹浮标也不吞键**) | 76/76 |
 | `tgs-multiselect.mjs` | Shift 多选删除: ⇧点击勾选/取消 + ⇧↑↓ 区间(可扩可收) + ⌘⌫ 批量关闭(70ms 错峰、副本同行一起关、撤销条) + Esc 取消 + 单行删除不变 + 三主题底色走 token | 39/39 |
 | `tgs-caret.mjs` | 滑行光标: 原生 caret 透明 / 细竖线 2px / 位置=插入点文本宽 / 位移 90ms 补间(中间帧存在非端点 x) / 打字不闪+停手 420ms 慢闪 / blur 隐藏 / 拼音组合交还原生 caret | 15/15 |
 | `tgs-undo-expand.mjs` | 撤销删除(⌘Z)的展开动画: 行以 `.expanding` 从 0 高展开(340ms, 与收起同参) + 淡入 + 从右侧滑回 / 批量 70ms 错峰且 ≤420ms / 演完摘类 + 抹干净内联样式 / reduced-motion 不演 | 15/15 |

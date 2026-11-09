@@ -2,7 +2,7 @@
 // 守: ① 删除时行先收起(height 340ms 过渡 + 淡出), ~340ms 后才重渲染消失
 //     ② 焦点立刻离开正在收起的行(连按 ⌘⌫ 不吞键)
 //     ③ 批量删除多行同时收起且错峰(transitionDelay 递增)
-//     ④ ⌘C 成功 → 行内 .copy-badge 浮现 / 不遮标题 / 2s 后自动消失 / 底部无 toast
+//     ④ ⌘C 成功 → 行内 .copy-badge 浮现 / 遮罩住文字(位置不动, mask 渐隐) / 2s 后自动消失 / 底部无 toast
 //     ⑤ 减弱动态效果时退化为立即重渲染(不卡住行)
 Object.defineProperty(process.versions, 'node', { value: '20.0.0', configurable: true });
 const { chromium } = await import('/Users/qianyuchen/.npm/_npx/9833c18b2d85bc59/node_modules/playwright/index.mjs');
@@ -198,16 +198,9 @@ for (const theme of ['linear', 'ink', 'sky']) {
     const badge = badges[0];
     if (!badge) return { found: false };
     const row = badge.closest('.tab-item');
-    const title = row.querySelector('.title');
-    // 文字的**实际可见**占位: 单行省略时 range 会量到未截断的全文宽度,
-    // 所以取 range 与标题盒的较小者(被 ellipsis 截在盒内)
-    const range = document.createRange();
-    range.selectNodeContents(title);
-    const box = title.getBoundingClientRect();
-    const textRight = Math.min(range.getBoundingClientRect().right, box.right);
+    const info = row.querySelector('.tab-info');
     const b = badge.getBoundingClientRect();
     const span = badge.querySelector('span').getBoundingClientRect();
-    const t = { right: textRight };
     const cs = getComputedStyle(badge);
     const before = getComputedStyle(badge, '::before');
     const grow = {
@@ -237,9 +230,15 @@ for (const theme of ['linear', 'ink', 'sky']) {
       grow,
       textInside: span.top > b.top && span.bottom < b.bottom && span.left > b.left && span.right < b.right,
       rightGap: Math.round(row.getBoundingClientRect().right - b.right),
-      overlapsTitle: b.left < t.right - 1,
-      titleTextRight: Math.round(t.right),
       badgeLeft: Math.round(b.left),
+      badgeRight: Math.round(b.right),
+      // —— 遮罩态: 浮标盖在文字上而不是把文字挤走 ——
+      infoPadRight: parseFloat(getComputedStyle(info).paddingRight),
+      maskImage: (getComputedStyle(info).maskImage || getComputedStyle(info).webkitMaskImage || 'none'),
+      maskEndX: Math.round(info.getBoundingClientRect().right
+        - parseFloat(getComputedStyle(info).getPropertyValue('--copy-mask-end'))),
+      infoTransitions: info.getAnimations().map(a => a.transitionProperty),
+      lastUsedDisplay: getComputedStyle(row.querySelector('.last-used')).display,
       toasts: [...document.querySelectorAll('#pushStack .push-banner')]
         .map(x => x.textContent).filter(t => t.includes('复制')),
     };
@@ -247,8 +246,19 @@ for (const theme of ['linear', 'ink', 'sky']) {
   chk('浮标已插入并完全浮现', info.found && info.count === 1 && info.show && info.opacity > 0.9);
   chk('文案 = URL 已复制 + 复制图标', info.text === 'URL 已复制' && info.hasSvg);
   chk('挂在选中行上', info.rowIsActive);
-  chk('不遮挡标题(字不压在浮标下面)', info.overlapsTitle === false,
-    `text.right=${info.titleTextRight} < badge.left=${info.badgeLeft}`);
+  // 浮标是遮罩: 不再用 .tab-info 的右内边距让位(那是"URL 被挤短"的根源)
+  chk('行内边距没有被浮标撑开(不再让位)', info.infoPadRight === 0,
+    `pad-right=${info.infoPadRight}px`);
+  chk('tab-info 上没有 padding 过渡(没有缩短/回弹动画)', info.infoTransitions.length === 0,
+    info.infoTransitions.join(','));
+  chk('文字用 mask 在浮标左缘前淡出(浮标下面无字)',
+    info.maskImage.includes('linear-gradient') && info.maskEndX <= info.badgeLeft + 1
+    && info.maskEndX >= info.badgeLeft - 8,
+    `maskEnd=${info.maskEndX} badge.left=${info.badgeLeft} mask=${info.maskImage.slice(0, 60)}`);
+  chk('选中行的时间戳槽位让开(遮罩坐标才能对齐行右缘)', info.lastUsedDisplay === 'none',
+    `display=${info.lastUsedDisplay}`);
+  // 遮罩要"盖住文字": 有底的主题必须是不透明背景(alpha=1), ink 靠墨点 + mask 兜底
+  chk('浮标底色不透明(盖得住下面的字)', theme === 'ink' || /^rgb\(/.test(info.bg), `bg=${info.bg}`);
   chk('底部 toast(复制提示)已被行内浮标取代', info.toasts.length === 0, info.toasts?.join(' | '));
   // 文字必须被包住: ink/sky 的底图是"形状", 不是胶囊, 内边距尤其不能省
   chk('文字四边都在浮标盒内', info.textInside,
@@ -287,7 +297,7 @@ for (const theme of ['linear', 'ink', 'sky']) {
   await p.close();
 }
 
-// ── 4b. 长标题: 标题让位(省略号提前)而不是被浮标盖住 ──
+// ── 4b. 长标题: 文字的位置**不动()**, 由 mask 在浮标左缘前淡出 ──
 {
   console.log('\n[4b] 长标题 + 浮标');
   const p = await ctx.newPage();
@@ -308,26 +318,64 @@ for (const theme of ['linear', 'ink', 'sky']) {
   await p.goto(`chrome-extension://${id}/popup.html`);
   await p.waitForSelector('.tab-item');
   await p.waitForTimeout(700);
-  const before = await p.evaluate(() => Math.round(document.querySelector('.tab-item.active .title').getBoundingClientRect().right));
+  const before = await p.evaluate(() => {
+    const row = document.querySelector('.tab-item.active');
+    const title = row.querySelector('.title');
+    const r = document.createRange();
+    r.setStart(title.firstChild, 0); r.setEnd(title.firstChild, 3);
+    const head = r.getBoundingClientRect(); // 开头几个字: 浮标出现前后必须在原地
+    return { headLeft: Math.round(head.left), headRight: Math.round(head.right),
+      titleBoxRight: Math.round(title.getBoundingClientRect().right) };
+  });
   await press(p, 'c', { metaKey: true });
   await p.waitForTimeout(400);
   const d = await p.evaluate(() => {
     const row = document.querySelector('.tab-item.active');
-    const box = row.querySelector('.title').getBoundingClientRect();
+    const title = row.querySelector('.title');
+    const box = title.getBoundingClientRect();
     const badge = document.querySelector('.copy-badge').getBoundingClientRect();
     const info = row.querySelector('.tab-info');
-    const cs = getComputedStyle(info);
+    const r = document.createRange();
+    r.setStart(title.firstChild, 0); r.setEnd(title.firstChild, 3);
+    const head = r.getBoundingClientRect();
     return {
       titleBoxRight: Math.round(box.right), badgeLeft: Math.round(badge.left),
-      infoPadRight: cs.paddingRight,
-      ellipsisShown: row.querySelector('.title').scrollWidth > row.querySelector('.title').clientWidth,
+      headLeft: Math.round(head.left), headRight: Math.round(head.right),
+      infoPadRight: getComputedStyle(info).paddingRight,
+      infoTransitions: info.getAnimations().map(a => a.transitionProperty),
+      maskImage: (getComputedStyle(info).maskImage || getComputedStyle(info).webkitMaskImage || 'none'),
+      maskEndX: Math.round(info.getBoundingClientRect().right
+        - parseFloat(getComputedStyle(info).getPropertyValue('--copy-mask-end'))),
+      ellipsisShown: title.scrollWidth > title.clientWidth,
     };
   });
-  chk('长标题被截断(ellipsis 生效)', d.ellipsisShown === true);
-  chk('标题盒给浮标让了位(tab-info 右内边距 92px)', d.infoPadRight === '92px', `pad=${d.infoPadRight}`);
-  chk('标题盒右缘在浮标左侧', d.titleBoxRight < d.badgeLeft,
-    `title.right=${d.titleBoxRight} < badge.left=${d.badgeLeft} (浮标出现前 ${before})`);
+  chk('长标题仍然溢出(省略号还在, 只是被遮罩盖住)', d.ellipsisShown === true);
+  chk('标题**没有被挤**(开头的字一动不动)',
+    d.headLeft === before.headLeft && d.headRight === before.headRight,
+    `before=${before.headLeft}~${before.headRight} after=${d.headLeft}~${d.headRight}`);
+  chk('tab-info 右内边距没变(92px 让位规则已删)', d.infoPadRight === '0px', `pad=${d.infoPadRight}`);
+  chk('没有任何 padding 过渡在跑(没有缩短/回弹动画)', d.infoTransitions.length === 0,
+    d.infoTransitions.join(','));
+  chk('浮标遮罩生效: 文字在浮标左缘前已透明(无字从浮标上下缘探出)',
+    d.maskImage.includes('linear-gradient') && d.maskEndX <= d.badgeLeft + 1
+    && d.maskEndX >= d.badgeLeft - 8,
+    `maskEnd=${d.maskEndX} ≈ badge.left=${d.badgeLeft}`);
   await p.screenshot({ path: `${OUT}-longtitle.png`, clip: { x: 0, y: 100, width: 480, height: 140 } });
+  // 浮标退场后遮罩/时间戳槽位要还原(不然标题会永远缺一截)
+  await p.waitForTimeout(2300);
+  const back = await p.evaluate(() => {
+    const row = document.querySelector('.tab-item.active');
+    const info = row.querySelector('.tab-info');
+    return {
+      badges: document.querySelectorAll('.copy-badge').length,
+      maskImage: (getComputedStyle(info).maskImage || getComputedStyle(info).webkitMaskImage || 'none'),
+      lastUsedDisplay: getComputedStyle(row.querySelector('.last-used')).display,
+      infoPadRight: getComputedStyle(info).paddingRight,
+    };
+  });
+  chk('浮标退场后遮罩一起摘下', back.badges === 0 && back.maskImage === 'none',
+    `badges=${back.badges} mask=${back.maskImage}`);
+  chk('浮标退场后时间戳槽位还原', back.lastUsedDisplay !== 'none', `display=${back.lastUsedDisplay}`);
   await p.close();
 }
 

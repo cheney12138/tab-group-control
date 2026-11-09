@@ -2047,8 +2047,6 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      /* 复制浮标出现时给标题让出右侧空间(见 .copy-badge); 过渡让让位/收回不跳 */
-      transition: padding-right 0.2s ease;
     }
     /* 休眠徽标: 标题里 💤 前缀剥离后的小降权角标,信息保留但不抢标题视觉 */
     .sleep-mark {
@@ -2219,11 +2217,29 @@
       opacity: 1;
       transform: translateY(-50%) scale(1);
     }
-    /* 浮标浮在行右端时, 标题**让位**而不是被盖住: 给 .tab-info 右内边距,
-     * 标题/URL 的省略号提前收好, 浮标落下时下面永远是空白(不遮行内容)。
-     * 用 .tab-info 的内边距而不是行 padding-right —— 后者要跟三套主题的
-     * html[data-theme=…] .tab-item padding 打选择器权重架, 前者没人动过, 天然干净。 */
-    .tab-item:has(.copy-badge) .tab-info { padding-right: 92px; }
+    /* 浮标是**遮罩**, 不是邻居: 直接盖在标题/URL 上面, 被盖住的文字一个字都不动。
+     * 曾经用 `.tab-item:has(.copy-badge) .tab-info { padding-right: 92px }` 让位 ——
+     * 长标题会在浮标出现的 200ms 里被"挤短"一次, 收起时又长回来, 读成一段莫名的
+     * 收缩动画(用户口径: "URL 被挤过去, 有一个缩短的动画, 看起来奇怪")。
+     *
+     * 光让浮标不透明还不够: 浮标(24~30px 高)比一行字(17.5px)高, 居中时上下各压住
+     * 半行, 被压住那行的**字头/字尾会从浮标边缘探出来**(实测长标题能看见上半截字形)。
+     * 所以文字自身用 mask 在浮标左缘之前淡出: 位置分毫不动(没有重排), 只是隐掉。
+     * --copy-mask-end = 行右缘 → 文字完全消失处 = 36px(关闭按钮让位) + 浮标宽 - 行右内边距;
+     * 三个主题浮标宽度/行内边距都不同(linear 93-12 / sky 102-12 / ink 107-8), 各自给值。 */
+    .tab-item:has(.copy-badge) .tab-info {
+      --copy-mask-end: 117px; /* linear: 36 + 93 - 12 */
+      -webkit-mask-image: linear-gradient(to right,
+        #000 calc(100% - var(--copy-mask-end) - 22px), transparent calc(100% - var(--copy-mask-end)));
+      mask-image: linear-gradient(to right,
+        #000 calc(100% - var(--copy-mask-end) - 22px), transparent calc(100% - var(--copy-mask-end)));
+    }
+    html[data-theme="ink"] .tab-item:has(.copy-badge) .tab-info { --copy-mask-end: 139px; } /* 36 + 107 - 8 + 4(墨晕比盒缘还外扩, 多躲 4px) */
+    html[data-theme="sky"] .tab-item:has(.copy-badge) .tab-info { --copy-mask-end: 126px; } /* 36 + 102 - 12 */
+    /* 遮罩坐标是按 .tab-info 自己的右缘算的, 而 .last-used 还占着 40~55px —— 收掉它
+     * (选中行的时间戳本来就 opacity: 0, 收掉不会有人看见), 遮罩右缘才能和行的右缘对齐。
+     * 不用 width:0 是因为 title/url 的省略号会跟着窄 40px, 白白丢掉可见字符。 */
+    .tab-item:has(.copy-badge) .last-used { display: none; }
     .copy-badge svg {
       width: 11px;
       height: 11px;
@@ -2240,7 +2256,9 @@
      * preserveAspectRatio=none 拉伸时几乎不畸变。本体只留文字/图标, 形状永远
      * 比文字盒大一圈 —— 这是"文字不露头"的根, 不是靠调 padding 碰运气。
      * 本体尺寸比 linear 大一号(6px 13px 内边距 / 28px 最小高), 文字四周的
-     * 墨底因此至少有 6px, 图标与字不会顶到形状边缘。 */
+     * 墨底因此至少有 6px, 图标与字不会顶到形状边缘。
+     * 本体仍保持 background: transparent —— 墨点的不规则轮廓要靠透明才读得出来;
+     * 浮标底下的文字由 .tab-info 的 mask 隐掉(见上), 不靠不透明底挡。 */
     html[data-theme="ink"] .copy-badge {
       min-height: 28px;
       padding: 6px 13px;
@@ -2304,12 +2322,6 @@
       height: 11px;
       stroke: var(--accent);
     }
-    /* 标题让位。注意 .tab-info 右边还有时间戳兄弟节点占位, 所以这个值不是"浮标宽度",
-     * 实测长标题才定得准: 146px 会白让出一大条空白。三个值 = 各自浮标宽度 + 常量,
-     * 长标题实测的"浮标左缘 - 标题右缘"缝隙: linear 16.7px / ink 12.8px / sky 15.9px
-     * (视觉节奏一致, 差 3px 看不出来)。sky 的徽章比 linear 胶囊宽 8.9px, 故 92→100。 */
-    html[data-theme="ink"] .tab-item:has(.copy-badge) .tab-info { padding-right: 106px; }
-    html[data-theme="sky"] .tab-item:has(.copy-badge) .tab-info { padding-right: 100px; }
     @media (prefers-reduced-motion: reduce) {
       .copy-badge { transform: translateY(-50%); transition: opacity 0.2s ease; }
       .copy-badge.show { transform: translateY(-50%); }
