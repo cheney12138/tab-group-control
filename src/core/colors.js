@@ -42,6 +42,18 @@ export const SKY_GROUP_COLORS = {
   orange: '#C97F45', // 夕照橙
 };
 
+export const DEEPSEEK_GROUP_COLORS = {
+  grey: '#8B9DC3',   // 雾蓝灰
+  blue: '#4D6BFE',   // DeepSeek 蓝
+  red: '#E06C75',    // 珊瑚红
+  yellow: '#D4A756', // 琥珀金
+  green: '#56B6C2',  // 青碧
+  pink: '#C678DD',   // 紫粉
+  purple: '#7E57C2', // 紫罗兰
+  cyan: '#39A0ED',   // 天青
+  orange: '#E8956D', // 蜜橙
+};
+
 // 构造水墨风 100% 同款晕染墨团 SVG (支持按分组色动态渲染)
 export function buildInkBleedSvg(hex) {
   const c = encodeURIComponent(hex || '#2B2622');
@@ -83,6 +95,7 @@ export const THEME_ASSETS = {
   linear: { groupColors: GROUP_COLORS },
   ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, blotSvg: buildInkBleedSvg, tabSliderExtra: 6 },
   sky: { groupColors: SKY_GROUP_COLORS, blotSvg: buildSkyBleedSvg },
+  deepseek: { groupColors: DEEPSEEK_GROUP_COLORS },
 };
 export function themeAssets() {
   const t = document.documentElement.dataset.theme;
