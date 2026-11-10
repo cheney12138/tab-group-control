@@ -3541,6 +3541,20 @@
     html[data-theme="deepseek"] .accent-swatch[data-accent="orange"] { background: #E8956D; }
     html[data-theme="deepseek"] .accent-swatch[data-accent="rose"]   { background: #C678DD; }
 
+    /* ---- 资产: 大鲸鱼(DeepSeek 同款意象) — 空状态时浮在文案上方 ----
+     * 用户提供的鲸鱼图(透明底), 已裁剪缩放到 142x104 存于 img/whale.png */
+    html[data-theme="deepseek"] .empty::before {
+      content: "";
+      display: block;
+      width: 88px; height: 64px;
+      margin: 0 auto 14px;
+      background-repeat: no-repeat;
+      background-size: contain;
+      background-position: center;
+      background-image: url("../img/whale.png");
+      opacity: 0.9;
+    }
+
     /* ---- 资产: 归档卡片左侧点 = 「云朵群」(按分组自身色彩渲染) --------
      * 取自用户给的实拍参考(标准积云群): 多圆瓣叠成一团, 顶面受光近乎白、云底沉蓝灰影。
      * 五瓣积云 + 逐瓣高光 + 顶部亮 + 底部影 ⇒ 体积感; 与 ink 的圆晕墨点是形状级分野。
