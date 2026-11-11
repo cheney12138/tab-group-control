@@ -1623,6 +1623,24 @@
       margin-left: auto;
       flex: none;
     }
+    /* 同窗口同名分组徽章(异常态, docs/group-uniqueness.md): 两个同名组头否则长得
+     * 完全一样, 异常没人看得见。小号文字徽章而不是图标 —— “重名”两个字自己会说话,
+     * 也不与 amber 的重复**标签**徽章(数字圆点)撞形状。颜色走 --danger 系: 它不
+     * 是“丢弃”, 但它确实是个需要处理的毛病。跨窗口同名不挂。 */
+    .group-dup {
+      flex: none;
+      height: 16px;
+      line-height: 16px;
+      padding: 0 5px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--danger);
+      background: var(--danger-bg);
+      box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--danger) 32%, transparent);
+      cursor: help;
+    }
     /* 音浪状态指示: 播放时为 3 根细柱错峰起伏,暂停时直接为 3 个小圆点(无任何过渡)。
      * 采用中性浅灰 (var(--text-3)) 降噪; margin: 0 8px 留足左右间距;
      * 相对整行垂直绝对居中,不论是否显示 URL 均保持在整行中心轴 */
@@ -2736,6 +2754,26 @@
       background: linear-gradient(to bottom, var(--group-c), color-mix(in srgb, var(--group-c) 15%, transparent)) !important;
       mask-image: linear-gradient(to bottom, #000 0%, #000 65%, transparent 100%);
       -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 65%, transparent 100%);
+    }
+
+    /* 重名徽章在这些主题里的形态: ink 是宋体小字盖章(微圆角、无填充渐层),
+     * sky 是圆角胶囊。三主题共用 --danger 色, 不另起颜色变量。 */
+    html[data-theme="ink"] .group-dup {
+      height: 17px;
+      line-height: 17px;
+      padding: 0 5px;
+      border-radius: 2px;
+      font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    html[data-theme="sky"] .group-dup {
+      height: 17px;
+      line-height: 17px;
+      padding: 0 7px;
+      border-radius: 99px;
+      letter-spacing: 0.03em;
     }
 
     /* 结构性符号 3: 分组之间的分割线 → 手绘水墨波浪曲线 SVG,开阔呼吸留白 */

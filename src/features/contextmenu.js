@@ -22,7 +22,7 @@
 import { state } from '../core/store.js';
 import { loadCloseScope, loadScopeByKey, computeTargets, rowMemberIds, runCloseBatch } from './close-batch.js';
 import { archiveGroupAction } from './settings.js';
-import { openNewGroupCard, openEditGroupCard, dissolveGroupAction, removeFromGroupAction } from './group-edit.js';
+import { openNewGroupCard, openEditGroupCard, dissolveGroupAction, removeFromGroupAction, mergeDupGroupsAction } from './group-edit.js';
 
 // 菜单自己不碰数据: 靶子算完直接交给 close-batch 的 runCloseBatch(它负责撤销条与刷新)。
 // 所以本模块**没有 initX 接线**, 不存在"忘了初始化"这种失灵模式。
@@ -177,8 +177,17 @@ export async function openGroupMenu(group, scopeWindowId, x, y) {
   closeContextMenu();
   const token = ++openToken;
   const windowId = group ? group.windowId : (scopeWindowId ?? state.currentWindowId);
-  const scope = await loadScopeByKey(windowId, group ? group.id : GROUP_NONE);
+  // “同窗口有没有同名组”在**开菜单这一刻**重查一次, 不信 render 传下来的快照:
+  // 菜单本身是异步打开的(loadScopeByKey), 中间 tidy 可能已经把它们合了。
+  // 只查本窗口 —— 跨窗口同名是合法的, 不该给合并入口。
+  const [scope, sameName] = await Promise.all([
+    loadScopeByKey(windowId, group ? group.id : GROUP_NONE),
+    group?.title
+      ? chrome.tabGroups.query({ title: group.title, windowId }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
   if (token !== openToken || !scope) return;
+  const hasDup = sameName.length > 1;
 
   const all = computeTargets(scope, 'all', null);
   const label = group
@@ -187,7 +196,12 @@ export async function openGroupMenu(group, scopeWindowId, x, y) {
   const spec = [{ label, danger: true, run: () => runCloseBatch(scope, all.ids) }];
   if (group) {
     spec.push({ sep: true });
-    // 分组编辑(手动): 与规则引擎发身份的路径平行 —— 名字/颜色是"身份"本身,
+    // 合并同名分组: 只在**本窗口真有同名组**时出现(异常态, 见 docs/group-uniqueness.md)。
+    // 不标红 —— 它不是“丢弃”而是修复; 排最上, 与下面三个组级动作成一类
+    if (hasDup) {
+      spec.push({ label: '合并同名分组', run: () => mergeDupGroupsAction(scope.group || group) });
+    }
+    // 分组编辑(手动): 与规则引擎发身份的路径平行 —— 名字/颜色是“身份”本身,
     // 改名撞车由 background 拒绝(改名不是合并), 规则组的名字连着规则键
     // 卡片要用**刚查到的**组(scope.group)预填名字与颜色 —— 传给本函数的 group 是
     // 渲染那一刻的快照, 中间若在别处改过名/改过色, 卡片会预填一个过期值

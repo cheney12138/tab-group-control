@@ -667,6 +667,28 @@ if (IS_STANDALONE) {
   });
 }
 
+// 唤起时请 background 整理分组(同名合并+空组清理)。此前是纯 fire-and-forget:
+// MV3 worker 休眠 / 冷启动时的 sendMessage 可能没有任何应答方, 消息就静默丢了 ——
+// 整理没跑, 重复组就一直留在下次唤起之后的列表里(用户看到的就是“同窗口两个同名组”)。
+// 现在等应答(3s 超时)确认真的送到了; 超时/报错静默补发一次。仍然不阻塞渲染:
+// 整段是异步的, 首帧早就画完了。
+const TIDY_TIMEOUT_MS = 3000;
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('tidy timeout')), ms)),
+  ]);
+}
+async function requestTidyGroups() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await withTimeout(
+        chrome.runtime.sendMessage({ type: 'tidy-groups' }), TIDY_TIMEOUT_MS);
+      if (resp?.ok) return;
+    } catch (e) { /* worker 冷启动/通道未就绪: 补发一次 */ }
+  }
+}
+
 (async () => {
   const bootT0 = performance.now();
   // ⌘E 唤起为独立窗口(设置"唤起为独立窗口"): 弹出面板只当"转发器" ——
@@ -713,9 +735,9 @@ if (IS_STANDALONE) {
       if (!state.searching) focusCurrentTab();
     }
   }, 1000);
-  // 唤起时异步触发分组整理(同名合并+空组清理),在 background 静默执行,
-  // 不阻塞弹窗;整理结果由下一次唤起自然看到
-  chrome.runtime.sendMessage({ type: 'tidy-groups' }).catch(() => {});
+  // 唤起时异步触发分组整理(同名合并+空组清理), 在 background 静默执行,
+  // 不阻塞弹窗; 整理结果由下一次唤起自然看到(重发次数上限已封顶在 requestTidyGroups)
+  requestTidyGroups();
   // 初始化设置按钮的归档未读小圆点(仅在有未读时亮起, 不常驻)
   chrome.storage.local.get(['archivedGroups', 'hasArchiveUnread']).then(s => {
     const count = Array.isArray(s?.archivedGroups) ? s.archivedGroups.length : 0;

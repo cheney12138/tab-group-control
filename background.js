@@ -901,13 +901,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     enqueueGroupOp(() => dissolveGroup(groupId)).then(reply, fail);
     return true;
   }
+
+  // 合并同窗口同名分组(组头右键, 见 render 的 dup 标记): 用户看见异常态后的显式
+  // 修复动作, 与 tidyGroups 的自动兜底是同一套动作、同一套竞态纪律 —— 走队列,
+  // 与 autoGroupTab 对同名组的 query→group 互斥
+  if (msg?.type === 'merge-dup-groups') {
+    const { windowId, title } = msg || {};
+    if (!title || !(windowId > 0)) {
+      sendResponse({ ok: false, error: '参数无效' });
+      return;
+    }
+    enqueueGroupOp(() => mergeDupGroups({ windowId, title })).then(reply, fail);
+    return true;
+  }
 });
 
 // ---- 分组整理: 同名合并 + 空组清理 ----
-let tidying = false;
-async function tidyGroups() {
-  if (tidying) return;
-  tidying = true;
+// 单例化: 唤起时的 tidy-groups 与规则保存链可能同时触发。后来者拿到的是**正在跑**的
+// 那个 Promise —— mergeDupGroups 要能等它落定(两边都在搬同名组的标签/删空组, 交错
+// 会互相踩), 光靠一个 boolean 只能"跳过", 没法"等一等"。
+let tidyInFlight = null;
+function tidyGroups() {
+  if (tidyInFlight) return tidyInFlight;
+  tidyInFlight = doTidyGroups().finally(() => { tidyInFlight = null; });
+  return tidyInFlight;
+}
+
+// 空组收尸: Chrome 没有删组 API, 只能往里塞一个一次性临时标签再关掉, 组随之被回收。
+// tidyGroups 与 mergeDupGroups 共用(重复组合并后留下的空壳也走这条路)
+async function collapseEmptyGroup(group) {
+  try {
+    const [tmp] = await chrome.tabs.create({
+      url: 'about:blank', active: false, windowId: group.windowId,
+    });
+    await chrome.tabs.group({ tabIds: [tmp.id], groupId: group.id });
+    await chrome.tabs.remove(tmp.id);
+    return true;
+  } catch (e) {
+    return false; // 组可能已被合并顺带删除
+  }
+}
+
+async function doTidyGroups() {
   try {
     const [groups, tabs] = await Promise.all([
       chrome.tabGroups.query({}),
@@ -956,14 +991,7 @@ async function tidyGroups() {
 
     let removed = 0;
     for (const g of emptyGroups) {
-      try {
-        const [tmp] = await chrome.tabs.create({
-          url: 'about:blank', active: false, windowId: g.windowId,
-        });
-        await chrome.tabs.group({ tabIds: [tmp.id], groupId: g.id });
-        await chrome.tabs.remove(tmp.id);
-        removed += 1;
-      } catch (e) { /* 组可能已被合并顺带删除 */ }
+      if (await collapseEmptyGroup(g)) removed += 1;
     }
 
     if (tabsMoved > 0 || removed > 0) {
@@ -972,7 +1000,42 @@ async function tidyGroups() {
     }
   } catch (e) {
     console.error('分组整理失败:', e);
-  } finally {
-    tidying = false;
   }
+}
+
+// ---- 同窗口同名分组: 显式合并(组头右键「合并同名分组」) ----
+// tidyGroups 是唤起时的自动兜底, 这条是用户看见 dup 标记后的手动修复。口径与 tidy
+// 一致: 同一窗口内所有同名组 → 第一个为 keeper, 其余组的标签搬进去, 搬空的壳用
+// 临时标签法收尸。**只按窗口隔离**: 跨窗口的同名组是合法的, 一根标签都不动。
+async function mergeDupGroups({ windowId, title }) {
+  // 整理正在跑就先等它落定(见 tidyInFlight 注释): 两边同时搬同一批标签会互相踩
+  if (tidyInFlight) await tidyInFlight.catch(() => {});
+  const groups = await chrome.tabGroups.query({ title, windowId });
+  if (groups.length < 2) return { merged: 0, tabs: 0, removed: 0 };
+  const keeper = groups[0];
+  const others = groups.slice(1);
+  const tabs = await chrome.tabs.query({ windowId });
+  let moved = 0;
+  for (const g of others) {
+    const members = tabs.filter(t => t.groupId === g.id);
+    if (!members.length) continue;
+    try {
+      await chrome.tabs.group({ tabIds: members.map(t => t.id), groupId: keeper.id });
+      moved += members.length;
+    } catch (e) {
+      console.error('合并同名分组失败:', g.title, e);
+    }
+  }
+  // 搬完重查存活标签: 只剩真·空壳才收尸(已经被 Chrome 回收的组, 临时标签法会失败)
+  const left = await chrome.tabs.query({ windowId });
+  let removed = 0;
+  for (const g of others) {
+    if (left.some(t => t.groupId === g.id)) continue;
+    if (await collapseEmptyGroup(g)) removed += 1;
+  }
+  if (moved || removed) {
+    console.log(`[TGS] 合并同名分组「${title}」: 并入 ${moved} 个标签, 删除 ${removed} 个空组`);
+    refreshSnapshot();
+  }
+  return { merged: others.length, tabs: moved, removed };
 }

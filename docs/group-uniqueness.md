@@ -12,7 +12,9 @@
 |---|---|---|
 | `attachTabToGroup` 建组/并入 | background.js:171 | ✅ 同窗口 query 同名 → 并入，无 → 新建 |
 | `enqueueGroupOp` 串行队列 | background.js:158 | ✅ background 自身归组操作全部排队 |
-| `tidyGroups` 同名合并+空组清理 | background.js:588 | ✅ 兜底，触发点：规则保存链 / popup 唤起消息 |
+| `tidyGroups` 同名合并+空组清理 | background.js | ✅ 兜底, 触发点：规则保存链 / popup 唤起消息 |
+| `mergeDupGroups` 显式合并同名组(`merge-dup-groups`) | background.js | ✅ 走 `enqueueGroupOp`, 只按窗口隔离 |
+| `collapseEmptyGroup` 空组收尸 | background.js | ✅ tidy / merge 共用（临时标签法） |
 | 规则删除清理 `cleanupRemovedRules` | background.js:480 | ✅ 走队列迁移，不建组 |
 
 ### popup.js（手动操作侧）
@@ -24,6 +26,7 @@
 | `regroupRestored` 撤销关闭恢复 | popup.js:1429 | ✅ 只并入不新建（但跨窗口查找，见"遗留观察"） |
 | `moveTabToGroupAction` 拖拽移动 | popup.js:2506 | ✅ 目标是已有组 id，不建组 |
 | 规则编辑器同名组 | popup.js:2988 | ❌ **口子 2**：对象 key 覆盖，域名静默丢失 |
+| `mergeDupGroupsAction` 合并同名组 | src/features/group-edit.js | ✅ 只发消息，由 background 排队执行 |
 | JSON 导入 name 未 trim | popup.js:3017 | ❌ **口子 4**：与编辑器 trim 后 key 撞车 |
 | popup 建组不进 bg 队列 | — | ❌ **口子 3**：与 autoGroupTab 并发可双建（低概率，tidy 兜底） |
 
@@ -68,9 +71,24 @@
   说明：`moveTabToGroupAction`（拖拽）目标是已有组 id 不建组，无重复组风险，未纳入队列。验证：双文件 `node --check` 通过。
 - **待确认**：用户确认
 
-## 三、遗留观察（本次不修，记录备查）
+### 口子 5：同窗口同名组无人善后，tidy 消息还可能丢掉（2026-11-11）
+- **现象**：用户截图反馈同窗口出现两个同名 `codedev` 组。两个组头长得**完全一样**——异常不可见，用户不知道可以处理，也不知道发生过什么。
+- **根因**（两层）：
+  1. popup 唤起时的 `tidy-groups` 是 fire-and-forget：MV3 worker 休眠 / 冷启动时消息可能没有应答方，整理压根没跑，而发起方也无从得知；
+  2. 即便 tidy 真的没跑成（或建组竞态先造出了重复组），面板也没有任何“这是异常”的信号——只能等下一次唤起碰运气。
+- **修法**（四处联动）：
+  1. **消息可靠**（src/main.js）：`requestTidyGroups()` 改为 await 应答 + 3s 超时；超时/报错静默补发一次（上限两次），仍不阻塞首帧（整段异步，首帧早画完了）；
+  2. **异常可见**（src/features/render.js）：浏览模式分区后按 `windowId + title` 统计同名组，重复的组头挂 `.group-dup` 「重名」徽章，title = 「同窗口存在同名分组, 右键可合并」。**跨窗口同名合法，一根都不标**；颜色不同也算重复（tidy / merge 都只按名字合）；
+  3. **一键修复**（contextmenu.js + group-edit.js）：组头右键**开菜单时重查一次**同窗口同名组（不信 render 快照，中间可能已被 tidy 收掉），有则加「合并同名分组」；`mergeDupGroupsAction` 发 `merge-dup-groups` 消息，popup 自己不碰 `tabs.group`（ADR-0007）；
+  4. **背景执行**（background.js）：`merge-dup-groups` 走 `enqueueGroupOp`；`mergeDupGroups` 第一组为 keeper，其余组标签搬入，空壳用抽出的 `collapseEmptyGroup()` 收尸。tidy 改成 Promise 单例（`tidyInFlight`），合并前先等正在跑的 tidy 落定——以前一个 boolean 只能“跳过”，没法“等一等”。
+- **验证**：`probes/tgs-dup-groups.mjs` 18/18（同窗两个同名组 → 两端都带徽章 / 跨窗口同名 → 不标且菜单无合并项 / 点合并 → 标签归入第一组、空组消失、徽章消失、toast 回报）；`node --check` background.js + src 四个文件通过；`tgs-verify` 11/11、`tgs-group-order` 5/5、`tgs-multiselect-order` 19/19 无回归；真实扩展环境手动脚本确认 `merged=1`、两个标签落在同一组（Chrome 自己即时回收空壳，所以 `removed=0`——临时标签法本就没来得及上）。
+- **待确认**：用户确认
 
+## 三、遗留观察（本次不修，记录备查）
 1. **恢复归档标签可能被自动分组抢走**：tabs.create 触发 background `onCreated → autoGroupTab` 时 `manualTabIds` 尚未写入；且归档组名恰好是规则组名时不写白名单——若归档标签 url 不命中该规则，恢复后被 `doAutoGroupTab` 判"在规则组但 url 不命中"→ 迁去 Others，恢复组瞬间被拆空。
 2. **`regroupRestored` 跨窗口并组**（popup.js:1426）：`query({})` 全局找同名+同色，可能把恢复的标签拉进另一个窗口的组；background 侧处处按窗口隔离，这里没隔离。
 3. **tidy keeper 颜色漂移**：`tidyGroups` 按 query 顺序取第一个同名组为 keeper，合并后颜色未必是 `colorForGroup` 的规则色。
 4. **大小写敏感**：`tabGroups.query({title})` 精确匹配区分大小写，「Work」/「work」会并存成两个组，编辑器无感知。如需视为同组，去重时做大小写折叠。
+5. **dup 标记只在浏览模式**：搜索模式按 `groupKey`（名|色）聚合，同名同色的两个组会并成一个分区显示（标签不丢），那里既没有「重名」徽章也吃不到「合并同名分组」入口——要在搜索态合并得先清空查询。属有意为之：搜索态的分区本来就不是“运行时分组实例”，拿它做破坏性动作会违反 ADR-0005 轴二。
+6. **两处口径不完全对齐（有意）**：dup 徽章只看“窗口 + 组名”，而 `keyOf` 的撞车序号仍按 `groupKey`（名|色）。所以同名不同色的两个组会**带徽章但没有 `#2` 后缀**——徽章对齐的是“能不能合并”（tidy/merge 都按名字合），座位身份对齐的是“记账本跨渲染稳定”，两件事本就不该用一把尺子。
+7. **合并只按窗口隔离，大小写仍不折叠**：`merge-dup-groups` 用 `tabGroups.query({title, windowId})` 精确匹配，`Work`/`work` 不会被一起收掉（见第 4 条）。真要收，得在这里先做大小写折叠再分批合并。

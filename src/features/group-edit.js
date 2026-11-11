@@ -286,6 +286,30 @@ export async function dissolveGroupAction(group) {
   actions.render();
 }
 
+// 合并同窗口同名分组(组头右键, 仅在组头带 dup 徽章时出现)。
+// 这是**异常态的显式修复**: tidy 的自动兜底没跑成(worker 休眠/建组竞态)时,
+// 用户看见“重名”徽章可以亲手收掉。建组/并组一律过 background 队列(ADR-0007),
+// popup 不直接碰 tabs.group —— 否则会与 autoGroupTab 双 query 双 miss 各建一个。
+export async function mergeDupGroupsAction(group) {
+  if (!group || !(group.id > 0) || !group.title) return;
+  const resp = await sendToBackground({
+    type: 'merge-dup-groups', windowId: group.windowId, title: group.title,
+  });
+  if (!resp.ok) {
+    showToast(`合并失败: ${resp.error || '未知错误'}`);
+    return;
+  }
+  if (!resp.merged) {
+    // 开菜单到点下去之间可能已被 tidy 收掉(或另一个窗口的组不在此列): 不算失败
+    showToast(`「${group.title}」已经没有重复分组了`);
+  } else {
+    showToast(`已合并「${group.title}」: ${resp.merged} 个重复分组收进第一个组`
+      + (resp.tabs ? `, 迁入 ${resp.tabs} 个标签` : ''));
+  }
+  await actions.refreshData({ forceFresh: true });
+  actions.render();
+}
+
 // 移出分组(标签行右键): 行整体移出(代表 + 同组副本)。单个标签的移出走拖拽,
 // 但拖拽只能"拖进"组, 没有"拖出去"的手势 —— 菜单补上这个缺口
 export async function removeFromGroupAction(tabIds) {

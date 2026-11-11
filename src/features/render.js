@@ -321,6 +321,22 @@ export function render() {
   sections = orderedKeys.map(k => byKey.get(k));
   noteGroupOrder(orderedKeys);
 
+  // 同窗同名分组 = 异常态(docs/group-uniqueness.md)。Chrome 允许同窗口并存同名组,
+  // 没有删组 API, 只能靠 tidy 兜底合并 —— 兜底没跑成(worker 休眠 / 建组竞态)时就
+  // 老老实实摆在列表里, 而两个同名组头看起来**一模一样**。给它们挂一个 dup 标记 +
+  // 右键“合并同名分组”, 让异常看得见、也能一键收掉。
+  // 判定只看 **窗口 + 组名**: 颜色不同也算重复(tidy / merge 都只按名字合), 而
+  // 跨窗口同名完全合法(每个窗口各有一个「工作」很正常), 一根都不标。
+  const sameTitle = new Map();
+  for (const section of sections) {
+    const title = section.group?.title;
+    if (!title) continue; // 未分组不是组, 没有“名字”
+    const k = `${section.windowId}|${title}`;
+    sameTitle.set(k, (sameTitle.get(k) || 0) + 1);
+  }
+  const isDupGroup = (group, windowId) =>
+    !!group?.title && (sameTitle.get(`${windowId}|${group.title}`) || 0) > 1;
+
   // 分区只包含 state.filtered 里实际有标签的分组: 组内最后一个标签被关掉后,
   // 该组不会出现在 sections,分组头自然消失
   const maxCount = sections.reduce((m, s) => Math.max(m, s.items.length), 0);
@@ -331,12 +347,13 @@ export function render() {
     const key = groupKey(section.group);
     // 搜索模式下强制全部展开,只有空查询浏览时才应用收起状态
     const isCollapsed = collapsed.has(key);
+    const isDup = isDupGroup(section.group, section.windowId);
     frag.appendChild(buildGroupHeader(section.group, section.items.length, isCollapsed, () => {
       if (collapsed.has(key)) collapsed.delete(key);
       else collapsed.add(key);
       saveCollapsed();
       render();
-    }, maxCount, section.windowId)); // 未分组分区必须带上自己的窗口, 否则会关错窗口
+    }, maxCount, section.windowId, isDup)); // 未分组分区必须带上自己的窗口, 否则会关错窗口
 
     if (!isCollapsed) {
       section.items.forEach(item => {
@@ -398,7 +415,10 @@ function restoreFocus(prevTabId) {
 //   而不分窗口的浏览模式会把每个窗口的未分组标签各排一个分区 —— 不把窗口传下来,
 //   右键任意一个都会去关「当前窗口」那一堆(错窗口)。搜索模式未分组分区是跨窗口合并的
 //   (哨兵 __ungrouped__), 传 null ⇒ 回落到 state.currentWindowId。
-function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWindowId = null) {
+// isDup: 本分区属于“同窗口存在同名分组”的异常态(见 render 的 sameTitle)。
+//   只在组头挂个小徽章 + 告诉右键菜单“可以合并”, 不改任何数据 —— 收场由
+//   background 的 merge-dup-groups 做, 渲染层不碰 chrome.tabGroups。
+function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWindowId = null, isDup = false) {
   const header = document.createElement('div');
   header.className = 'group-header' + (isCollapsed ? ' collapsed' : '');
   // 组头本身不入场(锚定, 见 popup.html), 但它仍是"一次展开"的节拍边界:
@@ -436,6 +456,17 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWin
     name.textContent = '未分组';
   }
   header.appendChild(name);
+  if (isDup) {
+    // 异常态徽章: 两个同名组头否则长得完全一样, 用户根本没线索知道这是异常。
+    // 文案用“重名”而不是“重复” —— 重复在本面板里指的是重复标签(amber 徽章)。
+    const dupBadge = document.createElement('span');
+    dupBadge.className = 'group-dup';
+    dupBadge.textContent = '重名';
+    dupBadge.title = '同窗口存在同名分组, 右键可合并';
+    dupBadge.setAttribute('aria-label', dupBadge.title);
+    header.appendChild(dupBadge);
+    header.dataset.dup = '1';
+  }
   if (count != null) {
     // 迷你条形图: 长度∝组内标签数/最大组,不读数字扫一眼知轻重
     if (maxCount > 1) {
