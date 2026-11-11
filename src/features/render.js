@@ -16,7 +16,7 @@ import { showUndo } from './undo.js';
 import { archiveGroupAction } from './settings.js';
 import { moveTabToGroupAction, beginTabDrag, finishTabDrag } from './dnd.js';
 import { openTabMenu, openGroupMenu, closeContextMenu } from './contextmenu.js';
-import { collapseRows } from './row-anim.js';
+import { collapseRows, collapseHeaders, vanishingHeaders } from './row-anim.js';
 import { syncMultiSelectionUI, toggleMultiSelection } from './multi-select.js';
 
 let actions = null; // initRender 注入: { refreshData, getSettings }
@@ -861,9 +861,12 @@ export async function closeTab(tabId) {
   // 节点何时退场 —— 绝不能把关闭动作押在动画后面。
   const willVanish = !!row && !promotedTabId;
   const anim = willVanish ? collapseRows([row]) : Promise.resolve();
+  // 这是组里最后一行时, 分组头也一起收 —— 否则行收完后头要等到重渲染才
+  // 突然消失, 读成"愣了一拍才没"。头比行晚 70ms 起步, Promise.all 等两边都演完
+  const headerAnim = willVanish ? collapseHeaders(vanishingHeaders([row])) : Promise.resolve();
   // 焦点在收起开始前就离开这一行(跳过 .closing), 连按 ⌘⌫ 每下都落到新行
   if (willVanish) focusWhileClosing(rowIdx, promotedTabId, succId, predId);
-  await anim; // 收起演完(减弱动态效果时立即 resolve)才重绘
+  await Promise.all([anim, headerAnim]); // 收起演完(减弱动态效果时立即 resolve)才重绘
   // 就地重渲染,并让焦点落到被关闭行的相邻行
   render();
   const newRows = [...resultsEl.querySelectorAll('.tab-item')];

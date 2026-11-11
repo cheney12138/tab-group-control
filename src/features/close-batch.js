@@ -18,7 +18,7 @@
 import { resultsEl } from '../core/dom.js';
 import { tabItemByTabId, recentlyRestoredTabs } from '../core/store.js';
 import { pushUndo, renderUndoBanner, persistUndoBatch } from './undo.js';
-import { collapseRows } from './row-anim.js';
+import { collapseRows, collapseHeaders, vanishingHeaders } from './row-anim.js';
 
 let actions = null; // initCloseBatch 注入: { refreshData, render, dropTabs }
 export function initCloseBatch(injected) { actions = injected; }
@@ -131,7 +131,10 @@ export async function runCloseBatch(scope, targetIds) {
   const ids = targets.map(t => t.id);
   // 多行一起收起(70ms 错峰)。数据层还没动, 但动画只是行的退场 ——
   // remove 紧随其后, 不等动画演完
-  const anim = collapseRows(rowsOf(ids), { stagger: 70 });
+  const rows = rowsOf(ids);
+  const anim = collapseRows(rows, { stagger: 70 });
+  // 整组行都被关掉时, 分组头也一起收(头晚 70ms 起步, 跟着行漏下去)
+  const headerAnim = collapseHeaders(vanishingHeaders(rows));
   try {
     await chrome.tabs.remove(ids);
   } catch (e) {
@@ -148,7 +151,7 @@ export async function runCloseBatch(scope, targetIds) {
   }
   actions.dropTabs?.(new Set(ids));
   renderUndoBanner();
-  await anim; // 收起演完才重绘(节点随重绘退场)
+  await Promise.all([anim, headerAnim]); // 行与分组头都收完才重绘(节点随重绘退场)
   await actions.refreshData({ forceFresh: true });
   actions.render();
   return ids.length;
@@ -176,8 +179,11 @@ export async function closeTabsByIds(ids) {
   }
   for (const snap of snapshots) pushUndo(snap);
 
-  // 收起动画先开演(多选是"一次关一堆", 70ms 错峰让退场读成一片)
-  const anim = collapseRows(rowsOf(list), { stagger: 70 });
+  // 收起动画先开演(多选是"一次关一堆", 70ms 错峰让退场读成一片);
+  // 某个组的行被整组选中时, 那个组的头也一起收
+  const rows = rowsOf(list);
+  const anim = collapseRows(rows, { stagger: 70 });
+  const headerAnim = collapseHeaders(vanishingHeaders(rows));
   await persistUndoBatch(snapshots);
 
   try {
@@ -192,7 +198,7 @@ export async function closeTabsByIds(ids) {
   }
   actions.dropTabs?.(new Set(list));
   renderUndoBanner();
-  await anim;
+  await Promise.all([anim, headerAnim]);
   await actions.refreshData({ forceFresh: true });
   actions.render();
   return list.length;
