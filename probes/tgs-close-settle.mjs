@@ -102,6 +102,57 @@ await p.waitForTimeout(700);
 const s4 = await activeTabId();
 chk('[2] 删中间行落在屏幕下一行(201, 原后继规则)', s4 === '201', `active=${s4}`);
 
+// ── [3] 连删两下后停一拍: 光标只在下一行, 不先回上一个再去下一个 ──
+{
+  // 新页重开: 乙组 3 行(203,202,201), 光标 → 202, 连按两下(删 202, 201), 然后停住
+  const p3 = await ctx.newPage();
+  await p3.addInitScript(INIT);
+  await p3.goto(`chrome-extension://${id}/popup.html`);
+  await p3.waitForSelector('.tab-item', { timeout: 10000 });
+  await p3.waitForTimeout(700);
+  await p3.evaluate(() => {
+    const rows = [...document.querySelectorAll('.tab-item')];
+    const idx = rows.findIndex(r => r.dataset.tabId === '202');
+    const cur = Math.max(rows.findIndex(r => r.classList.contains('active')), 0);
+    const input = document.getElementById('search');
+    for (let i = 0; i < Math.abs(idx - cur); i++) {
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        key: idx > cur ? 'ArrowDown' : 'ArrowUp', code: idx > cur ? 'ArrowDown' : 'ArrowUp',
+        bubbles: true, cancelable: true }));
+    }
+  });
+  const fire3 = () => p3.evaluate(() => {
+    document.getElementById('search').dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Backspace', code: 'Backspace', metaKey: true, bubbles: true, cancelable: true }));
+  });
+  // 采样收尾窗口里的每一帧光标位置(t=250~800ms, 盯"先回上一个再回来")
+  const trace = await p3.evaluate(async () => {
+    const out = [];
+    const fire = () => document.getElementById('search').dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Backspace', code: 'Backspace', metaKey: true, bubbles: true, cancelable: true }));
+    fire(); // 删 202
+    setTimeout(fire, 120); // 删 201 (前一趟还在演)
+    for (let t = 0; t <= 900; t += 60) {
+      await new Promise(r => setTimeout(r, 60));
+      out.push(document.querySelector('.tab-item.active')?.dataset.tabId ?? null);
+    }
+    return out;
+  });
+  // DOM 序: 丙(301), 乙(203,202,201), 甲(102,101)
+  // 删 202 → 光标 201(屏幕下一行); 删 201(乙组屏幕末行, 紧邻都在收) → 203(本组最近活行)
+  // 两趟收尾都必须保持在 203 —— 不先回上一个/别的组再去下一个
+  const badBack = trace.filter(x => x === '301' || x === '101' || x === '102');
+  chk('[3] 收尾全程无"跳到别的组"的抢光标', badBack.length === 0, `出现过的异常落点=${badBack.join(',')}`);
+  const final3 = trace[trace.length - 1];
+  chk('[3] 停一拍后稳定在乙组首行(203)', final3 === '203', `final=${final3}`);
+  // 光标轨迹只允许 201(删202后) → 203(删201后), 且收尾后恒为 203
+  const settledIdx = trace.findIndex(x => x === '203');
+  const afterSettle = trace.slice(settledIdx);
+  chk('[3] 落到 203 后再无变化(无先回上一个再去下一个)',
+    afterSettle.every(x => x === '203'), `轨迹=${trace.join(',')}`);
+  await p3.close();
+}
+
 await ctx.close();
 console.log(`\n结果: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -795,8 +795,12 @@ function groupNeighbours(rows, idx) {
 
 // 收起期间把光标挪到还活着的邻居行。正在收起的行只是"还没演完的残影",
 // 不能停光标 —— 连按 ⌘⌫ 落在它身上就是吞键。
-// 顺序与重绘后同一套: 晋升行 → 组内后继 → 组内前驱 → 原地
-function focusWhileClosing(rowIdx, promotedTabId, succId, predId) {
+// 顺序: 晋升行 → 组内后继 → 组内前驱 → **本组还活着的最近行** → 下方最近活行 → 上方最近活行。
+// 第四档(2026-11-12 病例之四): 组内删到边界时, 紧邻的 succ/pred 可能恰好都在收起
+// (连删场景), 兜底直接向后找会跳出本组落到下一分组 —— 组明明还剩着行, 光标不该离组。
+// closedKey 必须在 tabs.remove 之前算好传进来: focusWhileClosing 运行时那条
+// 已从 state.filtered 移除, 现算组键拿不到。
+function focusWhileClosing(rowIdx, promotedTabId, succId, predId, closedKey) {
   const rows = [...resultsEl.querySelectorAll('.tab-item')];
   const live = r => !r.classList.contains('closing');
   const idxOf = id => id == null ? -1
@@ -804,6 +808,16 @@ function focusWhileClosing(rowIdx, promotedTabId, succId, predId) {
   let target = idxOf(promotedTabId);
   if (target < 0) target = idxOf(succId);
   if (target < 0) target = idxOf(predId);
+  if (target < 0 && closedKey != null) {
+    // 本组还活着的最近行(双向, 离被删行最近者优先; 等距取先出现的)
+    let best = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (!live(rows[i])) continue;
+      if (rowGroupKey(Number(rows[i].dataset.tabId)) !== closedKey) continue;
+      if (best < 0 || Math.abs(i - rowIdx) < Math.abs(best - rowIdx)) best = i;
+    }
+    target = best;
+  }
   if (target < 0) target = rows.findIndex((r, i) => i >= rowIdx && live(r));
   if (target < 0) target = rows.map(live).lastIndexOf(true);
   if (target < 0) {
@@ -827,6 +841,7 @@ export async function closeTab(tabId) {
   const rowIdx = rows.findIndex(r => Number(r.dataset.tabId) === tabId);
   const row = rowIdx >= 0 ? rows[rowIdx] : null; // 要收起的那一行(可能不在当前视图里)
   const closed = state.filtered.find(f => f.tab.id === tabId);
+  const closedKey = row ? rowGroupKey(tabId) : null; // remove 前算好: 组内兜底要用
   const [succId, predId] = groupNeighbours(rows, rowIdx);
   try {
     await chrome.tabs.remove(tabId);
@@ -865,23 +880,28 @@ export async function closeTab(tabId) {
   // 突然消失, 读成"愣了一拍才没"。头比行晚 70ms 起步, Promise.all 等两边都演完
   const headerAnim = willVanish ? collapseHeaders(vanishingHeaders([row])) : Promise.resolve();
   // 焦点在收起开始前就离开这一行(跳过 .closing), 连按 ⌘⌫ 每下都落到新行
-  if (willVanish) focusWhileClosing(rowIdx, promotedTabId, succId, predId);
+  if (willVanish) focusWhileClosing(rowIdx, promotedTabId, succId, predId, closedKey);
   await Promise.all([anim, headerAnim]); // 收起演完(减弱动态效果时立即 resolve)才重绘
   // 就地重渲染,并让焦点落到被关闭行的相邻行
   render();
   const newRows = [...resultsEl.querySelectorAll('.tab-item')];
   if (newRows.length) {
+    // id 统一走 Number(): ghostId 来自 dataset(字符串), succ/pred 是数字,
+    // 严格 === 混用会静默失配(2026-11-12 病例之三: ghost 永远不命中, 落到过期的 pred)
     const idxOf = id => id == null ? -1
-      : newRows.findIndex(r => Number(r.dataset.tabId) === id);
-    // 顺序即优先级: 合并行原地换代表→跟着它走; 否则留在本组内的后继;
-    // 关到组尾则回退到组内前驱; 再没有则**保持在收起期间已经落的那行**。
+      : newRows.findIndex(r => Number(r.dataset.tabId) === Number(id));
+    // 顺序即优先级: 合并行原地换代表→跟着它走; 否则**保持在光标当前所在的那行**
+    // (ghost —— 收起期间 focusWhileClosing 已落位, 连删时后一趟的落点就是最新状态);
+    // 只有 ghost 也不在了(它自己也被删)才重算本趟的后继/前驱。
     // 兜底不能用重绘前的旧索引: 整组清空时组头+行一起退场, 后面的行全部上移,
-    // 同一个数字现在指向另一行 —— 光标会"没操作自己下移一格"(2026-11-12 病例)
+    // 同一个数字现在指向另一行 —— 光标会"没操作自己下移一格"(2026-11-12 病例);
+    // succ/pred 也不能排在 ghost 前面: 连删中途停一拍, 早前那趟的收尾会拿
+    // 它过期的前驱把光标抢回去(先回上一个再去下一个, 2026-11-12 病例之二)
     const ghostId = document.querySelector('.tab-item.active')?.dataset.tabId;
     let target = idxOf(promotedTabId);
+    if (target < 0) target = idxOf(ghostId);
     if (target < 0) target = idxOf(succId);
     if (target < 0) target = idxOf(predId);
-    if (target < 0) target = idxOf(ghostId);
     if (target < 0) target = Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1);
     setActive(target);
   } else {
