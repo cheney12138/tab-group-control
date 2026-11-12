@@ -1,6 +1,7 @@
 // features/undo.js: 撤销关闭(组件)
 // 单关路径 showUndo 入栈+渲染;批量清理 pushUndo 逐个入栈后 renderUndoBanner。
 import { pushBanner, dismissBanner, pushStack, resultsEl } from '../core/dom.js';
+import { getChromeFaviconUrl } from '../core/format.js';
 import { MOD } from '../core/platform.js';
 import { recentlyRestoredTabs, collapsed, saveCollapsed, searchCollapsed, state } from '../core/store.js';
 import { groupOrderSnapshot, seedGroupOrder } from '../core/group-order.js';
@@ -67,7 +68,13 @@ export function showUndo(snapshot) {
   renderUndoBanner();
 }
 
-// 渲染撤销通知条 + 启动 6s 倒计时。undoStack 由调用方维护:
+// 撤销条: 连续删除时**叠在同一条上**(数量角标递增), 不再每删一条弹一条
+// —— 旧版表现: 底部弹窗一直跳, 信息还重复。条目可点击展开成列表,
+// 逐条单独撤销(用户口径: 只想撤回其中指定的 tab), 也可一键全撤。
+// 跨 popup 恢复(restoreUndoBatch)时倒计时接着上一段走。
+let undoBannerEl = null;
+
+// 渲染/更新撤销通知条 + 启动 6s 倒计时。undoStack 由调用方维护:
 // 单关路径 showUndo 已 push;批量清理(cleanStaleTabs)在循环里已 push
 // 全部快照,直接调用本函数即可——之前 cleanStaleTabs 误调
 // showUndo(targets[last].tab)(传了裸 Tab 而非快照对象),既重复 push
@@ -77,35 +84,101 @@ export function renderUndoBanner(opts = {}) {
   const ms = opts.ms || UNDO_WINDOW_MS; // 跨 popup 恢复时, 倒计时接着上一段走
   const count = undoStack.length;
   if (!count) return;
-  const tab = undoStack[count - 1]?.tab;
-  const title = (tab?.title || tab?.url || '').toString().slice(0, 30);
-  pushBanner((banner) => {
-    const msg = document.createElement('span');
-    msg.className = 'push-msg';
-    msg.textContent = count > 1
-      ? `已关闭 ${count} 个标签页(含「${title}」)`
-      : `已关闭「${title}」`;
-    const btn = document.createElement('button');
-    btn.className = 'push-action';
-    btn.textContent = '撤销';
-    btn.title = `撤销刚才关闭的标签 (${MOD}Z)`;
-    btn.addEventListener('click', doUndo);
-    banner.appendChild(msg);
-    banner.appendChild(btn);
-    // 倒计时进度条: 剩余可撤销时间(条目相对定位收窄置底)。
-    // 时长必须跟本次的 ms 走 —— CSS 里的 6s 是首次关闭的满格值; 跨 popup 恢复时
-    // ms 只剩一段余额, 若沿用 6s 进度条会从头跑(表现: 每次开弹窗都重新读秒)。
-    banner.style.position = 'relative';
-    const progress = document.createElement('span');
-    progress.className = 'push-progress';
-    progress.style.animationDuration = `${ms}ms`;
-    banner.appendChild(progress);
-  }, { autoDismiss: ms });
+  // 叠加: 条还活着就直接换内容(文案/角标/列表), 不重推动画 ——
+  // 弹窗不再跳。条被 toast 顶掉/已被兑现过则重新建
+  if (undoBannerEl && undoBannerEl.isConnected) {
+    buildUndoBannerContent(undoBannerEl, ms);
+  } else {
+    undoBannerEl = pushBanner((banner) => {
+      banner.classList.add('undo-banner');
+      buildUndoBannerContent(banner, ms);
+    }, { autoDismiss: 0 }); // 生命期由 undoTimer 管, 不走 pushBanner 的自动消失
+  }
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => {
     undoStack = [];
-    clearUndoBatch(); // 撤销窗口一过, session 里的凭证也一并作废
+    // 撤销窗口一过, session 里的凭证也一并作废; 条目一并退场
+    clearUndoBatch();
+    if (undoBannerEl?.isConnected) {
+      dismissBanner(undoBannerEl);
+      undoBannerEl = null;
+    }
   }, ms);
+}
+
+// 条目内容(收起态 + 展开列表)整体重建。新关闭进来时回到收起态
+// (展开态看列表正滚动时突然插行, 观感比收起更乱)
+function buildUndoBannerContent(banner, ms) {
+  banner.textContent = '';
+  banner.style.position = 'relative';
+  const count = undoStack.length;
+  const last = undoStack[count - 1]?.tab;
+  const title = (last?.title || last?.url || '').toString().slice(0, 24);
+
+  // ① 收起态主体: 文案 + 撤销按钮 + 数量角标(≥2 才亮, 即"叠加"信号)
+  const msg = document.createElement('span');
+  msg.className = 'push-msg undo-msg';
+  msg.textContent = count > 1 ? `已关闭 ${count} 个标签页` : `已关闭「${title}」`;
+  const btn = document.createElement('button');
+  btn.className = 'push-action';
+  btn.textContent = '撤销全部';
+  btn.title = `撤销刚才关闭的 ${count} 个标签 (${MOD}Z)`;
+  btn.addEventListener('click', doUndo);
+  banner.appendChild(msg);
+  banner.appendChild(btn);
+  if (count > 1) {
+    const badge = document.createElement('button');
+    badge.className = 'undo-badge';
+    badge.textContent = `+${count}`;
+    badge.title = '展开列表, 可逐条单独撤销';
+    badge.addEventListener('click', () => toggleUndoList(banner, ms));
+    banner.appendChild(badge);
+  }
+
+  // ② 倒计时进度条: 剩余可撤销时间(条目相对定位收窄置底)。
+  // 时长必须跟本次的 ms 走 —— CSS 里的 6s 是首次关闭的满格值; 跨 popup 恢复时
+  // ms 只剩一段余额, 若沿用 6s 进度条会从头跑(表现: 每次开弹窗都重新读秒)。
+  const progress = document.createElement('span');
+  progress.className = 'push-progress';
+  progress.style.animationDuration = `${ms}ms`;
+  banner.appendChild(progress);
+}
+
+// 展开/收起列表。展开 = 条内附一个可滚动列表, 每条带独立的「撤销」
+function toggleUndoList(banner, ms) {
+  const existing = banner.querySelector('.undo-list');
+  if (existing) { existing.remove(); return; } // 再点角标 = 收起
+  const list = document.createElement('div');
+  list.className = 'undo-list';
+  // 新的在上(关闭时间倒序, 与撤销直觉一致: 最近关的排最上)
+  for (const snap of [...undoStack].reverse()) {
+    const t = snap?.tab;
+    if (!t?.url) continue;
+    const item = document.createElement('div');
+    item.className = 'undo-item';
+    const icon = document.createElement('span');
+    icon.className = 'undo-item-icon';
+    const fav = t.favIconUrl || getChromeFaviconUrl(t.url);
+    if (fav) {
+      icon.style.backgroundImage = `url("${fav}")`;
+    } else {
+      icon.textContent = (t.title || t.url || '?').trim().charAt(0).toUpperCase() || '?';
+    }
+    const label = document.createElement('span');
+    label.className = 'undo-item-title';
+    label.textContent = (t.title || t.url || '').toString().slice(0, 60);
+    label.title = t.title || t.url;
+    const one = document.createElement('button');
+    one.className = 'push-action secondary';
+    one.textContent = '撤销';
+    one.title = '只撤销这一个标签';
+    one.addEventListener('click', () => doUndoOne(snap));
+    item.appendChild(icon);
+    item.appendChild(label);
+    item.appendChild(one);
+    list.appendChild(item);
+  }
+  banner.appendChild(list);
 }
 
 // ⌘Z / Ctrl+Z 撤销最近关闭(等价于点击撤销按钮)
@@ -113,19 +186,57 @@ export function isUndoAvailable() {
   return undoStack.length > 0;
 }
 
+// 单条撤销(展开列表里的「撤销」): 只恢复指定的那一个, 栈里移掉它,
+// 条目角标 -1; 栈空了整条退场
+export async function doUndoOne(snap) {
+  const idx = undoStack.indexOf(snap);
+  if (idx < 0) return; // 已被单独撤销过/快照失效
+  undoStack.splice(idx, 1);
+  if (!undoStack.length) {
+    // 全部逐条撤完: 与整条撤销同款收尾
+    clearPushBanners();
+    clearUndoBatch();
+    clearTimeout(undoTimer);
+  } else if (undoBannerEl?.isConnected) {
+    // 叠加条仍在: 重建内容(角标/文案/进度条), 展开列表一并刷新
+    // 单撤不重置窗口: 整条的生命期还是最初那次 6s
+    buildUndoBannerContent(undoBannerEl, UNDO_WINDOW_MS);
+    // 剩余的快照继续留在内存栈; session 凭证是批量的, 单撤不动它
+  } else {
+    // 条被顶掉了(如 toast)但栈还有货: 重建一条
+    renderUndoBanner();
+  }
+  await restoreSnapshots([snap]);
+}
+
 // 撤销: 使用 active: false 在后台静默恢复被关闭的标签页,
 // 坚决不使用 chrome.sessions.restore (后者会强制激活新标签并导致弹窗失焦关闭/页面跳走)。
 // 恢复后把标签移回原分组并直查实时数据刷新分组视图。
 export async function doUndo() {
   if (!undoStack.length) return;
+  const snapshots = undoStack;
+  undoStack = [];
+  await doUndoRestore(snapshots);
+}
 
+// 兑现撤销的公共收尾(全部撤销路径): 清条目/清凭证, 再恢复
+async function doUndoRestore(snapshots) {
+  clearPushBanners(); // 通知条主动关闭(不等动画)
+  clearUndoBatch();   // 已兑现, 跨 popup 的凭证作废
+  await restoreSnapshots(snapshots);
+}
+
+// 恢复核心: 创建标签 + 归组 + 展开 + 刷新 + 展开动画 + 光标回当前
+// (doUndo 全量 / doUndoOne 单条 共用)
+async function restoreSnapshots(snapshots) {
+  if (!snapshots?.length) return;
   const restoredTabIds = [];
   const newlyCreatedIds = [];
   const groupsToExpand = new Set();
   // 兜底时间戳: 快照缺 lastAccessed 时也不许让恢复的标签顶到全场第一
   const oldestAccess = state.allTabs[state.allTabs.length - 1]?.tab?.lastAccessed || 1;
 
-  for (const snap of undoStack) {
+  for (const snap of snapshots) {
     const t = snap?.tab;
     if (!t?.url) continue; // 防御: 跳过脏/残缺快照
 
@@ -183,10 +294,6 @@ export async function doUndo() {
       for (const id of newlyCreatedIds) recentlyRestoredTabs.delete(id);
     }, 10000);
   }
-
-  undoStack = [];
-  clearPushBanners(); // 通知条主动关闭(不等动画)
-  clearUndoBatch();   // 已兑现, 跨 popup 的凭证作废
 
   // 补归组: 优先找同名同色组; 若原分组因标签清空已销毁则重建
   await regroupRestored(restoredTabIds);
@@ -269,4 +376,5 @@ async function regroupRestored(restored) {
 export function clearPushBanners() {
   for (const b of [...pushStack.children]) dismissBanner(b);
   clearTimeout(undoTimer);
+  undoBannerEl = null; // 叠加条引用一并作废(下次关闭重建)
 }

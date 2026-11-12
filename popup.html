@@ -2480,6 +2480,74 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0); }
     }
+    /* ---- 撤销叠加条: 数量角标 + 可展开的逐条列表(见 features/undo.js) ----
+     * 连续删除不再反复弹新条 —— 同一条上角标递增, 点角标展开成列表,
+     * 每条可单独撤销。角标是按钮(可点), 样式读成 iOS 通知上的计数气泡 */
+    .undo-banner { flex-wrap: wrap; }
+    .undo-badge {
+      flex-shrink: 0;
+      min-width: 22px;
+      height: 18px;
+      padding: 0 6px;
+      margin: 0 -4px 0 0;
+      border: none;
+      border-radius: 9px;
+      background: var(--tint-2);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
+      text-align: center;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.12s;
+    }
+    .undo-badge:hover { background: var(--tint); }
+    /* 展开列表: 条目换行铺满(push-banner flex-wrap), 最近关的在上 */
+    .undo-list {
+      flex: 1 1 100%;
+      margin-top: 6px;
+      max-height: 168px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      /* 细滚动条, 不占内容宽度 */
+      scrollbar-width: thin;
+    }
+    .undo-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      border-radius: 8px;
+    }
+    .undo-item:hover { background: var(--hover); }
+    .undo-item-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      background-size: 16px 16px;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-color: var(--fill);
+      font-size: 9.5px;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      color: var(--text-2);
+      overflow: hidden;
+    }
+    .undo-item-title {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-2);
+      font-size: 12px;
+    }
     /* 去掉控件默认聚焦描边(鼠标点选/快捷键/下拉后的蓝色圆角框),
      * 状态由各自自身视觉承担(选中项下划线/底色/内环),避免多余边框。 */
     button:focus, select:focus, input:focus,
