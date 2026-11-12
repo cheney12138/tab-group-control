@@ -93,12 +93,14 @@ await p.waitForTimeout(900); // 第 3 删的收尾(收起动画 380ms + banner �
 const s1 = await bannerState();
 const bannerCount = await p.evaluate(() => document.querySelectorAll('.push-banner').length);
 chk('[1] 只有一条撤销条(不反复弹)', bannerCount === 1, `banners=${bannerCount}`);
-chk('[1] 角标 +3(叠加计数)', s1.badge === '+3', `badge=${s1.badge}`);
+chk('[1] 角标 +3(叠加计数, 纯显示)', s1.badge === '+3', `badge=${s1.badge}`);
+const hasExpander = await p.evaluate(() => !!document.querySelector('.undo-expander'));
+chk('[1] 展开箭头存在(入口可见)', hasExpander === true);
 chk('[1] 文案「已关闭 3 个标签页」', s1.msg === '已关闭 3 个标签页', `msg=${s1.msg}`);
 chk('[1] 按钮是「撤销全部」', s1.actionText === '撤销全部', `btn=${s1.actionText}`);
 
 // ── [2] 点角标展开: 3 行, 最近关的在上 ──
-await p.click('.undo-badge');
+await p.click('.undo-expander');
 await p.waitForTimeout(150);
 const s2 = await bannerState();
 chk('[2] 展开后 3 行', s2.listItems.length === 3, `items=${s2.listItems.length}`);
@@ -123,7 +125,14 @@ chk('[3] 恢复的正是甲页二', hasEr === true);
 await p.waitForTimeout(100);
 const listGone = await p.evaluate(() => !document.querySelector('.undo-list'));
 chk('[4] 单撤后列表自动收起', listGone === true);
-await p.click('.undo-badge');
+// 点文案主体也能展开(入口不止箭头)
+await p.click('.undo-msg');
+await p.waitForTimeout(100);
+const viaMsg = await p.evaluate(() => !!document.querySelector('.undo-list'));
+chk('[4] 点文案也能展开列表', viaMsg === true);
+await p.click('.undo-expander'); // 收起
+await p.waitForTimeout(100);
+await p.click('.undo-expander');
 await p.waitForTimeout(100);
 const reopened = await p.evaluate(() => {
   const items = [...document.querySelectorAll('.undo-item-title')].map(e => e.textContent);
@@ -131,7 +140,7 @@ const reopened = await p.evaluate(() => {
 });
 chk('[4] 重新展开: 剩余 2 行且已撤的不在列表里',
   reopened.length === 2 && !reopened.includes('甲页二'), `items=${reopened.join(',')}`);
-await p.click('.undo-badge'); // 收起, 走主按钮路径
+await p.click('.undo-expander'); // 收起, 走主按钮路径
 await p.waitForTimeout(100);
 await p.evaluate(() => {
   const b = document.querySelector('.push-banner');

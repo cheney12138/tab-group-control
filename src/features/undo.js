@@ -115,7 +115,14 @@ function buildUndoBannerContent(banner, ms) {
   const last = undoStack[count - 1]?.tab;
   const title = (last?.title || last?.url || '').toString().slice(0, 24);
 
-  // ① 收起态主体: 文案 + 撤销按钮 + 数量角标(≥2 才亮, 即"叠加"信号)
+  // ① 收起态主体: 展开箭头 + 文案(可点展开) + 撤销按钮 + 数量角标(≥2 才亮)。
+  // 箭头与文案都是展开入口(用户口径: 一上来不知道能点开 —— 入口要明显),
+  // 角标纯显示计数, 不承担点击。
+  const expander = document.createElement('button');
+  expander.className = 'undo-expander';
+  expander.innerHTML = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"/></svg>';
+  expander.setAttribute('aria-label', '展开/收起已关闭列表');
+  expander.title = '展开列表, 可逐条单独撤销';
   const msg = document.createElement('span');
   msg.className = 'push-msg undo-msg';
   msg.textContent = count > 1 ? `已关闭 ${count} 个标签页` : `已关闭「${title}」`;
@@ -124,14 +131,19 @@ function buildUndoBannerContent(banner, ms) {
   btn.textContent = '撤销全部';
   btn.title = `撤销刚才关闭的 ${count} 个标签 (${MOD}Z)`;
   btn.addEventListener('click', doUndo);
+  // 重建即收起(见函数头注释), 箭头保持向下
+  const toggle = () => toggleUndoList(banner, ms, expander);
+  expander.addEventListener('click', toggle);
+  msg.addEventListener('click', toggle);
+  msg.style.cursor = 'pointer';
+  msg.title = '展开列表, 可逐条单独撤销';
+  banner.appendChild(expander);
   banner.appendChild(msg);
   banner.appendChild(btn);
   if (count > 1) {
-    const badge = document.createElement('button');
+    const badge = document.createElement('span');
     badge.className = 'undo-badge';
     badge.textContent = `+${count}`;
-    badge.title = '展开列表, 可逐条单独撤销';
-    badge.addEventListener('click', () => toggleUndoList(banner, ms));
     banner.appendChild(badge);
   }
 
@@ -144,10 +156,15 @@ function buildUndoBannerContent(banner, ms) {
   banner.appendChild(progress);
 }
 
-// 展开/收起列表。展开 = 条内附一个可滚动列表, 每条带独立的「撤销」
-function toggleUndoList(banner, ms) {
+// 展开/收起列表。展开 = 条内附一个可滚动列表, 每条带独立的「撤销」;
+// expander 是箭头按钮, 展开时转 180°
+function toggleUndoList(banner, ms, expander = banner.querySelector('.undo-expander')) {
   const existing = banner.querySelector('.undo-list');
-  if (existing) { existing.remove(); return; } // 再点角标 = 收起
+  if (existing) {
+    existing.remove(); // 再点 = 收起
+    expander?.classList.remove('open');
+    return;
+  }
   const list = document.createElement('div');
   list.className = 'undo-list';
   // 新的在上(关闭时间倒序, 与撤销直觉一致: 最近关的排最上)
@@ -179,6 +196,7 @@ function toggleUndoList(banner, ms) {
     list.appendChild(item);
   }
   banner.appendChild(list);
+  expander?.classList.add('open');
 }
 
 // ⌘Z / Ctrl+Z 撤销最近关闭(等价于点击撤销按钮)
