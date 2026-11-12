@@ -120,7 +120,8 @@ function buildUndoBannerContent(banner, ms) {
   // 角标纯显示计数, 不承担点击。
   const expander = document.createElement('button');
   expander.className = 'undo-expander';
-  expander.innerHTML = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"/></svg>';
+  // 箭头方向(用户口径 2026-11-12): 收起 = 向上(↑ 展开), 展开 = 转下来向下(↓ 收起)
+  expander.innerHTML = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l3-3 3 3"/></svg>';
   expander.setAttribute('aria-label', '展开/收起已关闭列表');
   expander.title = '展开列表, 可逐条单独撤销';
   const msg = document.createElement('span');
