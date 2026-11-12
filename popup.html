@@ -1994,6 +1994,17 @@
       pointer-events: none;
       will-change: height, opacity, transform;
     }
+    /* 光标静音: 删除的收起动画演着的时候, 键盘光标虽然已挪到上一行(连按 ⌘⌫
+     * 靠它落位才不吞键), 但选中态不该每次删除都立刻亮 —— 用户口径"暂停之后
+     * 才选中上一个"。只盖视觉(背景/上浮/投影/图标弹), 键盘行为照常;
+     * row-anim.js 的计数归零时摘除, 与收尾 render+setActive 同一任务链,
+     * 高亮恰好在收起演完后浮现。important 用来压过主题变体(静音是临时态)。 */
+    body.cursor-muted .tab-item.active {
+      background: none !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    body.cursor-muted .tab-item.active .icon-wrap { transform: none !important; }
     /* ============================================================
      * 多选行(Shift 点选 / ⇧↑↓): "被勾上" = 主题色淡底 + 1px 内描边
      * + 左侧 3px 实心竖条。竖条用绝对定位 —— 勾选不会把内容推开(行不跳)。
