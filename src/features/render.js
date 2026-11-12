@@ -874,10 +874,14 @@ export async function closeTab(tabId) {
     const idxOf = id => id == null ? -1
       : newRows.findIndex(r => Number(r.dataset.tabId) === id);
     // 顺序即优先级: 合并行原地换代表→跟着它走; 否则留在本组内的后继;
-    // 关到组尾则回退到组内前驱; 整组被清空才让位给原来的位置(下一个分组首行)
+    // 关到组尾则回退到组内前驱; 再没有则**保持在收起期间已经落的那行**。
+    // 兜底不能用重绘前的旧索引: 整组清空时组头+行一起退场, 后面的行全部上移,
+    // 同一个数字现在指向另一行 —— 光标会"没操作自己下移一格"(2026-11-12 病例)
+    const ghostId = document.querySelector('.tab-item.active')?.dataset.tabId;
     let target = idxOf(promotedTabId);
     if (target < 0) target = idxOf(succId);
     if (target < 0) target = idxOf(predId);
+    if (target < 0) target = idxOf(ghostId);
     if (target < 0) target = Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1);
     setActive(target);
   } else {
