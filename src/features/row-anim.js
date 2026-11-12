@@ -22,22 +22,6 @@ export function reduceMotion() {
   return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
-// 光标静音计数: 收起动画还在演的期间, 键盘光标虽然已经挪到上一行(连按 ⌘⌫
-// 需要它落位才不吞键), 但选中态不该立刻亮 —— 用户口径"暂停之后才选中上一个"。
-// 视觉上的延迟交给 CSS(body.cursor-muted 盖住 .active 的背景/上浮/投影), 这里只记账:
-// 每个收起动画开始 +1, 演完 -1; 归零时摘静音标记(与最后一趟收尾的 render+setActive
-// 同一个任务链, 浏览器只会画出最终帧 —— 高亮浮现的时机就是"收起演完之后")。
-let closingOps = 0;
-function closingBegin() {
-  closingOps++;
-  document.body.classList.add('cursor-muted');
-}
-function closingEnd() {
-  closingOps = Math.max(0, closingOps - 1);
-  if (closingOps === 0) document.body.classList.remove('cursor-muted');
-}
-export function anyClosing() { return closingOps > 0; }
-
 // 按 DOM 顺序排 —— 错峰节拍的"先后"必须是屏幕上的先后。
 // 调用方给的顺序往往是数据层顺序(tabs.query / 关闭栈), 与渲染顺序不一定一致,
 // 不归一的话级联会读成跳着演。
@@ -81,10 +65,9 @@ export function collapseRows(rows, { stagger = 0, maxSpread = 420 } = {}) {
     row.style.transform = 'translateX(16px)';
   });
 
-  closingBegin();
   // transitionend 要为每行挂监听且会被中间属性打断, 统一用定时器兜底:
   // 早一点 commit 只是"提前变干净", 不会有残影
-  return new Promise(resolve => setTimeout(() => { closingEnd(); resolve(); }, spread + COLLAPSE_MS + 40));
+  return new Promise(resolve => setTimeout(resolve, spread + COLLAPSE_MS + 40));
 }
 
 // 分组头伴随收起: 给定将被收起的行集合, 找出"整组行都在集合里"的分区头。
@@ -140,8 +123,7 @@ export function collapseHeaders(headers, { delay = 70 } = {}) {
     h.style.opacity = '0';
     h.style.transform = 'translateX(16px)';
   });
-  closingBegin();
-  return new Promise(resolve => setTimeout(() => { closingEnd(); resolve(); }, delay + COLLAPSE_MS + 40));
+  return new Promise(resolve => setTimeout(resolve, delay + COLLAPSE_MS + 40));
 }
 
 // 批量展开(撤销删除/⌘Z): collapseRows 的镜像 —— 从 0 高 + 淡出右移展开回自然高度。
