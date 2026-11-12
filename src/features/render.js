@@ -795,18 +795,15 @@ function groupNeighbours(rows, idx) {
 
 // 收起期间把光标挪到还活着的邻居行。正在收起的行只是"还没演完的残影",
 // 不能停光标 —— 连按 ⌘⌫ 落在它身上就是吞键。
-// 顺序与重绘后同一套: 晋升行 → 组内前驱 → 组内后继 → 前一行(用户口径:
-// 删除后选中态落到上一行, 视觉上列表不往下跳)
+// 顺序与重绘后同一套: 晋升行 → 组内后继 → 组内前驱 → 原地
 function focusWhileClosing(rowIdx, promotedTabId, succId, predId) {
   const rows = [...resultsEl.querySelectorAll('.tab-item')];
   const live = r => !r.classList.contains('closing');
   const idxOf = id => id == null ? -1
     : rows.findIndex(r => Number(r.dataset.tabId) === id && live(r));
   let target = idxOf(promotedTabId);
-  if (target < 0) target = idxOf(predId);
   if (target < 0) target = idxOf(succId);
-  // 组内无邻居(整组被清空): 落到被删行的前一行(上一组的末行), 没有才向后找
-  if (target < 0) target = rows.map(live).lastIndexOf(true, Math.max(rowIdx - 1, 0));
+  if (target < 0) target = idxOf(predId);
   if (target < 0) target = rows.findIndex((r, i) => i >= rowIdx && live(r));
   if (target < 0) target = rows.map(live).lastIndexOf(true);
   if (target < 0) {
@@ -876,12 +873,12 @@ export async function closeTab(tabId) {
   if (newRows.length) {
     const idxOf = id => id == null ? -1
       : newRows.findIndex(r => Number(r.dataset.tabId) === id);
-    // 顺序即优先级(与 focusWhileClosing 同一套): 合并行原地换代表→跟着它走;
-    // 否则留在本组内的前驱; 关到组首则用组内后继; 整组被清空落到前一行
+    // 顺序即优先级: 合并行原地换代表→跟着它走; 否则留在本组内的后继;
+    // 关到组尾则回退到组内前驱; 整组被清空才让位给原来的位置(下一个分组首行)
     let target = idxOf(promotedTabId);
-    if (target < 0) target = idxOf(predId);
     if (target < 0) target = idxOf(succId);
-    if (target < 0) target = Math.max(Math.min((rowIdx >= 0 ? rowIdx : 1) - 1, newRows.length - 1), 0);
+    if (target < 0) target = idxOf(predId);
+    if (target < 0) target = Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1);
     setActive(target);
   } else {
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
