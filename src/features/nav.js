@@ -63,7 +63,10 @@ export function focusCurrentTab() {
 // 分组头只是**触发器**: 被 ↑↓ 选中就展开, 光标随即下沉到组内第一行 —— 头不驻留光标,
 // 所以展开的分组头(含刚展开的)永远不会出现在这个序列里(旧的"分组 cell 不允许选中"约定不变)。
 export function navUnits() {
-  return [...resultsEl.querySelectorAll('.tab-item, .group-header.collapsed')];
+  // 过滤 .closing: 收起中的行正塌向 0 高(肉眼不可见且 pointer-events 失效),
+  // 不过滤的话 ↑↓ 能停在幽灵行上, ⌘⌫/Enter/⌘C 全打到看不见的行
+  // (2026-11-14 review P1-2; extendMultiSelection 已同口径过滤)
+  return [...resultsEl.querySelectorAll('.tab-item:not(.closing), .group-header.collapsed')];
 }
 export function clearActiveUnit() {
   resultsEl.querySelectorAll('.tab-item, .group-header').forEach(u => u.classList.remove('active'));

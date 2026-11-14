@@ -99,13 +99,13 @@ demo 基准:`.cmd-copy`(`site/demo.html`)。插件侧落在 `render.js` 的 `cop
 
 ## 分组折叠/展开(2026-11-12 动效审查 P0 落地)
 
-场景:点组头 / 键盘 → ← / ⌘E 定位自动展开。原先全量重绘硬切(行瞬消、下方内容瞬间上移),是分组视图最高频动作的最大动效缺口。
+场景(2026-11-14 补齐全部入口): 浏览态点组头 / 搜索态点组头 / ↑↓ 落在折叠头(键盘用户的主入口) / ⌘E 定位自动展开 / ⌘Z 撤销自动展开。原先 5 个入口里 4 个全量重绘硬切(行瞬消、下方内容瞬间上移),是分组视图最高频动作的最大动效缺口。键盘 ← 理论上也能展开,但正常时序不可达(组收起后光标必然落在别的组上),保留逻辑但不指望它。
 
 | 维度 | 参数 |
 | --- | --- |
 | 行收起/展开 | 与删除同一套 `row-anim.js` 原语: 340ms / `--e-size` 同族缓动, stagger 16ms(一帧一行), maxSpread 200ms |
 | 组头箭头 | 150ms `ease` 旋转; 收起时在**旧节点**上挂 `.collapsed` 当场转, 展开时在**新节点**上先写起点再清(过渡自然播放) |
-| 方向语义 | 用户口径: 收起 = ↑(可展开), 展开 = 转 ↓(可收起) |
+| 组头箭头方向 | caret 向下 ▼ = 展开; `.collapsed` 时转 -90° 指右 ▶(标准 disclosure 语言)。注意: 这与撤销条的箭头口径(收起=↑)不同, 两者是不同组件、各自成立 |
 
 实现要点(render.js `collapseGroupAnimated` / `expandGroupAnimated`):
 
@@ -122,10 +122,15 @@ demo 基准:`.cmd-copy`(`site/demo.html`)。插件侧落在 `render.js` 的 `cop
 表现是撤销栈只有第 1 条。正确写法: `if (!superseded) render();` 之后**照常**走焦点
 收尾与撤销条(它们不依赖本次重绘)。
 
-接线义务: 任何新的 "await 动画 → 全量重绘" 代码都必须带纪元比对(现 3 处:
-render.js closeTab / close-batch.js runCloseBatch / closeTabsByIds)。
+接线义务: 任何新的 "await 动画 → 全量重绘" 代码都必须带纪元比对。已接: render.js
+closeTab / close-batch.js runCloseBatch / closeTabsByIds / multi-select.js 焦点收尾。
+⚠️ 同族未接(低危, 后续按需): undo.js doUndo 的 regroupRestored 窗口 / search.js /
+clean.js / dnd.js —— 它们不是"动画收尾"路径(没有先起动画再等), 护栏语义不适用,
+改它们需要另一种"渲染前比对"的写法。
 
 ## reduced-motion 默认策略(2026-11-12 动效审查 2.5)
 
 - `forceMotionEnabled` **默认跟随系统**(原先默认强制开, 属可访问性违规): 系统开了「减弱动态效果」的用户默认看到动效被压掉; 显式开过开关(chrome.storage / localStorage 已表态)的用户不受影响。
-- 信息型动效在 reduced-motion 下保留静态表达: 音浪/校验闪烁已例外; **倒计时进度条**是「还剩多久可撤销」的唯一载体, 冻结成静态满格(`transform: scaleX(1)`)而非消失。
+  - ⚠️ 镜像必须**三态**(2026-11-14 review P0-1 病例): `applyForceMotion(on, {explicit})` 只在用户显式扳开关时落盘 '1'/'0'; 推导值("未表态 ⇒ 跟系统")不落盘 —— 旧版无条件写镜像, 首启的推导值被固化成"显式表态", 系统再开减弱动态也永远不跟了。
+  - `reduceMotion()`(row-anim.js)与 CSS 同口径: `data-force-motion="on"` 时 JS 动画也放行(开关文案"动效已强制开启"对 CSS/JS 一视同仁)。
+- 信息型动效在 reduced-motion 下保留静态表达, 判据一句话: **动效承载的信息在冻结后是否不可恢复** —— 音浪(正在播放)/校验闪烁(哪里错了)/**倒计时进度条**(还剩多久可撤销, 冻结成静态满格 `transform: scaleX(1)` 而非消失)都是"冻结即丢信息", 保留; 装饰性动效(入场/push/浮标)冻结无损, 砍。

@@ -317,15 +317,21 @@ async function restoreSnapshots(snapshots) {
   // 补归组: 优先找同名同色组; 若原分组因标签清空已销毁则重建
   await regroupRestored(restoredTabIds);
 
-  // 自动展开目标分组, 避免恢复的标签被原收起状态遮挡
+  // 自动展开目标分组, 避免恢复的标签被原收起状态遮挡。
+  // 状态批处理(撤销恢复可能一次展开多组), 重绘交给下面的 actions.render() ——
+  // expandGroupAnimated 的"带动画展开"在这里拆开用: 行动画必须在 render 之后对
+  // **新节点**播, 而本函数的 render 在 refreshData 之后统一做
   let collapseChanged = false;
+  const expandedKeys = [];
   for (const gKey of groupsToExpand) {
     if (collapsed.has(gKey)) {
       collapsed.delete(gKey);
       collapseChanged = true;
+      expandedKeys.push(gKey);
     }
     if (searchCollapsed.has(gKey)) {
       searchCollapsed.delete(gKey);
+      expandedKeys.push(gKey);
     }
   }
   if (collapseChanged) saveCollapsed();
@@ -333,6 +339,18 @@ async function restoreSnapshots(snapshots) {
   // 强制 forceFresh 直查最新标签/分组, 绕过 background 2s 旧快照缓存
   await actions.refreshData({ forceFresh: true });
   actions.render();
+  // 展开的分组行随重绘就位后播展开动画(与点组头展开同一语言; 遍历找到各组的行)
+  for (const gKey of expandedKeys) {
+    const header = [...resultsEl.querySelectorAll('.group-header')].find(h => h.dataset.groupKey === gKey);
+    if (!header) continue;
+    let n = header.nextElementSibling;
+    const rows = [];
+    while (n && !n.classList.contains('group-header')) {
+      if (n.classList.contains('tab-item')) rows.push(n);
+      n = n.nextElementSibling;
+    }
+    expandRows(rows, { stagger: 70, maxSpread: 420 }); // 与撤销批量恢复同一节拍
+  }
 
   // 展开动画: 在 render **之后**演 —— 恢复的行是这一帧才建出来的, 从 0 高展开
   // 回自然高度(与删除时的收起同一套参数, 同一行"删掉再撤销"读成同一段倒放)。

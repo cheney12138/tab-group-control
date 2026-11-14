@@ -203,9 +203,8 @@ function locateCurrentTab() {
   // 所在分组折叠则展开
   const gk = cur.group ? groupKey(cur.group) : '__ungrouped__';
   if (cur.group && collapsed.has(gk)) {
-    collapsed.delete(gk);
-    saveCollapsed();
-    render();
+    // 带动画展开(review P1-3: 5 个展开入口之一, 原先硬切)
+    expandGroupAnimated(gk, collapsed);
   }
   // render 后 DOM 重建,重新找行
   const row = rowByTabId(cur.tab.id);
@@ -307,7 +306,7 @@ document.addEventListener('keydown', async (e) => {
     && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT'
       || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
   if (isOtherInput) return;
-  handleShortcuts(e);
+  handleShortcuts(e).catch(err => console.error('[TGS] 快捷键处理异常:', err)); // async 化后错误不再同步抛, 必须显式兜住
 });
 
 // 点击文档任意位置后焦点还给搜索框(行/气泡/空白处的点击都会把焦点带走,
@@ -336,9 +335,8 @@ function expandCollapsedGroupHeader(headerEl) {
   const key = headerEl.dataset.groupKey;
   const set = activeCollapsed();
   if (!set.has(key)) return false; // 已经展开: 交给调用方按普通单元处理
-  set.delete(key);
-  if (!state.searching) saveCollapsed();
-  render();
+  // 带动画展开(2026-11-14 review P1-3: 这是键盘用户展开分组的主入口, 原先是硬切)
+  expandGroupAnimated(key, set);
   // 展开后这个分组的行才存在 —— 按身份(key)找它下面的第一行
   const rows = [...resultsEl.querySelectorAll('.tab-item')];
   const firstRow = rows.find(r => {
@@ -429,17 +427,21 @@ async function handleShortcuts(e) {
     const set = activeCollapsed();
     if (DEBUG) console.log('[TGS] 分组键:', key, '已收起:', set.has(key));
     if (e.key === 'ArrowRight' && !set.has(key)) {
-      // 收起带动画(与点组头同一套语言); 动画窗口内别人重绘过则收尾让路
-      await collapseGroupAnimated(key, set);
-      // 收起后保持在就近的可见标签行上，不再选中分组头
-      const remainingRows = [...resultsEl.querySelectorAll('.tab-item')];
-      if (remainingRows.length) {
-        const targetIdx = Math.min(focusIdx, remainingRows.length - 1);
-        setActive(targetIdx);
-      } else {
-        clearActiveUnit();
-        state.activeIndex = -1;
-      }
+      // 收起带动画(与点组头同一套语言)。焦点交接已在 collapseGroupAnimated 内
+      // 同步完成(光标离开被收的组), 这里的收尾只在「本趟拥有重绘权」时做。
+      // ⚠️ 旧版用 focusIdx(navUnits 坐标系, 含折叠头)索引 remainingRows(只有
+      // .tab-item)—— 收起的组越多出一个折叠头, 两套下标就错一格, 动画把错位
+      // 从不可见放大成"等 340ms 后光标怪跳"(2026-11-14 review P1-1); 且晚到的
+      // setActive 会抢走用户在动画窗口内自己按 ↓ 做的移动
+      const focusTabId = Number(focusedUnit.dataset?.tabId) || null;
+      const owned = await collapseGroupAnimated(key, set);
+      if (!owned) return; // 等待期间别人重绘过(⌘Z/连点反向), 焦点归那一次所有
+      // 按**行身份**落位: 光标行还在就跟着它; 不在(它就在被收的组里)落到最近可见行
+      const remainingRows = [...resultsEl.querySelectorAll('.tab-item:not(.closing)')];
+      if (!remainingRows.length) { clearActiveUnit(); state.activeIndex = -1; return; }
+      const stayIdx = remainingRows.findIndex(r => Number(r.dataset.tabId) === focusTabId);
+      if (stayIdx >= 0) setActive(stayIdx);
+      else setActive(Math.min(focusIdx, remainingRows.length - 1)); // 行身份失配时的位置兜底
     } else if (e.key === 'ArrowLeft' && set.has(key)) {
       // 展开带动画(不阻塞: 行展开与焦点落位并行)
       expandGroupAnimated(key, set);

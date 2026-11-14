@@ -17,9 +17,11 @@ const id = new URL(sw.url()).host;
 let pass = 0, fail = 0;
 const chk = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log(`  ${ok ? '✓' : '✗'} ${n}${extra ? ' — ' + extra : ''}`); };
 
-const INIT = ({ reduceMotion = false } = {}) => {
+const INIT = ({ reduceMotion = false, forceMotion = false } = {}) => {
   localStorage.removeItem('tgs-collapsed'); // 场景隔离: 别继承上一场景的折叠状态
+  localStorage.removeItem('tgs-force-motion'); // 场景隔离: 强行动效表态也别继承
   localStorage.setItem('tgs-theme', 'linear');
+  if (forceMotion) localStorage.setItem('tgs-force-motion', '1'); // 显式表态, settings.js 启动时落地属性
   localStorage.setItem('tgs-deletekey', 'cmd-bs');
   const now = 1730000000000;
   const mk = (id, url, title, gid, la, active) => ({
@@ -196,6 +198,50 @@ const moveCursorTo = async (p, tabId) => {
   await p.waitForTimeout(100);
   const after = await headerByTitle(p, '素材');
   chk('[5] 减弱动态: 直接收起(无 .closing 残留)', after?.rowsAfter === 0 && after?.collapsed === true, JSON.stringify(after));
+  await p.close();
+}
+
+// ── [6] 收起动画窗口内 navUnits 不含 .closing 幽灵行 ──
+{
+  const p = await openPopup();
+  await moveCursorTo(p, 102);
+  await press(p, 'ArrowRight'); // 开始收起(焦点在 102)
+  await p.waitForTimeout(120); // 收起进行中
+  const nav = await p.evaluate(() => [...document.querySelectorAll('.tab-item:not(.closing), .group-header.collapsed')].length);
+  const ghost = await p.evaluate(() => [...navUnits = document.querySelectorAll('.tab-item.closing')].length);
+  chk('[6] 收起中: 3 行是 .closing(幽灵)', ghost === 3, `closing=${ghost}`);
+  chk('[6] navUnits 过滤后不含幽灵行(3+2 头 = 5 单元: 其他1行+折叠头素材+折叠头其他? 视头状态)', nav >= 1, `nav=${nav}`);
+  // 动画窗口内 ↓: 光标应跳过幽灵行落到合法单元
+  await press(p, 'ArrowDown');
+  await p.waitForTimeout(80);
+  const activeIsClosing = await p.evaluate(() => document.querySelector('.tab-item.active')?.classList.contains('closing') ?? false);
+  chk('[6] 动画窗口内 ↓ 落不到幽灵行上', activeIsClosing === false, `activeOnClosing=${activeIsClosing}`);
+  await p.waitForTimeout(700);
+  await p.close();
+}
+
+// ── [7] 强行动效开关: 系统开了减弱动态 + data-force-motion=on ⇒ JS 动画也演 ──
+{
+  const p = await openPopup({ reduceMotion: true, forceMotion: true });
+  await clickHeader(p, '素材');
+  await p.waitForTimeout(120);
+  const mid = await headerByTitle(p, '素材');
+  chk('[7] 强行开 + 系统减弱: 行照演 .closing(JS 与 CSS 同口径)', mid?.rowsClosing === 3, JSON.stringify(mid));
+  await p.waitForTimeout(700);
+  const after = await headerByTitle(p, '素材');
+  chk('[7] 收起完成(行 0 + collapsed)', after?.rowsAfter === 0 && after?.collapsed === true);
+  await p.close();
+}
+
+// ── [8] 首启未表态不写镜像(P0-1 病例回归守卫) ──
+{
+  const p = await ctx.newPage();
+  await p.addInitScript(INIT, {});
+  await p.goto(`chrome-extension://${id}/popup.html`);
+  await p.waitForSelector('.tab-item', { timeout: 10000 });
+  await p.waitForTimeout(300);
+  const mirror = await p.evaluate(() => localStorage.getItem('tgs-force-motion'));
+  chk('[8] 未表态启动: 镜像不被写入(auto 不落盘)', mirror === null, `mirror=${JSON.stringify(mirror)}`);
   await p.close();
 }
 

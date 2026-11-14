@@ -267,9 +267,9 @@ export function render() {
       const key = groupKey(group);
       const isCollapsed = searchCollapsed.has(key);
       frag.appendChild(buildGroupHeader(group, items.length, isCollapsed, () => {
-        if (searchCollapsed.has(key)) searchCollapsed.delete(key);
-        else searchCollapsed.add(key);
-        render();
+        // 与浏览态同一套收起/展开动画(2026-11-14 review P1-3: 这是 5 个展开入口之一)
+        if (searchCollapsed.has(key)) expandGroupAnimated(key, searchCollapsed);
+        else collapseGroupAnimated(key, searchCollapsed).catch(err => console.error('[TGS] 搜索态分组收起异常:', err));
       }, maxCount, null)); // 搜索态未分组分区跨窗口合并 ⇒ 回落到当前窗口
       if (!isCollapsed) {
         for (const item of items) {
@@ -359,7 +359,7 @@ export function render() {
     frag.appendChild(buildGroupHeader(section.group, section.items.length, isCollapsed, () => {
       // 收起/展开带动画(见 collapseGroupAnimated): 与删除同一套行收起语言
       if (collapsed.has(key)) expandGroupAnimated(key, collapsed);
-      else collapseGroupAnimated(key, collapsed);
+      else collapseGroupAnimated(key, collapsed).catch(err => console.error('[TGS] 分组收起异常:', err));
     }, maxCount, section.windowId, isDup)); // 未分组分区必须带上自己的窗口, 否则会关错窗口
 
     if (!isCollapsed) {
@@ -448,20 +448,39 @@ function rowsOfHeader(header) {
 }
 
 // 收起指定分组。set 传 collapsed(浏览态, 持久化)或 searchCollapsed(搜索态, 不持久化)。
+// 返回值: true = 收尾重绘由本趟完成; false = 等待期间别人重绘过, 收尾已让路 ——
+// 调用方(main.js 键盘路径)据此决定收尾焦点逻辑要不要跟着让(晚到的 setActive 会抢走
+// 用户在 340ms 动画窗口内自己做的移动, 2026-11-14 review P1-1)。
 export async function collapseGroupAnimated(key, set = activeCollapsed()) {
-  if (set.has(key)) return;
+  if (set.has(key)) return false;
   set.add(key); // 状态先落地: 收尾前再点一次, 读到的是新状态(方向不会反)
   if (set === collapsed) saveCollapsed();
   const epoch = renderEpoch;
   const header = headerByKey(key);
   const rows = rowsOfHeader(header);
   if (header) header.classList.add('collapsed'); // 旧节点箭头当场转(150ms), 不等重绘
+  // 焦点交接(对齐删除路径 focusWhileClosing 的纪律): 光标在本组内时**收起开始前**
+  // 就离开本组的行 —— 否则动画窗口里它停在幽灵行上(navUnits 已过滤 .closing),
+  // 鼠标收起后光标更会彻底消失, ⌘⌫/Enter 静默失效直到用户再按一次 ↑↓(review P1-2/P3-3)。
+  // 落点 = 本组**块之后**的第一个可聚焦单元(下一组的行/折叠头), 没有就退到组头自身
+  // (刚挂 .collapsed 的组头是合法键盘单元), 再没有(列表只剩它)就清焦点。
+  // ⚠️ 不能落"组内下一行"—— 那行也在被收的集合里, render 后照样丢
+  const activeRow = rows.find(r => r.classList.contains('active'));
+  if (activeRow) {
+    const units = navUnits();
+    const lastRow = rows[rows.length - 1];
+    const afterBlock = units[units.indexOf(lastRow) + 1];
+    if (afterBlock) setActive(units.indexOf(afterBlock));
+    else if (header) setActive(units.indexOf(header)); // 组头此刻已是 .collapsed, 合法单元
+    else clearActiveUnit();
+  }
   // 入场级联窗口内不演(行上 animation 压内联样式, 会演成半路跳变) —— 与 expandRows 同一口径
   if (rows.length && !document.body.classList.contains('entrance')) {
     await collapseRows(rows, { stagger: 16, maxSpread: 200 });
   }
-  if (renderEpoch !== epoch) return; // 等待期间别人重绘过(连点反向/⌘Z), 收尾让路
+  if (renderEpoch !== epoch) return false; // 等待期间别人重绘过(连点反向/⌘Z), 收尾让路
   render();
+  return true;
 }
 
 // 展开指定分组(同步返回: 行的展开动画不阻塞后续焦点逻辑)。
@@ -481,7 +500,9 @@ export function expandGroupAnimated(key, set = activeCollapsed()) {
     caret.style.transform = '';
   }
   if (rows.length && !document.body.classList.contains('entrance')) {
-    expandRows(rows, { stagger: 16, maxSpread: 200 });
+    // maxRows 传全量: 撤销恢复的 14 行 cap 是"位置无预设"场景; 分组展开是容器开合,
+    // 下方内容位置必须连续 —— 超 cap 的行直接满高出现会读成"尾巴先蹦出来再被顶下去"
+    expandRows(rows, { stagger: 16, maxSpread: 200, maxRows: rows.length });
   }
 }
 
@@ -972,13 +993,23 @@ export async function closeTab(tabId) {
     // succ/pred 也不能排在 ghost 前面: 连删中途停一拍, 早前那趟的收尾会拿
     // 它过期的前驱把光标抢回去(先回上一个再去下一个, 2026-11-12 病例之二)
     const ghostId = document.querySelector('.tab-item.active')?.dataset.tabId;
-    let target = idxOf(promotedTabId);
-    if (target < 0) target = idxOf(ghostId);
-    if (target < 0) target = idxOf(succId);
-    if (target < 0) target = idxOf(predId);
-    if (target < 0) target = Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1);
-    setActive(target);
-  } else {
+    // superseded(别人已重绘)时收尾降级为"只认 ghost"(2026-11-14 review P2-2):
+    //   promoted/succ/pred/旧索引都是**本趟自己的过期快照** —— 别人(典型 ⌘Z)的
+    //   渲染里它们与用户此刻的意图无关, 拿它们落焦点纯属抢; ghost 是光标现在的
+    //   真实位置, 命中就保持, 不命中就让(别人的渲染/焦点逻辑自己管)
+    if (superseded) {
+      const g = idxOf(ghostId);
+      if (g >= 0) setActive(g);
+    } else {
+      let target = idxOf(promotedTabId);
+      if (target < 0) target = idxOf(ghostId);
+      if (target < 0) target = idxOf(succId);
+      if (target < 0) target = idxOf(predId);
+      if (target < 0) target = Math.min(rowIdx >= 0 ? rowIdx : 0, newRows.length - 1);
+      setActive(target);
+    }
+  } else if (!superseded) {
+    // empty 写入也让路(别人刚渲染好的列表/空态不能被这条迟到写入覆盖, review P2-2)
     resultsEl.innerHTML = `<div class="empty">${emptyMessage()}</div>`;
   }
   // 撤销快照带上原分组信息,恢复后用于归组(sessions.restore 不触发 onCreated,

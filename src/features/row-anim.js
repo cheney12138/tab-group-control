@@ -17,8 +17,12 @@ export const COLLAPSE_MS = 340; // 与 popup.html 的 .tab-item.closing 过渡�
 export const EXPAND_MS = COLLAPSE_MS;
 export const EXPAND_MAX_ROWS = 14; // 最多演 14 行, 其余直接落位(大批量恢复不该演成两秒)
 
-// 减弱动态效果(系统偏好): 直接不演, 走原路径立即重渲染
+// 减弱动态效果(系统偏好): 直接不演, 走原路径立即重渲染。
+// 显式开了「强行动效」则跟 CSS 同一口径放行(data-force-motion="on" 时 CSS 处决不生效,
+// JS 侧也不能比 CSS 更保守 —— 2026-11-14 review P2-4: 旧版开关只救 CSS 动画,
+// 行收起/展开这些 JS 动画照旧不演, 开关文案"动效已强制开启"名不副实)
 export function reduceMotion() {
+  if (document.documentElement.getAttribute('data-force-motion') === 'on') return false;
   return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 

@@ -14,6 +14,7 @@ import { resultsEl, input, indexOfRow } from '../core/dom.js';
 import { state, multiSelected, tabItemByTabId } from '../core/store.js';
 import { clearActiveUnit, setActive, scrollPastSticky } from './nav.js';
 import { closeTabsByIds } from './close-batch.js';
+import { renderEpoch } from './render.js';
 
 let rangeBase = null; // 区间选择开始前的选中快照; null = 当前没有在演区间
 const hintEl = document.getElementById('multiHint');
@@ -133,11 +134,17 @@ export async function closeMultiSelection() {
   // 先清选择态: 收起动画自己负责退场, 选中色不该跟着演一遍
   clearMultiSelection();
 
+  const epochAtClose = renderEpoch; // 关闭开始前采样(⚠️ closeTabsByIds 自身会 render, 见下)
   const count = await closeTabsByIds([...ids]);
 
+  // 纪元护栏(2026-11-14 review P2-3): closeTabsByIds 正常收尾自己 render ⇒ 纪元必然
+  // 变化 ⇒ 这里的 setActive 属于"动画窗口内的晚到焦点", 会让路; 但它的落点(focusId
+  // 按**行身份**算)不受重绘影响 —— 只在别人插队(⌘Z/搜索)时让, 自己的收尾不算插队。
+  const superseded = renderEpoch !== epochAtClose + 1; // +1 = 只有本趟的收尾重绘
   // 重渲染之后才落焦点(closeTabsByIds 内部已 await 收起动画 + render)
   const newRows = [...resultsEl.querySelectorAll('.tab-item')];
   if (!newRows.length) return count;
+  if (superseded) return count; // 别人插队: 焦点归那一次所有
   const target = focusId == null ? -1
     : newRows.findIndex(r => Number(r.dataset.tabId) === focusId);
   setActive(target >= 0 ? target : Math.min(fallbackIdx, newRows.length - 1));
