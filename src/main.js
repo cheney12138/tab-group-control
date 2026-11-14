@@ -27,7 +27,7 @@ import { initBackup } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { hasMultiSelection, clearMultiSelection, extendMultiSelection, closeMultiSelection } from './features/multi-select.js';
 import { initBlockCaret, refreshBlockCaret } from './features/caret.js';
-import { initRender, render, closeTab, switchTo, copyTabUrl, endEntrance } from './features/render.js';
+import { initRender, render, closeTab, switchTo, copyTabUrl, endEntrance, collapseGroupAnimated, expandGroupAnimated } from './features/render.js';
 import { VIEWS, setView } from './features/views.js';
 
 // 性能埋点(无条件输出): 脚本开始执行的时刻。
@@ -235,7 +235,7 @@ document.getElementById('locateBtn').addEventListener('click', locateCurrentTab)
 
 // 全局键盘路由: 监听 document 而非 input,任何元素拿走焦点后快捷键依然有效。
 // 仅当焦点在其他真实输入控件(设置面板的 checkbox 等)时放行原生行为
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', async (e) => {
   // 中文输入法组合输入(拼音未上屏)期间,按键全部让位给输入法:
   // composing 中按回车是"确认拼音串上屏",不是"选中结果"——不拦的话
   // 拼音打一半回车,标签瞬间被切走,输入内容全丢。上下键同理(选候选词),
@@ -354,7 +354,7 @@ function expandCollapsedGroupHeader(headerEl) {
   return true;
 }
 
-function handleShortcuts(e) {
+async function handleShortcuts(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
     // 多选优先: 有选择时 Esc 只取消选择 —— 不清搜索词, 更不关窗
@@ -429,9 +429,8 @@ function handleShortcuts(e) {
     const set = activeCollapsed();
     if (DEBUG) console.log('[TGS] 分组键:', key, '已收起:', set.has(key));
     if (e.key === 'ArrowRight' && !set.has(key)) {
-      set.add(key);
-      if (!state.searching) saveCollapsed();
-      render();
+      // 收起带动画(与点组头同一套语言); 动画窗口内别人重绘过则收尾让路
+      await collapseGroupAnimated(key, set);
       // 收起后保持在就近的可见标签行上，不再选中分组头
       const remainingRows = [...resultsEl.querySelectorAll('.tab-item')];
       if (remainingRows.length) {
@@ -442,9 +441,8 @@ function handleShortcuts(e) {
         state.activeIndex = -1;
       }
     } else if (e.key === 'ArrowLeft' && set.has(key)) {
-      set.delete(key);
-      if (!state.searching) saveCollapsed();
-      render();
+      // 展开带动画(不阻塞: 行展开与焦点落位并行)
+      expandGroupAnimated(key, set);
       // 展开后选中该分组下第一行
       const rows = [...resultsEl.querySelectorAll('.tab-item')];
       const firstRow = rows.find(r => {

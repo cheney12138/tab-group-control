@@ -2585,7 +2585,8 @@
      * —— 没有可用值(animation-duration: revert 在 !important 声明里倒退到 UA 值,不是作者值);
      * ② 让处决自己带一个可被开关排除的条件 —— 就是下面的 :not()。选 ②:html 上没有
      * data-force-motion="on" 时才处决 ⇒ 开关打开时这些选择器不匹配,原生时长自然生效。
-     * 属性由 settings.js 的 applyForceMotion() 落地,默认开启(口径同 Glance 的 motion.alwaysAnimate)。*/
+     * 属性由 settings.js 的 applyForceMotion() 落地,**默认跟随系统**(2026-11-12 审查 2.5):
+     * 系统开了减弱动态且用户未显式表态时,这里正常处决;显式开过开关才强制。*/
     @media (prefers-reduced-motion: reduce) {
       html:not([data-force-motion="on"]) *,
       html:not([data-force-motion="on"]) *::before,
@@ -2607,6 +2608,12 @@
       html:not([data-force-motion="on"]) .host-add-input.invalid-flash,
       html:not([data-force-motion="on"]) .sinput.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       html:not([data-force-motion="on"]) .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      /* 撤销倒计时进度条: 是「还剩多久可撤销」的唯一载体, 不能被冻成 scaleX(0)(信息直接消失)。
+       * 冻结成静态满格 —— 6s 的时间信息降级为「窗口还在」, 但至少不丢 */
+      html:not([data-force-motion="on"]) .push-progress {
+        animation: none !important;
+        transform: scaleX(1) !important;
+      }
       /* Tab 滑块与设置面板抽屉: 保留动画 */
       html:not([data-force-motion="on"]) .view-tabs .tab-slider,
       html:not([data-force-motion="on"]) .settings-tabs .tab-slider { transition-duration: 0.28s !important; }

@@ -17,7 +17,10 @@ let optOthersGroup = null;
 let optForceMotion = null;
 
 // ---- 强行动效(忽略系统「减弱动态效果」) ----
-// 口径同 Glance 的 motion.alwaysAnimate:**默认开启**(undefined = 没写过 ⇒ 开)。
+// 默认跟随系统(2026-11-12 动效审查 2.5 红线): 系统开了「减弱动态」的用户,
+// 默认就该看到动效被压掉 —— 动效默认强制开启属于可访问性违规, 只有用户显式
+// 打开开关才算主动选择忽略。显式开过(chrome.storage 写过 true / localStorage '1')
+// 的用户不受影响, 仍是强制开。
 // CSS 侧处决写成 html:not([data-force-motion="on"]) ⇒ 属性在 = 不处决。
 // 必须**同步**落地:chrome.storage 是异步的,等它回来首帧已经画完(会看到"不动的首帧")。
 // 所以用 localStorage 镜像做首帧依据;chrome.storage 仍是唯一真源(开面板时对账)。
@@ -26,14 +29,22 @@ function applyForceMotion(on) {
   else document.documentElement.removeAttribute('data-force-motion');
   try { localStorage.setItem('tgs-force-motion', on ? '1' : '0'); } catch (e) {}
 }
-try { if (localStorage.getItem('tgs-force-motion') !== '0') applyForceMotion(true); } catch (e) {}
+function prefersReduceMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+try {
+  const storedLs = localStorage.getItem('tgs-force-motion');
+  // 已表态('1'/'0')尊重表态; 未表态跟随系统(没开减弱动态 = 照常演)
+  applyForceMotion(storedLs === '1' || (storedLs == null && !prefersReduceMotion()));
+} catch (e) { applyForceMotion(!prefersReduceMotion()); }
 
 async function loadForceMotionSwitch() {
-  let on = true;
+  let on;
   try {
     const stored = await chrome.storage.local.get('forceMotionEnabled');
-    on = stored?.forceMotionEnabled !== false;   // 默认开;写成 false 才算关
-  } catch (e) { /* 读不到 ⇒ 保持默认开 */ }
+    if (typeof stored?.forceMotionEnabled === 'boolean') on = stored.forceMotionEnabled;
+    else on = !prefersReduceMotion(); // 未表态 ⇒ 跟系统
+  } catch (e) { on = !prefersReduceMotion(); }
   applyForceMotion(on);
   if (optForceMotion) optForceMotion.checked = on;
 }

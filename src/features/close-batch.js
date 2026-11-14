@@ -19,6 +19,7 @@ import { resultsEl } from '../core/dom.js';
 import { tabItemByTabId, recentlyRestoredTabs } from '../core/store.js';
 import { pushUndo, renderUndoBanner, persistUndoBatch } from './undo.js';
 import { collapseRows, collapseHeaders, vanishingHeaders } from './row-anim.js';
+import { renderEpoch } from './render.js';
 
 let actions = null; // initCloseBatch 注入: { refreshData, render, dropTabs }
 export function initCloseBatch(injected) { actions = injected; }
@@ -151,8 +152,11 @@ export async function runCloseBatch(scope, targetIds) {
   }
   actions.dropTabs?.(new Set(ids));
   renderUndoBanner();
+  const epochAtClose = renderEpoch; // 动画窗口开始前采样(同 closeTab 的纪元护栏)
   await Promise.all([anim, headerAnim]); // 行与分组头都收完才重绘(节点随重绘退场)
   await actions.refreshData({ forceFresh: true });
+  // 等待期间别人重绘过(⌘Z/搜索/切视图)则让路 —— 迟到的 render 会砸掉正在展开的行
+  if (renderEpoch !== epochAtClose) return ids.length;
   actions.render();
   return ids.length;
 }
@@ -198,8 +202,10 @@ export async function closeTabsByIds(ids) {
   }
   actions.dropTabs?.(new Set(list));
   renderUndoBanner();
+  const epochAtClose = renderEpoch; // 同上: 纪元护栏
   await Promise.all([anim, headerAnim]);
   await actions.refreshData({ forceFresh: true });
+  if (renderEpoch !== epochAtClose) return list.length;
   actions.render();
   return list.length;
 }
