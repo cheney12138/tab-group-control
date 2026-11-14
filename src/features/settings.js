@@ -17,26 +17,53 @@ let optOthersGroup = null;
 let optForceMotion = null;
 
 // ---- 强行动效(忽略系统「减弱动态效果」) ----
-// 口径同 Glance 的 motion.alwaysAnimate:**默认开启**(undefined = 没写过 ⇒ 开)。
+// 默认跟随系统(2026-11-12 动效审查 2.5 红线): 系统开了「减弱动态」的用户,
+// 默认就该看到动效被压掉 —— 动效默认强制开启属于可访问性违规, 只有用户显式
+// 打开开关才算主动选择忽略。显式开过(chrome.storage 写过 true / localStorage '1')
+// 的用户不受影响, 仍是强制开。
 // CSS 侧处决写成 html:not([data-force-motion="on"]) ⇒ 属性在 = 不处决。
 // 必须**同步**落地:chrome.storage 是异步的,等它回来首帧已经画完(会看到"不动的首帧")。
 // 所以用 localStorage 镜像做首帧依据;chrome.storage 仍是唯一真源(开面板时对账)。
-function applyForceMotion(on) {
+function applyForceMotion(on, { explicit = false } = {}) {
   if (on) document.documentElement.setAttribute('data-force-motion', 'on');
   else document.documentElement.removeAttribute('data-force-motion');
-  try { localStorage.setItem('tgs-force-motion', on ? '1' : '0'); } catch (e) {}
+  // 镜像必须**三态**: 只有用户显式扳过开关才落盘('1'/'0')。
+  // ⚠️ 2026-11-14 review P0-1 病例: 旧版每次调用都无条件写镜像, "未表态 ⇒ 跟系统"
+  // 推导出的值被写进 localStorage ⇒ 下次启动 '1' 被当成显式表态,
+  // 系统之后再开「减弱动态」也永远不跟了 —— 红线("默认跟随系统")被自己架空。
+  if (explicit) {
+    try { localStorage.setItem('tgs-force-motion', on ? '1' : '0'); } catch (e) {}
+  }
 }
-try { if (localStorage.getItem('tgs-force-motion') !== '0') applyForceMotion(true); } catch (e) {}
+function prefersReduceMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+// 已表态('1'/'0')尊重表态; 未表态跟随系统(没开减弱动态 = 照常演)。启动路径不写镜像。
+try {
+  const storedLs = localStorage.getItem('tgs-force-motion');
+  applyForceMotion(storedLs === '1' || (storedLs == null && !prefersReduceMotion()));
+} catch (e) { applyForceMotion(!prefersReduceMotion()); }
 
 async function loadForceMotionSwitch() {
-  let on = true;
+  let on;
+  let explicit = false;
   try {
     const stored = await chrome.storage.local.get('forceMotionEnabled');
-    on = stored?.forceMotionEnabled !== false;   // 默认开;写成 false 才算关
-  } catch (e) { /* 读不到 ⇒ 保持默认开 */ }
-  applyForceMotion(on);
+    if (typeof stored?.forceMotionEnabled === 'boolean') { on = stored.forceMotionEnabled; explicit = true; }
+    else on = !prefersReduceMotion(); // 未表态 ⇒ 跟系统(不写镜像)
+  } catch (e) { on = !prefersReduceMotion(); }
+  applyForceMotion(on, { explicit }); // chrome.storage 是真源, 表态过才同步镜像
   if (optForceMotion) optForceMotion.checked = on;
 }
+
+// 未表态期间系统偏好实时跟随(弹窗存活期内改系统设置也生效); 显式表态后不再跟
+try {
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => {
+    let explicit = false;
+    try { explicit = localStorage.getItem('tgs-force-motion') != null; } catch (e) {}
+    if (!explicit) applyForceMotion(!prefersReduceMotion());
+  });
+} catch (e) {}
 
 export function isSettingsOpen() {
   return !!(settingsPanel && settingsPanel.classList.contains('open'));
@@ -576,7 +603,7 @@ optOthersGroup.addEventListener('change', async () => {
 // 强行动效开关(唯一出口 applyForceMotion —— 属性不许在别处被漏改)
 optForceMotion = document.getElementById('optForceMotion');
 optForceMotion.addEventListener('change', async () => {
-  applyForceMotion(optForceMotion.checked);
+  applyForceMotion(optForceMotion.checked, { explicit: true }); // 用户扳开关 = 显式表态
   try { await chrome.storage.local.set({ forceMotionEnabled: optForceMotion.checked }); } catch (e) {}
   showToast(optForceMotion.checked ? '动效已强制开启(忽略系统设置)' : '动效跟随系统设置');
 });

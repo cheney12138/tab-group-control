@@ -17,8 +17,12 @@ export const COLLAPSE_MS = 340; // 与 popup.html 的 .tab-item.closing 过渡�
 export const EXPAND_MS = COLLAPSE_MS;
 export const EXPAND_MAX_ROWS = 14; // 最多演 14 行, 其余直接落位(大批量恢复不该演成两秒)
 
-// 减弱动态效果(系统偏好): 直接不演, 走原路径立即重渲染
+// 减弱动态效果(系统偏好): 直接不演, 走原路径立即重渲染。
+// 显式开了「强行动效」则跟 CSS 同一口径放行(data-force-motion="on" 时 CSS 处决不生效,
+// JS 侧也不能比 CSS 更保守 —— 2026-11-14 review P2-4: 旧版开关只救 CSS 动画,
+// 行收起/展开这些 JS 动画照旧不演, 开关文案"动效已强制开启"名不副实)
 export function reduceMotion() {
+  if (document.documentElement.getAttribute('data-force-motion') === 'on') return false;
   return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
@@ -68,6 +72,62 @@ export function collapseRows(rows, { stagger = 0, maxSpread = 420 } = {}) {
   // transitionend 要为每行挂监听且会被中间属性打断, 统一用定时器兜底:
   // 早一点 commit 只是"提前变干净", 不会有残影
   return new Promise(resolve => setTimeout(resolve, spread + COLLAPSE_MS + 40));
+}
+
+// 分组头伴随收起: 给定将被收起的行集合, 找出"整组行都在集合里"的分区头。
+// 分区在 DOM 里的形态是: .group-header 后跟本组的 .tab-item(连续), 直到下一个头。
+// 只收行不收头的话, 组里最后一个标签删完后, 分组头要等到重渲染才"啪"地消失 ——
+// 表现是行收完之后分组头又愣了一拍(用户口径: "迟疑 0.2s 分组 cell 才消失")。
+// 头跟着行一起收, 退场才读成同一段动作。
+export function vanishingHeaders(rows) {
+  const closing = new Set(rows.filter(Boolean));
+  const headers = [];
+  for (const row of closing) {
+    // 本行的分区头: 向前走, 越过本组行, 直到 .group-header(收起中的行也在链上)
+    let el = row.previousElementSibling;
+    while (el && !el.classList.contains('group-header')) el = el.previousElementSibling;
+    if (!el || headers.includes(el)) continue;
+    // 本分区里的全部行都在收起集合里 → 这个头也会随重渲染消失, 收它
+    let n = el.nextElementSibling, count = 0, allIn = true;
+    while (n && !n.classList.contains('group-header')) {
+      if (n.classList.contains('tab-item')) {
+        count++;
+        if (!closing.has(n)) allIn = false;
+      }
+      n = n.nextElementSibling;
+    }
+    if (count > 0 && allIn) headers.push(el);
+  }
+  return headers;
+}
+
+// 收起分组头(与 collapseRows 同一套四步): 量高 → 挂 .closing + 写起点 → 强制结算 → 写终点。
+// delay 默认 70ms(一个错峰档): 头比行晚半拍退场, 读成"tab 先走, 分组头紧跟";
+// 同一组多行时头与错峰的行一起漏下去, 不会等所有行收完才动。
+export function collapseHeaders(headers, { delay = 70 } = {}) {
+  const list = (Array.isArray(headers) ? headers : [headers])
+    .filter(h => h && !h.classList.contains('closing'));
+  if (!list.length) return Promise.resolve();
+  if (reduceMotion()) return Promise.resolve();
+
+  const heights = list.map(h => h.offsetHeight);
+  list.forEach((h, i) => {
+    h.classList.add('closing');
+    h.style.height = `${heights[i]}px`;
+    h.style.overflow = 'hidden';
+    h.style.transitionDelay = `${delay}ms`;
+  });
+  void document.body.offsetHeight;
+  list.forEach((h) => {
+    h.style.height = '0px';
+    h.style.paddingTop = '0px';
+    h.style.paddingBottom = '0px';
+    h.style.marginTop = '0px';
+    h.style.marginBottom = '0px';
+    h.style.opacity = '0';
+    h.style.transform = 'translateX(16px)';
+  });
+  return new Promise(resolve => setTimeout(resolve, delay + COLLAPSE_MS + 40));
 }
 
 // 批量展开(撤销删除/⌘Z): collapseRows 的镜像 —— 从 0 高 + 淡出右移展开回自然高度。
