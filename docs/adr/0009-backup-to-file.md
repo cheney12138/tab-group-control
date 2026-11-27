@@ -264,3 +264,68 @@ Invalid type: expected integer, found array.
 # 备份文件在不在、内容对不对
 cat ~/Downloads/tab_group_rule_bak.json | head -20
 ```
+
+## 2026-11-27 演进：撤掉 downloads 自动备份，改为手动导出/导入 + 变更提醒
+
+上面那套「打开弹窗就自动往下载目录写一份」在真实使用里攒出了四个实测缺陷，这一版整段撤掉：
+
+1. **短命弹窗截断 `backupState.sig` 落库，形成每次唤起都下载的死循环**：弹窗是 100ms 量级的文档，
+   写文件之后 `chrome.storage.local.set({ backupState })` 往往还没落库弹窗就关了。下次 ⌘E 打开时
+   `maybeAutoBackup` 读到的是旧 `sig`（或没有），判定「内容变了」⇒ 又写一遍。用户看到的现象是
+   **每按一次 ⌘E，下载目录就多一个文件**，而配置其实一个字都没改。
+2. **`pagehide` 无锁并发二次触发**：「面板打开时」与「面板关闭时」两个触发点共用同一份状态，
+   却没做互斥；面板开着的期间一改配置（防抖 1.2s）又碰上关面板，两次写盘并发，同一份内容写两遍。
+3. **`tgs-collapsed` / `tgs-view` 临时 UI 态污染指纹**：折叠集合、当前视图（分组/平铺）被算进
+   `data.prefs`，用户随手收个组、按 Tab 切个视图，指纹就变 ⇒ 面板一开就认为「配置变了」并写盘，
+   把缺陷 1 的死循环再次放大。它们不是「用户配出来的东西」，不该进备份，更不该进指纹。
+4. **`onDeterminingFilename` 漏 `return true`**：`background.js` 那个抢文件名的监听里是异步
+   `storage.local.get(...).then(suggest)`，但监听器没有同步 `return true` 表示「稍后应答」——
+   Chrome 直接丢弃这个异步 `suggest`，下载管理器接管时名字照样被改成 `下载.json`（病例三的修法
+   事实上从未生效）。
+
+### 新口径
+
+- **移除 `downloads` 权限**（`manifest.json`），`background.js` 删掉整个 `onDeterminingFilename`
+  监听与 `BACKUP_FILENAME` / `BACKUP_URL_MARK` / `BACKUP_FOLDER_KEY` 常量；`background.js` 与 `src/`
+  里不再出现 `chrome.downloads`。
+- **手动导出**：设置页「功能」→「导出备份…」触发 `window.showSaveFilePicker({ id: 'tgs-backup', … })`，
+  用户可挑任意目录，浏览器按 `id` 记住上次位置；不走下载管线，因此不受下载管理器改名影响，
+  也不产生下载记录。不支持该 API 时降级为普通 Blob `<a download>`（仍是用户主动点击）。
+- **手动导入**：同一行「恢复…」选一份 JSON，按 `LOCAL_KEYS` / `PREF_KEYS` 白名单写回，非法 JSON / 错误
+  `format` 报错且不破坏已有数据。
+- **未导出变更提醒**：导出成功才记 `backupState`（`at` / `sig` / `bytes` / `groups` / `hosts` / `name`）。
+  从未导出过的用户不打扰；导出过之后配置有改动，设置页「功能」tab 与「配置备份」行亮小圆点，
+  文案变为「有未导出变更 · 上次导出 …」。恢复成功后把 `backupState` 重算成恢复后的指纹，状态直接干净。
+- **旧键清理**：`autoBackupEnabled` / `backupFolder` / `backupStrategy` 与 `backupState` 里的
+  `id` / `folder` / `needAuth` / `hint` / `mode` 在开面板时一次性清掉。
+
+端到端验证见 `probes/tgs-backup-manual.mjs`（无 downloads / 无旧 DOM / 取消不出声 / 白名单 /
+不把折叠与视图算进指纹 / 恢复后不亮脏圆点 / 遗留键清理）。
+
+### 2026-11-27 二次演进：放弃 `showSaveFilePicker`，改「一键 Blob 导出 + 面板内拖放/粘贴恢复」
+
+`showSaveFilePicker` 这一版上线当天就被真实场景否掉了：
+
+- **贴图标弹窗里一弹系统保存框就死**。保存框抢走焦点，Chrome 立刻销毁弹窗文档 —— 框还挂在屏幕上
+  等用户选路径，弹窗的 JS 上下文已经没了，`createWritable()` / `write()` 与 `backupState` 落库
+  一个都没执行。用户看到的是「点了导出、选了目录、提示也弹了，回来还是『有未导出变更 · 上次导出
+  7 周前』」。这不是时序能绕过去的，是弹窗文档的生命周期决定的。
+- **转交独立窗口能跑通，但体验割裂**。把 `{ pane:'func', backup:'export'|'restore' }` 发给
+  background、让它开 `popup.html?win=1&…` 再由设置页承接，确实写得出文件；代价是「点一下导出」
+  变成「先弹一个窗口」，还要维护一次性 URL 参数、参数清理、以及面板 `visibility` 过渡期间的
+  聚焦时序（同一帧 `focus()` 无效，得 rAF + 补试）。为一个「导出 JSON」不值得。
+
+**最终采用：一键 Blob `<a download>` 导出 + 面板内拖放/粘贴恢复弹层。**
+
+- 导出：与规则导出同一个动作 —— `new Blob([JSON])` → `URL.createObjectURL` → `<a download="tab_group_rule_bak.json">`
+  → `click()` → 1s 后 `revokeObjectURL`。零弹窗、零权限、同步完成，贴图标弹窗 / 独立窗口 / 普通
+  标签页三种形态行为完全一致。落点退回浏览器默认下载目录，但那是**用户主动点出来的那一次**，
+  不是自动写盘（旧的自动备份与 `downloads` 权限都没有回来）。
+- 恢复：点「恢复…」在当前设置面板上弹 `.backup-restore-layer`，一个 textarea 同时承担**拖放**
+  （`dragover` 高亮边框、`drop` 读文件内容填进去供核对）与**粘贴**；校验失败在弹层内红字提示、
+  不关弹层。只有非贴图标弹窗（`chrome.tabs.getCurrent()` 返回真实 Tab）才额外显示「选择文件…」
+  —— 贴图标弹窗里系统文件框同样会杀掉文档。
+- 一并撤掉：`background.js` 的 `findStandaloneWindow` 回到 `documentUrl === STANDALONE_URL` 全等匹配、
+  `openStandalone()` 回到无参、`open-standalone` 消息不再携带 `pane` / `backup`；`main.js` 删掉
+  一次性 URL 参数承接块（开设置页 → 切 tab → 抢焦点）与那两条「已在独立窗口打开」提示。
+  Esc 关弹层的守卫留在 `main.js` 顶层（弹层叠在设置面板上，这一下只该关弹层）。

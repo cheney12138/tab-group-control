@@ -23,7 +23,7 @@ import { initNav, setActive, focusCurrentTab, navUnits, clearActiveUnit, scrollP
 import { initDnd, moveTabToGroupAction } from './features/dnd.js';
 import { initCloseBatch } from './features/close-batch.js';
 import { initGroupEdit, isGroupEditOpen, closeGroupEdit } from './features/group-edit.js';
-import { initBackup } from './features/backup.js';
+import { initBackup, isBackupRestoreOpen, closeBackupRestore } from './features/backup.js';
 import { initSearch, search, searchValue, closeOneDuplicate, resetCmd } from './features/search.js';
 import { hasMultiSelection, clearMultiSelection, extendMultiSelection, closeMultiSelection } from './features/multi-select.js';
 import { initBlockCaret, refreshBlockCaret } from './features/caret.js';
@@ -281,6 +281,12 @@ document.addEventListener('keydown', async (e) => {
       closeGroupEdit();
       return;
     }
+    // 恢复备份弹层优先于设置面板: 弹层是叠在面板上的, 这一下 Esc 只该关弹层
+    if (isBackupRestoreOpen()) {
+      e.preventDefault();
+      closeBackupRestore();
+      return;
+    }
     if (isSettingsOpen()) {
       e.preventDefault();
       closeSettingsPanel();
@@ -302,6 +308,10 @@ document.addEventListener('keydown', async (e) => {
     }
   }
   const activeEl = document.activeElement;
+  // 设置面板里的控件(如「导出备份」/「恢复…」按钮)拿到焦点时, Enter 必须落到
+  // 按钮本身 —— 下面的标签切换/数字跳转快捷键会把这一下吃掉, 表现成「按回车没反应」
+  // (Escape / Tab 已在上面单独处理过了)
+  if (isSettingsOpen() && activeEl?.closest('#settingsPanel')) return;
   const isOtherInput = activeEl && activeEl !== input
     && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT'
       || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
@@ -317,6 +327,8 @@ document.addEventListener('click', (e) => {
   // 导入 JSON 弹层同理(textarea 要能正常点击定位/输入,
   // 弹层挂在 body 下不在 #settingsPanel 内,须单独豁免)
   if (e.target.closest('.rules-import-layer')) return;
+  // 恢复备份弹层同理(textarea 要能点击定位/粘贴)
+  if (e.target.closest('.backup-restore-layer')) return;
   // 添加域名弹层: 新建分组输入框需要保持焦点,否则点击就丢焦点无法输入
   if (e.target.closest('.group-pop')) return;
   // 分组编辑卡: 名字输入框同理(卡片自己也在 mousedown 上挡了一层)
@@ -708,7 +720,7 @@ async function requestTidyGroups() {
   await loadTabs();
   search('');
   render();
-  // 初始光标落在当前激活标签,Enter 直接回去
+  // 初始光标落在当前激活标签, Enter 直接回去
   focusCurrentTab();
   input.focus();
   // 上一次若是"靶子含激活标签"的批量关闭(关完 popup 就死了), 撤销承诺在 session 里 ——

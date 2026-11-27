@@ -123,74 +123,150 @@
     /* ============================================================
      * 主题: Linear(默认主题) — <html data-theme="linear"> 生效;
      * data-theme 缺省/未知值按本主题渲染(ADR-0003,:root 只存度量基座)。
-     * 暖黑/冷亮 + 发丝线 + 单一紫强调 + 圆角 6/12/16
+     * 精密冷灰阶梯 + 三档发丝线 + 顶边微高光 + 克制冷蓝强调 + 亮暗双态
      * ============================================================ */
     :root[data-theme="linear"] {
       color-scheme: light dark;
-      --bg: #f9f9fb; --surface: #ffffff; --fill: rgba(8, 9, 10, 0.05); --fill-2: rgba(8, 9, 10, 0.08);
-      --text: #08090a; --text-2: #5e6b7a; --text-3: #9ca3af; --placeholder: rgba(8, 9, 10, 0.44);
-      --hairline: rgba(8, 9, 10, 0.08); --header-line: rgba(8, 9, 10, 0.05); --hover: rgba(8, 9, 10, 0.04);
-      --accent: #2563eb; --accent-hi: #3b82f6;
-      --tint: color-mix(in srgb, var(--accent) 12%, transparent); --tint-2: color-mix(in srgb, var(--accent) 18%, transparent);
-      --ring: color-mix(in srgb, var(--accent) 35%, transparent);
-      --danger: #dc2626; --danger-solid: #dc2626; --danger-bg: rgba(220, 38, 38, 0.09);
+      /* 四级冷灰表面阶梯: 画布(#f4f5f7) → 卡片(#ffffff) → 浮层(#ffffff+双层影) */
+      --bg: #f4f5f7; --surface: #ffffff; --surface-2: #f9fafb;
+      --fill: rgba(15, 23, 42, 0.045); --fill-2: rgba(15, 23, 42, 0.075);
+      /* 统一冷灰文字梯度(告别 #5e6b7a 与 #9ca3af 色温混搭, 抬高 --text-3 可读性) */
+      --text: #111318; --text-2: #525b6a; --text-3: #747e8e; --placeholder: rgba(17, 19, 24, 0.40);
+      /* 三档发丝线 + 顶边微高光 */
+      --border-subtle: rgba(15, 23, 42, 0.055);
+      --hairline: rgba(15, 23, 42, 0.085);
+      --border-strong: rgba(15, 23, 42, 0.14);
+      --header-line: rgba(15, 23, 42, 0.05);
+      --rim-light: inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      --hover: rgba(15, 23, 42, 0.042);
+      /* 默认强调色: 精密冷蓝(克制沉稳, 告别高饱和 Chrome 工具蓝) */
+      --accent: #3B6FE8; --accent-hi: #2B5CD4;
+      --tint: color-mix(in srgb, var(--accent) 10%, transparent);
+      --tint-2: color-mix(in srgb, var(--accent) 16%, transparent);
+      --ring: color-mix(in srgb, var(--accent) 28%, transparent);
+      --danger: #cf3434; --danger-solid: #cf3434; --danger-bg: rgba(207, 52, 52, 0.08);
       --amber: #b45309;
-      --seg-active: #ffffff; --seg-shadow: none;
-      --header-bg: #f9f9fb; --header-hover: rgba(8, 9, 10, 0.04);
-      --pop-bg: #ffffff; --shadow-pop: 0 1px 2px rgba(8, 9, 10, 0.18), 0 4px 14px rgba(8, 9, 10, 0.06);
-      --dot-ring: rgba(8, 9, 10, 0.06); --btn-2: #5e6b7a;
-      --media-btn-bg: #ffffff; --media-btn-shadow: 0 1px 3px rgba(8, 9, 10, 0.16);
-      --push-shadow: 0 1px 2px rgba(8, 9, 10, 0.14), 0 4px 12px rgba(8, 9, 10, 0.05);
-      --search-bg: #ffffff; --search-bg-focus: #ffffff; --plate-bg: #f9f9fb;
-      --tag-hot-c: #15803d;   --tag-hot-bg: rgba(22, 163, 74, 0.12);
-      --tag-info-c: #5e6ad2;  --tag-info-bg: rgba(94, 106, 210, 0.10);
-      --tag-mid-c: #5e6b7a;   --tag-mid-bg: rgba(8, 9, 10, 0.06);
-      --tag-stale-c: #b45309; --tag-stale-bg: rgba(180, 83, 9, 0.12);
-      --tag-zombie-c: #dc2626; --tag-zombie-bg: rgba(220, 38, 38, 0.10);
+      --seg-active: #ffffff; --seg-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      --header-bg: #f4f5f7; --header-hover: rgba(15, 23, 42, 0.045);
+      --pop-bg: #ffffff;
+      --shadow-pop: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 4px 12px rgba(15, 23, 42, 0.08), 0 14px 32px rgba(15, 23, 42, 0.08);
+      --dot-ring: rgba(15, 23, 42, 0.08); --btn-2: #525b6a;
+      --media-btn-bg: #ffffff; --media-btn-shadow: 0 1px 3px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.05);
+      --push-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.08);
+      --search-bg: #ffffff; --search-bg-focus: #ffffff; --plate-bg: #f4f5f7;
+      --scrollbar: rgba(15, 23, 42, 0.15); --scrollbar-hover: rgba(15, 23, 42, 0.28);
+      /* 时间标签收敛色相: today/current 随冷蓝 --accent, 消除原先蓝紫打架 */
+      --tag-hot-c: #15803d;    --tag-hot-bg: rgba(22, 163, 74, 0.10);
+      --tag-info-c: var(--accent); --tag-info-bg: var(--tint);
+      --tag-mid-c: #646f80;    --tag-mid-bg: rgba(15, 23, 42, 0.055);
+      --tag-stale-c: #b45309;  --tag-stale-bg: rgba(180, 83, 9, 0.10);
+      --tag-zombie-c: #cf3434; --tag-zombie-bg: rgba(207, 52, 52, 0.09);
       --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px;
       --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 99px;
       --fs-xs: 10.5px; --fs-sm: 11px; --fs-md: 12.5px; --fs-lg: 13px;
       --gutter: 16px;
-      --card-shadow: 0 1px 2px rgba(8, 9, 10, 0.06); --card-shadow-hover: 0 1px 2px rgba(8, 9, 10, 0.10);
+      --card-shadow: 0 1px 1px rgba(15, 23, 42, 0.03), 0 2px 6px rgba(15, 23, 42, 0.035);
+      --card-shadow-hover: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.06);
     }
-    /* 现代风突出色系统: 取自 Chrome 调色板高级温和色号,告别早期纯原色感 */
-    :root,
-    :root[data-theme="linear"] {
-      --accent: #387BE5;
-      --accent-hi: #2768cc;
-      --tint: color-mix(in srgb, var(--accent) 12%, transparent);
-      --tint-2: color-mix(in srgb, var(--accent) 18%, transparent);
-      --ring: color-mix(in srgb, var(--accent) 35%, transparent);
-    }
-    :root[data-theme="linear"][data-accent="blue"]   { --accent: #387BE5; --accent-hi: #2768cc; }
-    :root[data-theme="linear"][data-accent="cyan"]   { --accent: #1BA39C; --accent-hi: #12827c; }
-    :root[data-theme="linear"][data-accent="green"]  { --accent: #34A853; --accent-hi: #278641; }
-    :root[data-theme="linear"][data-accent="orange"] { --accent: #E66A28; --accent-hi: #c75215; }
-    :root[data-theme="linear"][data-accent="rose"]   { --accent: #E55375; --accent-hi: #c93b5c; }
+    /* Linear 五档克制强调色(同明度级精密色) */
+    :root[data-theme="linear"][data-accent="blue"]   { --accent: #3B6FE8; --accent-hi: #2B5CD4; }
+    :root[data-theme="linear"][data-accent="cyan"]   { --accent: #14969E; --accent-hi: #0E7C84; }
+    :root[data-theme="linear"][data-accent="green"]  { --accent: #2D9D5E; --accent-hi: #22824C; }
+    :root[data-theme="linear"][data-accent="orange"] { --accent: #D96B27; --accent-hi: #BC571A; }
+    :root[data-theme="linear"][data-accent="rose"]   { --accent: #D84B6E; --accent-hi: #BE3759; }
 
     @media (prefers-color-scheme: dark) {
+      /* 暗色强调色: 告别过浅粉彩导致的按钮白字发糊, 保持深炭底发光感与按钮白字对比度 */
       :root[data-theme="linear"]:not([data-accent]) {
-        --accent: #8AB4F8; --accent-hi: #a8c7fa;
+        --accent: #4E84F5; --accent-hi: #6A9BFF;
       }
-      :root[data-theme="linear"][data-accent="blue"]   { --accent: #8AB4F8; --accent-hi: #a8c7fa; }
-      :root[data-theme="linear"][data-accent="cyan"]   { --accent: #78D9EC; --accent-hi: #a0e5f3; }
-      :root[data-theme="linear"][data-accent="green"]  { --accent: #81C995; --accent-hi: #a3d9b3; }
-      :root[data-theme="linear"][data-accent="orange"] { --accent: #FCAD70; --accent-hi: #fdc396; }
-      :root[data-theme="linear"][data-accent="rose"]   { --accent: #F28B82; --accent-hi: #f6ada7; }
+      :root[data-theme="linear"][data-accent="blue"]   { --accent: #4E84F5; --accent-hi: #6A9BFF; }
+      :root[data-theme="linear"][data-accent="cyan"]   { --accent: #2AAEB7; --accent-hi: #42C2CB; }
+      :root[data-theme="linear"][data-accent="green"]  { --accent: #3FB974; --accent-hi: #56CA88; }
+      :root[data-theme="linear"][data-accent="orange"] { --accent: #E58242; --accent-hi: #F0965C; }
+      :root[data-theme="linear"][data-accent="rose"]   { --accent: #E66485; --accent-hi: #F07B99; }
       :root[data-theme="linear"] {
-        --bg: #08090a; --surface: #16171c; --fill: rgba(255, 255, 255, 0.05); --fill-2: rgba(255, 255, 255, 0.08);
-        --text: #f7f8f8; --text-2: #9ca3af; --text-3: #6b7280; --placeholder: rgba(247, 248, 248, 0.50);
-        --hairline: rgba(255, 255, 255, 0.06); --header-line: rgba(255, 255, 255, 0.04); --hover: rgba(255, 255, 255, 0.06);
-        --danger: #f87171; --danger-solid: #f87171; --danger-bg: rgba(248, 113, 113, 0.14);
-        --amber: #f59e0b; --seg-active: #1e1f25; --seg-shadow: none; --header-bg: #08090a; --header-hover: rgba(255, 255, 255, 0.06);
-        --pop-bg: #16171c; --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
-        --dot-ring: rgba(255, 255, 255, 0.08); --btn-2: #6b7280; --media-btn-bg: #1e1f25; --media-btn-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-        --push-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2); --search-bg: #16171c; --search-bg-focus: #1e1f25; --plate-bg: #08090a;
-        --tag-hot-c: #4ade80; --tag-hot-bg: rgba(74, 222, 128, 0.16); --tag-info-c: #8a93e8; --tag-info-bg: rgba(94, 106, 210, 0.18);
-        --tag-mid-c: #9ca3af; --tag-mid-bg: rgba(255, 255, 255, 0.08); --tag-stale-c: #fbbf24; --tag-stale-bg: rgba(251, 191, 36, 0.16);
-        --tag-zombie-c: #f87171; --tag-zombie-bg: rgba(248, 113, 113, 0.16);
+        /* 深炭蓝灰四级表面阶梯: #0f1115 → #161920 → #1b1f27 → #222631 */
+        --bg: #0f1115; --surface: #161920; --surface-2: #1c2029;
+        --fill: rgba(255, 255, 255, 0.05); --fill-2: rgba(255, 255, 255, 0.085);
+        --text: #edf0f5; --text-2: #949ead; --text-3: #687283; --placeholder: rgba(237, 240, 245, 0.42);
+        --border-subtle: rgba(255, 255, 255, 0.05);
+        --hairline: rgba(255, 255, 255, 0.085);
+        --border-strong: rgba(255, 255, 255, 0.145);
+        --header-line: rgba(255, 255, 255, 0.045);
+        --rim-light: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        --hover: rgba(255, 255, 255, 0.055);
+        --danger: #f87171; --danger-solid: #ef4444; --danger-bg: rgba(248, 113, 113, 0.14);
+        --amber: #f59e0b; --seg-active: #222631; --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        --header-bg: #0f1115; --header-hover: rgba(255, 255, 255, 0.05);
+        --pop-bg: #1b1f27;
+        --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 8px 24px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        --dot-ring: rgba(255, 255, 255, 0.10); --btn-2: #949ead;
+        --media-btn-bg: #20242e; --media-btn-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        --push-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 6px 20px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        --search-bg: #161920; --search-bg-focus: #1b1f27; --plate-bg: #0f1115;
+        --scrollbar: rgba(255, 255, 255, 0.16); --scrollbar-hover: rgba(255, 255, 255, 0.28);
+        --tag-hot-c: #4ade80; --tag-hot-bg: rgba(74, 222, 128, 0.15);
+        --tag-info-c: color-mix(in srgb, var(--accent) 82%, #ffffff); --tag-info-bg: var(--tint);
+        --tag-mid-c: #848e9e; --tag-mid-bg: rgba(255, 255, 255, 0.07);
+        --tag-stale-c: #fbbf24; --tag-stale-bg: rgba(251, 191, 36, 0.15);
+        --tag-zombie-c: #f87171; --tag-zombie-bg: rgba(248, 113, 113, 0.15);
+        --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+        --card-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(255, 255, 255, 0.07);
       }
     }
+
+    /* Linear 专属精修层(纯装饰/token 消费, 不动布局骨架, 不碰 .tab-item.active 公共交互层) */
+    html[data-theme="linear"] body { -webkit-font-smoothing: antialiased; }
+    html[data-theme="linear"] .view-tabs .tab-slider,
+    html[data-theme="linear"] .settings-tabs .tab-slider { height: 2px; }
+    /* 搜索框: 真正消费 --search-bg / --search-bg-focus, 收柔聚焦环告别生硬表单蓝框 */
+    html[data-theme="linear"] .search-wrap {
+      background: var(--search-bg);
+      border-color: var(--hairline);
+      box-shadow: var(--card-shadow), var(--rim-light);
+      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.18s ease;
+    }
+    html[data-theme="linear"] .search-wrap:focus-within {
+      background: var(--search-bg-focus);
+      border-color: color-mix(in srgb, var(--accent) 44%, var(--border-strong));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent), var(--card-shadow-hover), var(--rim-light);
+    }
+    /* 分组间分割线降噪(替换掉原先 18% 黑线), 保持卡片轮廓 > 列表分割线的主次 */
+    html[data-theme="linear"] .group-header::before {
+      background: linear-gradient(to right, transparent, var(--border-subtle) 14%, var(--border-subtle) 86%, transparent);
+    }
+    /* 分组标题与列表正文拉开字阶层次; 时间戳等宽对齐 */
+    html[data-theme="linear"] .group-header .group-title { font-size: 13px; letter-spacing: -0.015em; }
+    html[data-theme="linear"] .tab-item .title { font-weight: 450; letter-spacing: -0.005em; }
+    html[data-theme="linear"] .last-used { font-size: 11px; font-variant-numeric: tabular-nums; }
+    /* 计数徽章: 精密微件, 弱化字重不抢组名 */
+    html[data-theme="linear"] .group-count {
+      box-shadow: inset 0 0 0 1px var(--border-subtle), var(--rim-light);
+      color: var(--text-3);
+      font-weight: 500;
+    }
+    /* 实体感键帽: 顶高光 + 细底厚影 */
+    html[data-theme="linear"] .kbd {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 1px 0 var(--hairline), var(--rim-light);
+      color: var(--text-2);
+      font-weight: 550;
+    }
+    /* 卡片/浮层/芯片材质精度(双层影 + 顶高光 + 暗色清晰外缘) */
+    html[data-theme="linear"] .sbox,
+    html[data-theme="linear"] .rule-group,
+    html[data-theme="linear"] .archive-card { box-shadow: var(--card-shadow); }
+    html[data-theme="linear"] .ctx-menu,
+    html[data-theme="linear"] .ge-card,
+    html[data-theme="linear"] .group-pop { border-color: var(--border-strong); }
+    html[data-theme="linear"] .host-chip { background: var(--surface-2); border-color: var(--hairline); }
+    html[data-theme="linear"] .rules-save-btn {
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+    html[data-theme="linear"] ::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+    html[data-theme="linear"] ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
     /* 弹窗整体上浮入场: 打开瞬间 translateY(4px)→0 + 淡入,
      * 叠在 Chrome popup 自身的出现动画之上,更顺滑 */
     @keyframes panel-enter {
@@ -539,6 +615,8 @@
       font-weight: 700;
       vertical-align: middle;
     }
+    /* 设置 Tab 里的未导出圆点: 四套主题都跟文字同基线居中 */
+    .settings-tab .dirty-dot { vertical-align: middle; }
     /* 归档卡片列表 */
     .archived-list {
       display: flex;
@@ -752,9 +830,8 @@
     .sbtn { width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-family: inherit; color: var(--text-2); }
     /* 设置行右侧的"值/状态"文字: 与左边加粗的 .slabel 区分(如备份时间) */
     .svalue { color: var(--text-2); font-weight: 500; }
-    /* 备份行右侧: 值 + 一两个小药丸(位置可能很长, 让它自己省略) */
+    /* 备份行右侧: 导出 / 恢复两个小按钮 */
     .backup-pos { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-    .backup-pos .svalue { max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sbtn:hover { background: var(--hover); color: var(--text); }
     /* iOS toggle 开关: 扁平纯净 */
     .srow input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -771,31 +848,16 @@
     .srow input[type="checkbox"]:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
     .srow input[type="checkbox"]:checked + .toggle-track::after { transform: translateX(14px); }
     .srow input[type="checkbox"]:focus-visible + .toggle-track { box-shadow: 0 0 0 3px var(--ring); }
-    /* 备份位置的内联小输入框(与规则编辑器里的 chip 输入同一路数: 基座样式, 主题只调 token) */
-    .sinput {
-      width: 150px; text-align: right; border: 1px solid transparent; background: var(--fill);
-      border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px;
-      color: var(--text-2); outline: none;
+    /* 备份状态行: 比常规设置行紧凑(38px), 过长时省略而不是把卡片撑破 */
+    .srow.srow-backup-status { min-height: 38px; border-top: none; }
+    .srow-backup-status .svalue {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .sinput::placeholder { color: var(--text-3); }
-    .sinput:hover { border-color: var(--hairline); }
-    .sinput:focus { border-color: var(--accent); background: var(--surface); color: var(--text); }
-    /* 行内"点一下展开说明"的小圆钮 + 说明行。
-     * ⚠️ 2026-10-09 病例(本机): 一开始复用规则头那个 .hint-icon(靠 :hover/:focus-visible 弹气泡),
-     * 用户点它**什么都不发生**。实测两点: ① 鼠标点击不匹配 :focus-visible(那条只在键盘聚焦时生效);
-     * ② 更根本的是气泡 position:absolute 挂在行下方, 而这一行在弹窗底部 —— 气泡 y=520、高 167,
-     *    底边 687 早已越过弹窗(520 高), 又被 .sbox 的 overflow:hidden 剪掉 ⇒ 怎么触发都看不见。
-     * 所以改成"点一下在同位置展开一行说明": 内容在**流内**, 不会被裁、也不会跑出屏幕。 */
-    .s-hint-btn {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 17px; height: 17px; margin-left: 3px; padding: 0;
-      border: none; background: none; color: var(--text-3); cursor: pointer;
-      vertical-align: middle; border-radius: 5px;
-    }
-    .s-hint-btn:hover, .s-hint-btn[aria-expanded="true"] { color: var(--accent); }
-    .s-hint-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; }
-    .s-hint-line { padding: 0 14px 10px; margin-top: -4px; font-size: 11px; line-height: 1.6; color: var(--text-3); }
-    .s-hint-line b { color: var(--text-2); font-weight: 600; }
     /* 删除按键: 去边框灰底,与文字一体(带小箭头) */
     .sselect { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-weight: 500; }
     .sselect select {
@@ -1327,7 +1389,7 @@
       30%, 80% { border-color: color-mix(in srgb, var(--danger) 65%, transparent); }
       55% { border-color: var(--danger); }
     }
-    .host-add-input.invalid-flash, .sinput.invalid-flash { animation: invalid-flash 0.6s ease 2; }
+    .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2; }
     /* 组名重名拦截: 同名闪烁(与无效输入同一视觉语言)。
        组名框常态 border:none,闪烁时补 transparent border 让动画可见,
        padding 同步减 1px 补偿占位,防布局抖动 */
@@ -2605,8 +2667,7 @@
       /* 重复域名定位提示: 保留闪烁(否则被冻结到不可见) */
       html:not([data-force-motion="on"]) .host-chip.dup-flash { animation: dup-flash 0.6s ease 2 !important; }
       /* 无效输入拦截提示: 同上,提示信号不能被冻结 */
-      html:not([data-force-motion="on"]) .host-add-input.invalid-flash,
-      html:not([data-force-motion="on"]) .sinput.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
+      html:not([data-force-motion="on"]) .host-add-input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       html:not([data-force-motion="on"]) .rule-group-name input.invalid-flash { animation: invalid-flash 0.6s ease 2 !important; }
       /* 撤销倒计时进度条: 是「还剩多久可撤销」的唯一载体, 不能被冻成 scaleX(0)(信息直接消失)。
        * 冻结成静态满格 —— 6s 的时间信息降级为「窗口还在」, 但至少不丢 */
@@ -3775,7 +3836,7 @@
       <span class="tab-slider"></span>
       <button class="settings-tab active" data-pane="group">分组</button>
       <button class="settings-tab" data-pane="archive">已归档<span id="archivePill" class="s-tab-pill" style="display:none">0</span></button>
-      <button class="settings-tab" data-pane="func">功能</button>
+      <button class="settings-tab" data-pane="func">功能<span id="funcBackupDot" class="dirty-dot" title="配置较上次导出有变更"></span></button>
     </div>
     <div class="settings-body">
       <div class="settings-pane active" id="pane-group">
@@ -3833,21 +3894,27 @@
           </div>
           <div class="srow" id="accentRow"><span class="slabel">突出色</span>
             <span class="accent-row">
-              <button class="accent-swatch active" data-accent="blue" style="--sw:#387BE5" title="蓝"></button>
-              <button class="accent-swatch" data-accent="cyan" style="--sw:#1BA39C" title="青"></button>
-              <button class="accent-swatch" data-accent="green" style="--sw:#34A853" title="绿"></button>
-              <button class="accent-swatch" data-accent="orange" style="--sw:#E66A28" title="橙"></button>
-              <button class="accent-swatch" data-accent="rose" style="--sw:#E55375" title="玫红"></button>
+              <button class="accent-swatch active" data-accent="blue" style="--sw:#3B6FE8" title="冷蓝"></button>
+              <button class="accent-swatch" data-accent="cyan" style="--sw:#14969E" title="青"></button>
+              <button class="accent-swatch" data-accent="green" style="--sw:#2D9D5E" title="绿"></button>
+              <button class="accent-swatch" data-accent="orange" style="--sw:#D96B27" title="橙"></button>
+              <button class="accent-swatch" data-accent="rose" style="--sw:#D84B6E" title="玫红"></button>
             </span>
           </div>
           <button id="cleanBtn" class="srow sbtn"><span class="slabel">清理 7 天未用标签</span><span class="keycaps"><span class="kbd"><span class="k-cmd"></span></span><span class="kbd">⇧</span><span class="kbd">K</span></span></button>
         </div>
         <div class="sbox">
-          <label class="srow" title="配置(分组规则 / 开关 / 外观)变化后自动写一份 JSON 到「下载」目录, 同名覆盖。重装插件、换电脑、清掉浏览器数据之后, 可以用它恢复。"><span class="slabel">自动备份配置</span><input type="checkbox" id="optAutoBackup"><span class="toggle-track"></span></label>
-          <div class="srow"><span class="slabel">备份位置<button type="button" id="backupHintBtn" class="s-hint-btn" aria-expanded="false" aria-controls="backupHintLine" title="点一下看说明"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.4" r="0.4" fill="currentColor" stroke="none"/></svg></button></span><span class="backup-pos"><input id="backupFolderInput" class="sinput" type="text" placeholder="下载目录" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="下载目录下的子文件夹" title="填下载目录下的子文件夹(可多层, 如 TGS/自动备份); 留空就放在下载目录根"><button id="backupOpenFolderBtn" class="rules-io-link" title="用系统文件管理器打开“下载”目录, 看看里面有什么/新建一个子文件夹">打开目录</button></span></div>
-          <div class="s-hint-line" id="backupHintLine" hidden>备份只能落在系统<b>“下载”目录</b>里 —— 浏览器不给扩展“写到别处”的长期权限（自己挑任意路径会变成每次备份都弹一次授权框）。这里只填 <b>“下载”下的子文件夹名</b>（如 TGS/自动备份，最多三层；留空 = 下载目录根），旁边<b>「打开目录」</b>用来看清 / 新建文件夹。Chrome 的文件夹选择器对家目录、文稿、下载这些位置本身是拒绝打开的，所以这里没摆“选择”按钮。</div>
-          <div class="srow"><span class="svalue" id="backupStateLabel">尚未备份</span><span class="backup-pos"><button id="backupRevealBtn" class="rules-io-link" title="在访达 / 资源管理器中显示这个文件">文件位置</button><button id="backupNowBtn" class="rules-io-link" title="现在就写一份">立即备份</button></span></div>
-          <div class="srow"><span class="slabel">从备份恢复</span><button id="backupRestoreBtn" class="rules-io-link" title="选一份之前备份的 JSON">选择文件…</button><input id="backupFileInput" type="file" accept=".json,application/json" hidden></div>
+          <div class="srow">
+            <span class="slabel">配置备份<span id="backupDirtyDot" class="dirty-dot" title="配置较上次导出有变更"></span></span>
+            <span class="backup-pos">
+              <button id="backupExportBtn" class="rules-io-link" title="导出规则、开关与外观配置为 JSON 文件">导出备份</button>
+              <button id="backupRestoreBtn" class="rules-io-link" title="拖入或粘贴备份 JSON 恢复配置">恢复…</button>
+              <input id="backupFileInput" type="file" accept=".json,application/json" hidden>
+            </span>
+          </div>
+          <div class="srow srow-backup-status">
+            <span class="svalue" id="backupStateLabel">尚未导出备份</span>
+          </div>
         </div>
         <div class="help-card">
           <div class="help-card-head"><img src="img/help.png" alt="?"> 使用帮助 · 关于插件 <span id="appVersion" class="app-ver">v—</span></div>

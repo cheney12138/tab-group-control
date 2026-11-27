@@ -12,8 +12,7 @@
     "history",
     "storage",
     "activeTab",
-    "scripting",
-    "downloads"
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"

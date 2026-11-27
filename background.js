@@ -101,7 +101,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // 记录所有由用户手动移动过的标签 ID (无论是通过弹窗拖拽, 还是在 Chrome 标签栏手动拖动/归组)
 // 只要标签被手动干预过, 自动分组引擎就彻底忽略该标签, 绝不自动强拆
 let manualTabIds = new Set();
-chrome.storage.local.get('manualTabIds').then(s => {
+// 就绪标记(与 switchReady 同款): worker 冷启动时这次 storage 读取是异步的,
+// 归组事件若在此之前到达, 读到的是空 Set ⇒ 本该被保护的标签被自动引擎搬走/
+// 拆散。归组入口(doAutoGroupTab / groupExistingTabs)统一 await 它
+let manualReady = chrome.storage.local.get('manualTabIds').then(s => {
   if (Array.isArray(s?.manualTabIds)) {
     manualTabIds = new Set(s.manualTabIds);
   }
@@ -110,6 +113,7 @@ chrome.storage.local.get('manualTabIds').then(s => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && 'manualTabIds' in changes) {
     manualTabIds = new Set(Array.isArray(changes.manualTabIds.newValue) ? changes.manualTabIds.newValue : []);
+    manualReady = Promise.resolve(); // onChanged 已是最新的, 无需再等冷启动读取
   }
 });
 
@@ -165,13 +169,23 @@ function autoGroupTab(tab) {
   return enqueueGroupOp(() => doAutoGroupTab(tab));
 }
 
+// 精确组名查重: **绝不能**把 title 交给 chrome.tabGroups.query 的过滤条件。
+// 真实 Chromium 里 query({title}) 走的是 pattern 匹配, '?' 与 '*' 被当通配符
+// (已 E2E 实锤: 新建「任务?」直接并进了「任务1」, 新建「*」并进窗口首个组)。
+// 所以只按窗口取全量分组, 再在 JS 侧做 === 比较。windowId 缺省时跨窗口查
+async function queryGroupsByExactTitle(title, windowId) {
+  const q = windowId ? { windowId } : {};
+  const all = await chrome.tabGroups.query(q);
+  return all.filter(g => (g.title || '') === title);
+}
+
 // 归组原子操作: 同窗口找同名组 → 并入;没有则新建并命名上色。
 // doAutoGroupTab 主路径 / "No group with id" 重试 / 规则删除迁移 三处共用
 const autoGroupingTabIds = new Set();
 async function attachTabToGroup(tab, groupName) {
   autoGroupingTabIds.add(tab.id);
   try {
-    const existing = await chrome.tabGroups.query({ title: groupName, windowId: tab.windowId });
+    const existing = await queryGroupsByExactTitle(groupName, tab.windowId);
     if (existing.length) {
       await chrome.tabs.group({ tabIds: [tab.id], groupId: existing[0].id });
     } else {
@@ -194,11 +208,10 @@ async function attachTabToGroup(tab, groupName) {
 // 正在用的组), 与 restore-group 恢复归档时同一口径。
 async function createOrMergeGroup({ title, color, tabIds, windowId }) {
   const safeColor = GROUP_COLORS.includes(color) ? color : colorForGroup(title);
-  const q = { title };
-  if (windowId) q.windowId = windowId;
-  const dup = await chrome.tabGroups.query(q).catch(() => []);
+  const dup = await queryGroupsByExactTitle(title, windowId).catch(() => []);
   if (dup.length) {
     await chrome.tabs.group({ tabIds, groupId: dup[0].id });
+    syncManualFlagAfterGrouping(tabIds, title);
     return { merged: true, groupId: dup[0].id };
   }
   const groupId = await chrome.tabs.group({
@@ -206,7 +219,17 @@ async function createOrMergeGroup({ title, color, tabIds, windowId }) {
     ...(windowId ? { createProperties: { windowId } } : {}),
   });
   await chrome.tabGroups.update(groupId, { title, color: safeColor });
+  syncManualFlagAfterGrouping(tabIds, title);
   return { merged: false, groupId };
+}
+
+// 建组/并入后的 manualTabIds 显式对账(与 tabs.onUpdated 的 groupId 分支同一口径):
+// 进了规则组 ⇒ 解除手动保护, 否则这个组从此再受不到规则变更管理;
+// 进了普通/自定义组 ⇒ 记入手动保护。顺带刷新快照, 免得 popup 读到建组前的结构
+function syncManualFlagAfterGrouping(tabIds, title) {
+  if (isRuleGroupName(title)) unmarkTabsManual(tabIds);
+  else markTabsManual(tabIds);
+  refreshSnapshot();
 }
 
 // 改名/改色 (ADR-0007)。两条边界:
@@ -220,7 +243,8 @@ async function createOrMergeGroup({ title, color, tabIds, windowId }) {
 async function renameOrRecolorGroup({ groupId, title, color, renameRule }) {
   const group = await chrome.tabGroups.get(groupId);
   const oldTitle = group.title || '';
-  const dup = await chrome.tabGroups.query({ title, windowId: group.windowId }).catch(() => []);
+  // 精确比对: query({title}) 的通配符语义会把 '任务?'/'*' 当成同名(见 queryGroupsByExactTitle)
+  const dup = await queryGroupsByExactTitle(title, group.windowId).catch(() => []);
   if (dup.some(g => g.id !== groupId)) {
     const err = new Error('同名分组已存在');
     err.code = 'dup';
@@ -259,6 +283,7 @@ async function dissolveGroup(groupId) {
 
 async function doAutoGroupTab(tab) {
   await switchReady; // 确保 storage 状态已加载(worker 冷启动竞态)
+  await manualReady; // 同上: 手动保护白名单未就绪时不能做"是否受保护"的判断
   if (!autoGroupEnabled) return;
   if (!tab || !tab.url || tab.url.startsWith('chrome')) return;
   // 保护 1: 手动干预移动过的标签(Chrome标签栏手动移动/弹窗拖拽/恢复)，自动规则一律忽略
@@ -303,6 +328,7 @@ async function doAutoGroupTab(tab) {
 // 未命中规则的: 散着的归入 Others 兜底,已在其他组里的不动(避免规则外乱迁)
 async function groupExistingTabs() {
   await switchReady;
+  await manualReady; // 白名单就绪后再扫存量, 否则冷启动会把受保护标签全搬一遍
   if (!autoGroupEnabled) return;
   try {
     // 先从 storage 重读规则重建索引——归组消息可能与 storage.onChanged
@@ -454,6 +480,12 @@ async function gotoPreviousTab() {
   }
 }
 chrome.tabs.onRemoved.addListener(refreshSnapshot);
+// 分组结构自身的变更(建组/命名/解散/收空壳)也会让 tabSnapshot 变旧: 只靠
+// tabs 事件的话, 建组后 ~1s 内 popup 拿到的快照仍有旧 tabs[].groupId 与缺组。
+// 存在性判断: 老环境/受限环境可能没有这些事件, 缺了也不该让 worker 挂掉
+if (chrome.tabGroups?.onCreated) chrome.tabGroups.onCreated.addListener(() => refreshSnapshot());
+if (chrome.tabGroups?.onUpdated) chrome.tabGroups.onUpdated.addListener(() => refreshSnapshot());
+if (chrome.tabGroups?.onRemoved) chrome.tabGroups.onRemoved.addListener(() => refreshSnapshot());
 // 切换窗口不触发 tabs.onActivated——这里补压 MRU 栈,否则窗口间的
 // 来回切换全不进栈,⌥E 互跳会跳过它们(多窗口下"失灵"的主因)。
 // WINDOW_ID_NONE = 所有窗口失焦(切去了别的 app),不压
@@ -480,7 +512,8 @@ chrome.tabs.onCreated.addListener((tab) => {
   autoGroupTab(tab); // 新建时 url 可能还未就绪,onUpdated 的 url 变化会兜底
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.title || changeInfo.url || changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined) {
+  if (changeInfo.title || changeInfo.url || changeInfo.audible !== undefined
+    || changeInfo.mutedInfo !== undefined || changeInfo.groupId !== undefined) {
     refreshSnapshot();
   }
   // 感知用户在 Chrome 原生标签栏手动移动/归组: 非插件自身自动归组触发时
@@ -616,7 +649,7 @@ async function moveTabFromRemovedRule(tab, fromTitle) {
 // 解散不会碰用户手动建的规则组
 async function ungroupAllOthersGroups() {
   try {
-    const groups = await chrome.tabGroups.query({ title: 'Others' });
+    const groups = await queryGroupsByExactTitle('Others');
     if (!groups.length) return;
     const groupIds = new Set(groups.map(g => g.id));
     const tabs = await chrome.tabs.query({});
@@ -779,39 +812,6 @@ chrome.windows.onBoundsChanged.addListener(async (win) => {
 
 // popup 消息: 快照 / 整理触发
 // ---------------------------------------------------------------------------
-// 备份文件的落盘名: 抢回被下载管理器改掉的名字
-//
-// 病例(2026-10-08, 用户机器上): 每次 ⌘E 唤起面板, 下载目录就多一个「下载.json / 下载 (1).json / (2)…」。
-// 真因不在我们这边: 用户装了 NeatDownloadManager, 它的 bg.js 在 onCreated 里做的是
-//     chrome.downloads.cancel(id) + chrome.downloads.erase({id})
-// 然后把 URL 重新下一遍 —— 而重下的那一次**不带 filename**(它取名字只认 Content-Disposition /
-// URL 路径末段, data: URL 两者都没有)。于是 Chrome 用本地化的兜底名「下载」+ MIME 后缀 .json,
-// 同时 conflictAction:'overwrite' 也一起丢了 ⇒ 每备份一次就堆一个 (1)/(2)。
-// (已用"复刻 NeatDM 行为的假拦截者 + Chrome 155"在本地完整复现, 见 docs/adr/0009)
-//
-// 修法: 下载的最终名字是可以被扩展"建议"的 —— onDeterminingFilename 在**每次**下载(不管谁发起的)
-// 落盘前都会问一遍。这里只对"我们自己的备份载荷"表态, 把名字与覆盖语义要回来; 别人的下载
-// **不调 suggest()**, 免得干扰下载管理器自己的命名。
-const BACKUP_FILENAME = 'tab_group_rule_bak.json';   // 必须与 features/backup.js 的 BACKUP_FILE 一致
-const BACKUP_URL_MARK = 'tgs-backup';                // 载荷里的 "format": "tgs-backup"(encodeURIComponent 不会转义它)
-const BACKUP_FOLDER_KEY = 'backupFolder';            // 下载目录下的相对子文件夹(空 = 根)
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  const isOurs = typeof item.url === 'string'
-    && item.url.startsWith('data:')
-    && item.url.includes(BACKUP_URL_MARK);
-  if (!isOurs) return;   // 别人的下载一句话都不说, 免得干扰下载管理器自己的命名
-  // 名字要连子文件夹一起建议 —— 只给文件名的话, 用户在设置里填的子文件夹会被建议回根目录
-  chrome.storage.local.get(BACKUP_FOLDER_KEY).then((s) => {
-    const raw = s[BACKUP_FOLDER_KEY];
-    const folder = typeof raw === 'string' ? raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
-    suggest({ filename: folder ? `${folder}/${BACKUP_FILENAME}` : BACKUP_FILENAME, conflictAction: 'overwrite' });
-    // 下载管理器(NeatDM)会 cancel+erase 我们这条下载, 存储读取的间隙里记录已失效,
-    // suggest 落在死 id 上会置 runtime.lastError("Invalid downloadId")——
-    // 这里读一下把它标记为已处理, 否则错误面板里堆 "Unchecked runtime.lastError" 噪音
-    void chrome.runtime.lastError;
-  }).catch(() => suggest({ filename: BACKUP_FILENAME, conflictAction: 'overwrite' }));
-});
-
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const reply = (result) => sendResponse({ ok: true, ...result });
   const fail = (err) => sendResponse({ ok: false, error: err?.code || String(err?.message || err) });
@@ -917,28 +917,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ---- 分组整理: 同名合并 + 空组清理 ----
-// 单例化: 唤起时的 tidy-groups 与规则保存链可能同时触发。后来者拿到的是**正在跑**的
-// 那个 Promise —— mergeDupGroups 要能等它落定(两边都在搬同名组的标签/删空组, 交错
-// 会互相踩), 光靠一个 boolean 只能"跳过", 没法"等一等"。
+// 单例化 + 串行化: 唤起时的 tidy-groups 与规则保存链可能同时触发。后来者拿到
+// 的是**正在跑**的那个 Promise。
+// 必须进 enqueueGroupOp 的原因: tidy 会 tabs.group 搬标签、tabs.create 收空壳,
+// 而 createOrMergeGroup 是"先 tabs.group 再 tabGroups.update"两步——tidy 若在两步
+// 中间把刚建的空组当空壳收掉, 后续 update 就是 "No group with id"。队列互斥后两者
+// 不可能交错。
+// ⚠️ 也因此 mergeDupGroups 不得 await tidyInFlight: 两者现在由同一条队列
+// 互斥执行, 再 await 就变成自己等自己 —— 永久死锁。
 let tidyInFlight = null;
 function tidyGroups() {
   if (tidyInFlight) return tidyInFlight;
-  tidyInFlight = doTidyGroups().finally(() => { tidyInFlight = null; });
+  tidyInFlight = enqueueGroupOp(() => doTidyGroups())
+    .finally(() => { tidyInFlight = null; });
   return tidyInFlight;
 }
 
 // 空组收尸: Chrome 没有删组 API, 只能往里塞一个一次性临时标签再关掉, 组随之被回收。
 // tidyGroups 与 mergeDupGroups 共用(重复组合并后留下的空壳也走这条路)
 async function collapseEmptyGroup(group) {
+  // chrome.tabs.create 返回的是单个 Tab 对象(不可迭代): 曾写成 `const [tmp] = await ...`,
+  // 必抛 TypeError 且被下面的 catch 吞掉, 则建出来的 about:blank 无人关闭 ——
+  // 每合并一次就泄漏一根幽灵标签(E2E 实测 4→5)。用普通变量 + catch 里兜底关闭
+  let tmp = null;
   try {
-    const [tmp] = await chrome.tabs.create({
+    tmp = await chrome.tabs.create({
       url: 'about:blank', active: false, windowId: group.windowId,
     });
     await chrome.tabs.group({ tabIds: [tmp.id], groupId: group.id });
     await chrome.tabs.remove(tmp.id);
+    tmp = null;
     return true;
   } catch (e) {
-    return false; // 组可能已被合并顺带删除
+    // 组可能已被合并顺带删除; 临时标签建出来了就必须关掉, 不能留在窗口里
+    if (tmp?.id) await chrome.tabs.remove(tmp.id).catch(() => {});
+    return false;
   }
 }
 
@@ -962,7 +975,11 @@ async function doTidyGroups() {
     for (const [windowId, winGroups] of byWindow) {
       const sameName = new Map();
       for (const g of winGroups) {
-        const key = g.title || '';
+        // 未命名组(只点"新建组"没命名, title 为空串)不参与同名合并:
+        // 空串相等不代表"同一个组", 多个未命名组是合法并存状态,
+        // 当成重复组暴力合并会把用户刚拉好的几个组全搬进一个壳
+        if (!g.title) continue;
+        const key = g.title;
         if (!sameName.has(key)) {
           sameName.set(key, g);
         } else {
@@ -1008,9 +1025,9 @@ async function doTidyGroups() {
 // 一致: 同一窗口内所有同名组 → 第一个为 keeper, 其余组的标签搬进去, 搬空的壳用
 // 临时标签法收尸。**只按窗口隔离**: 跨窗口的同名组是合法的, 一根标签都不动。
 async function mergeDupGroups({ windowId, title }) {
-  // 整理正在跑就先等它落定(见 tidyInFlight 注释): 两边同时搬同一批标签会互相踩
-  if (tidyInFlight) await tidyInFlight.catch(() => {});
-  const groups = await chrome.tabGroups.query({ title, windowId });
+  // 不 await tidyInFlight: tidyGroups 与 mergeDupGroups 都在 enqueueGroupOp 队列里,
+  // 已由队列互斥; 再等 tidyInFlight 就是自己等自己(队列里等一个排队中的任务) ⇒ 死锁
+  const groups = await queryGroupsByExactTitle(title, windowId);
   if (groups.length < 2) return { merged: 0, tabs: 0, removed: 0 };
   const keeper = groups[0];
   const others = groups.slice(1);

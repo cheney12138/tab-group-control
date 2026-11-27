@@ -14,6 +14,19 @@ export const GROUP_COLORS = {
   orange: '#FCAD70', // Chrome 暖橙 (附图第9项)
 };
 
+// Chrome 组色名 → Linear 主题专属精修色板(亮/暗双模均衡,告别 Chrome 暗栏粉彩在亮底发飘)
+export const LINEAR_GROUP_COLORS = {
+  grey:   '#8A94A6', // 冷墨灰
+  blue:   '#467BF0', // 精密冷蓝
+  red:    '#E05858', // 克制绯红
+  yellow: '#D69E2E', // 暖铜金(亮底清晰可读)
+  green:  '#38A169', // 翡翠绿
+  pink:   '#DB5E99', // 柔玫粉
+  purple: '#8B6CE8', // 雅致紫
+  cyan:   '#26A6B5', // 清冷青
+  orange: '#E07A3C', // 琥珀橙
+};
+
 // Chrome 组色名 → 中国水墨矿物色(用于 ink 主题,温润内敛)
 export const INK_GROUP_COLORS = {
   grey: '#A79E92',   // 淡墨
@@ -92,7 +105,7 @@ export function buildSkyBleedSvg(hex) {
 //   blotSvg          归档卡片左侧点的晕染图构造器(主题自备, 可选): 入参分组色, 返回 data-URI
 //   tabSliderExtra   顶部 Tab 滑块左右挑出量 px(可选视觉资产)
 export const THEME_ASSETS = {
-  linear: { groupColors: GROUP_COLORS },
+  linear: { groupColors: LINEAR_GROUP_COLORS },
   ink: { groupColors: INK_GROUP_COLORS, inkBlot: true, blotSvg: buildInkBleedSvg, tabSliderExtra: 6 },
   sky: { groupColors: SKY_GROUP_COLORS, blotSvg: buildSkyBleedSvg },
   deepseek: { groupColors: DEEPSEEK_GROUP_COLORS },

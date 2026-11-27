@@ -180,14 +180,19 @@ export async function openGroupMenu(group, scopeWindowId, x, y) {
   // “同窗口有没有同名组”在**开菜单这一刻**重查一次, 不信 render 传下来的快照:
   // 菜单本身是异步打开的(loadScopeByKey), 中间 tidy 可能已经把它们合了。
   // 只查本窗口 —— 跨窗口同名是合法的, 不该给合并入口。
-  const [scope, sameName] = await Promise.all([
+  // **不能**用 chrome.tabGroups.query({ title }) 判重名: 它的 title 是**通配匹配**
+  // (? = 任意单字符, * = 任意串), 组名叫「任务?」「*」时会把别的组认成同名(实锤见
+  // probes/tgs-ctx-tab-live.mjs Case 3.2)。改成取本窗口全量后在 JS 里精确比对。
+  const [scope, windowGroups] = await Promise.all([
     loadScopeByKey(windowId, group ? group.id : GROUP_NONE),
     group?.title
-      ? chrome.tabGroups.query({ title: group.title, windowId }).catch(() => [])
+      ? chrome.tabGroups.query(windowId ? { windowId } : {}).catch(() => [])
       : Promise.resolve([]),
   ]);
   if (token !== openToken || !scope) return;
-  const hasDup = sameName.length > 1;
+  const hasDup = group?.title
+    ? (windowGroups || []).filter(g => (g.title || '') === group.title).length > 1
+    : false;
 
   const all = computeTargets(scope, 'all', null);
   const label = group

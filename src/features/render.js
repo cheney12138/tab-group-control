@@ -587,6 +587,9 @@ function buildGroupHeader(group, count, isCollapsed, onClick, maxCount, scopeWin
   }
   // 右键菜单: 组级动作(关闭全组 / 归档)的入口。未分组分区同样吃这套(group=null),
   // 它没有组名, 只能靠“本窗口”交代作用域
+  // 右键 mousedown 先拦一道(见 buildTabRow 里同一段注释): 否则 Chrome 在右键按下的瞬间
+  // 就把焦点从 #search 抢到 BODY, 菜单期间 ↑↓/Enter/Esc 全哑
+  header.addEventListener('mousedown', (e) => { if (e.button === 2) e.preventDefault(); });
   header.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -855,6 +858,11 @@ function buildTabRow(item) {
 
   // 右键菜单: 虚拟条目(书签/历史, 负 id)不是真实标签, 没有关闭语义
   if (!isVirtualItem) {
+    // 真右键(= mousedown button 2)会把焦点从 #search 抢到 BODY: Chrome 在按下那一刻
+    // 就重算焦点, 于是菜单还开着而键盘快捷键(↑↓ 导航 / ⌘⌫ / Esc)全部失效。
+    // 只拦右键:**绝不拦左键** —— 左键的 mousedown 是拖拽与点击的起点, 拦了拖拽就废了。
+    // 拦住 mousedown 的默认行为不影响随后的 contextmenu 事件, 菜单照常弹
+    row.addEventListener('mousedown', (e) => { if (e.button === 2) e.preventDefault(); });
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();

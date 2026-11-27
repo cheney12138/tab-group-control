@@ -43,14 +43,21 @@ export async function cleanEmptyGroups() {
     if (!ok) return;
     let cleaned = 0;
     for (const g of empty) {
+      // chrome.tabs.create 返回的是**单个 Tab 对象**, 不是数组。
+      // 病例(2026-11-25, 真实 headless 实测实锤): 旧代码 `const [tmp] = await chrome.tabs.create(...)`
+      // 对不可迭代对象解构 ⇒ TypeError 抛在 try 里 ⇒ 被自己的 catch 吞掉 ⇒
+      // 临时 about:blank 已经建出来了却没人关它 ⇒ 每清一个空组就泄漏一根 tab。
+      let tmp = null;
       try {
-        const [tmp] = await chrome.tabs.create({
+        tmp = await chrome.tabs.create({
           url: 'about:blank', active: false, windowId: g.windowId,
         });
         await chrome.tabs.group({ tabIds: [tmp.id], groupId: g.id });
         await chrome.tabs.remove(tmp.id);
         cleaned += 1;
       } catch (e) {
+        // 中途任何一步失败(含上面 group/remove 偶发报错)都把临时标签收掉, 不留泄漏
+        if (tmp?.id) await chrome.tabs.remove(tmp.id).catch(() => {});
         console.error(`清理分组 ${g.title} 失败:`, e);
       }
     }

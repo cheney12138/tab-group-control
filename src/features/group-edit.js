@@ -59,6 +59,22 @@ async function loadRuleNames() {
   }
 }
 
+// 同一窗口现有的分组名集合(建组卡的"会并入谁"预警用)。
+// Chrome 的 tabGroups.query({ title }) 的 title 是**通配匹配**(? / * 有语义),
+// 所以这里只按 windowId 查全量, 再在 JS 里精确比对名字 —— 组名里带 ? 的用户
+// 不该被当成通配符(与 contextmenu.js / settings.js 同一道防线)。
+// 空名组不算(Chrome 未命名组的 title 是空串), 它们没有"同名并入"语义
+async function loadWindowGroupNames(windowId) {
+  try {
+    const groups = await chrome.tabGroups.query(windowId ? { windowId } : {});
+    const set = new Set();
+    for (const g of groups || []) if (g.title) set.add(g.title);
+    return set;
+  } catch (e) {
+    return new Set();
+  }
+}
+
 // 与 background 通信的统一入口。**必须把"后台说不行"和"后台根本没答"分开** ——
 // 病例(2026-09-23, 用户截图): 改完 background.js 没重载扩展, 弹窗文件是每次打开即读磁盘
 // (新卡片照常出现), 而 service worker 还在跑旧代码 —— 旧后台没有 create-group 分支
@@ -84,7 +100,7 @@ async function sendToBackground(msg) {
   return resp;
 }
 
-// 卡片骨架。cfg: { heading, sub, name, color, ruleTip, showRuleCheck, showMergeHint }
+// 卡片骨架。cfg: { heading, sub, name, color, ruleTip, showRuleCheck, showMergeHint, windowId }
 function buildCard(cfg) {
   const assets = themeAssets();
   const el = document.createElement('div');
@@ -121,7 +137,12 @@ function buildCard(cfg) {
 // 返回错误文案则留在卡内报错, 返回 null 视为成功(调用方自己关)
 async function openCard(cfg, onSubmit) {
   closeGroupEdit();
-  const ruleNames = await loadRuleNames();
+  // 两条"名字会不会撞上别人"的线索一起取: 规则键(全局) + 本窗口已有组名。
+  // 后者只在建组卡上要(编辑卡的名字本来就是它自己的)
+  const [ruleNames, windowGroupNames] = await Promise.all([
+    loadRuleNames(),
+    cfg.showMergeHint ? loadWindowGroupNames(cfg.windowId) : Promise.resolve(new Set()),
+  ]);
   let color = cfg.color || 'grey';
   const el = buildCard(cfg);
   layer = el;
@@ -133,9 +154,12 @@ async function openCard(cfg, onSubmit) {
   const ruleCheck = el.querySelector('.ge-rule-check');
   const hintEl = el.querySelector('.ge-hint');
 
-  // 名称与规则键的实时对照: **只在建组卡**上提示"会并入已有规则组" ——
-  // 免得用户以为新建了一个新组。编辑卡不挂它: 那里名字本来就该是它自己的
-  // (规则组的当前名就是规则键, 挂上去会读成"确定后要并入自己", 纯噪声)
+  // 名字会不会撞上别人 —— **只在建组卡**上讲, 免得用户以为新建了一个独立分组。
+  // 编辑卡不挂它: 那里名字本来就该是它自己的(规则组的当前名就是规则键,
+  // 挂上去会读成"确定后要并入自己", 纯噪声)
+  // 口径(2026-11-25 用户确认): 并入本身不是 bug, **静默**并入才是。所以这里
+  // 既要说"会并入", 也要说"并进谁": 本窗口已有同名组(自定义/规则组) 优先,
+  // 其次才是只撞上规则键(本窗口还没建组)。判定按 windowId 走 —— 跨窗口同名合法。
   // 同时把上一次的报错**实时**抹掉: 报错描述的是"上一次那个名字", 用户一改就不再成立; 
   // 留在屏幕上就等于拿旧结论回话(病例: 截图里"fedo"与「分组名不能为空」同时出现 ——
   // 那个报错是空名那一下留下的, 打字并不清它)
@@ -143,7 +167,16 @@ async function openCard(cfg, onSubmit) {
     if (errEl.textContent) errEl.textContent = '';
     if (!hintEl || !cfg.showMergeHint) return;
     const name = inputEl.value.trim();
-    hintEl.textContent = name && ruleNames.has(name) ? '已有同名规则组，确定后会并入它' : '';
+    if (!name) { hintEl.textContent = ''; return; }
+    const inWindow = windowGroupNames.has(name);
+    const isRule = ruleNames.has(name);
+    hintEl.textContent = (inWindow && isRule)
+      ? '本窗口已有同名规则组，确定后会并入它'
+      : inWindow
+        ? '本窗口已有同名分组，确定后会并入它'
+        : isRule
+          ? '已有同名规则组，确定后会并入它'
+          : '';
   };
   inputEl.addEventListener('input', refreshHint);
   refreshHint();
@@ -220,6 +253,7 @@ export async function openNewGroupCard({ tabIds, windowId, rowTitle }) {
     name: '',
     color: 'blue',
     showMergeHint: true,
+    windowId, // 预警要按"本窗口"判: 跨窗口同名是合法的, 不该提示并入
   }, async (name, color) => {
     const resp = await sendToBackground({
       type: 'create-group', title: name, color, tabIds, windowId,

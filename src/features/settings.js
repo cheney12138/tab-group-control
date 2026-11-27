@@ -8,6 +8,7 @@ import { relativeTime } from '../core/format.js';
 import { themeAssets } from '../core/colors.js';
 import { recentlyRestoredTabs } from '../core/store.js';
 import { loadRulesForEdit } from './rules.js';
+import { refreshBackupStatus } from './backup.js';
 
 let actions = null;          // initSettings 注入的 main 侧能力
 let settingsBtn = null;      // 以下元素引用在 initSettings 内赋值
@@ -79,6 +80,9 @@ function openSettingsPanel() {
   loadOthersGroupSwitch();
   loadForceMotionSwitch();
   renderArchivedList();
+  // 每次点开设置面板都重算一次「上次导出 / 有未导出变更」——
+  // 配置可能在面板关着时被自动分组 / 右键菜单改过
+  refreshBackupStatus().catch(() => {});
   requestAnimationFrame(() => positionTabSlider(document.querySelector('.settings-tabs')));
 }
 
@@ -388,9 +392,12 @@ async function restoreArchivedGroupAction(item) {
       } else {
         // worker 异常兜底: 直调建组(竞态概率低,总好过打开的标签散着)
         if (resp && !resp.ok) console.error('队列建组失败,转直调:', resp.error);
-        const dupQuery = { title };
-        if (windowId) dupQuery.windowId = windowId;
-        const dupGroups = await chrome.tabGroups.query(dupQuery).catch(() => []);
+        // 同样不能用 query({ title }) —— tabGroups.query 的 title 是通配匹配
+        // (? / * 有语义), 组名「任务?」会误配到「任务1」。取本窗口全量再精确比名字
+        const windowGroups = await chrome.tabGroups
+          .query(windowId ? { windowId } : {})
+          .catch(() => []);
+        const dupGroups = (windowGroups || []).filter(g => (g.title || '') === title);
         if (dupGroups.length) {
           mergedIntoExisting = true;
           await chrome.tabs.group({ tabIds: newTabIds, groupId: dupGroups[0].id });
@@ -449,28 +456,63 @@ async function restoreArchivedGroupAction(item) {
 // 触发归档动作: 存入 storage -> 关闭标签栏中的对应标签 -> 提示并刷新列表
 export async function archiveGroupAction(group) {
   if (!group || !group.id) return;
-  const targetTabs = actions.getAllTabs().filter(x => x.group && x.group.id === group.id);
-  if (!targetTabs.length) return;
 
-  const tabsToSave = targetTabs.map(x => ({
-    title: x.tab.title || x.tab.url || '未命名页面',
-    url: x.tab.url,
-    favIconUrl: x.tab.favIconUrl || ''
-  }));
+  // **实时查 Chrome, 不信面板快照**: actions.getAllTabs() 是 1s 追帧的派生数据,
+  // 刚拖进/刚新建的标签可能还不在里面 ⇒ 归档卡会漏标签(标签被关掉却没人记得它)。
+  // 归档的承诺是"留存", 漏一条就是真的丢一条。
+  let live = null;
+  try {
+    live = await chrome.tabs.query({ groupId: group.id });
+  } catch (e) {
+    live = null; // 回退到快照(见下)
+  }
+
+  let tabsToSave;
+  let tabIdsToRemove = [];
+
+  if (Array.isArray(live)) {
+    // lastAccessed 倒序(= 最近用过的排前, 与行内"代表标签"同一把尺子);
+    // 同 URL 副本拍平成一条 —— 归档卡是"这一类页面"的清单, 不是份数台账
+    const ordered = live
+      .filter(t => !!t.url)
+      .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    const seenUrl = new Set();
+    tabsToSave = [];
+    for (const t of ordered) {
+      if (seenUrl.has(t.url)) continue;
+      seenUrl.add(t.url);
+      tabsToSave.push({
+        title: t.title || t.url || '未命名页面',
+        url: t.url,
+        favIconUrl: t.favIconUrl || ''
+      });
+    }
+    // 关闭靶子 = 该组**全部**实时成员(不只快照里那几条), 否则会留下一篇没被归档的散标签
+    tabIdsToRemove = live.map(t => t.id).filter(id => id > 0);
+  } else {
+    // worker/API 异常时的快照兜底: 保持旧语义(代表标签 + 同组副本)
+    const targetTabs = actions.getAllTabs().filter(x => x.group && x.group.id === group.id);
+    if (!targetTabs.length) return;
+    tabsToSave = targetTabs.map(x => ({
+      title: x.tab.title || x.tab.url || '未命名页面',
+      url: x.tab.url,
+      favIconUrl: x.tab.favIconUrl || ''
+    }));
+    for (const x of targetTabs) {
+      if (x.tab && x.tab.id > 0) tabIdsToRemove.push(x.tab.id);
+      if (x.duplicates && x.duplicates.length) {
+        tabIdsToRemove.push(...x.duplicates.filter(id => id > 0));
+      }
+    }
+  }
+
+  if (!tabsToSave.length) return;
 
   await addArchivedGroup({
     title: group.title || '未命名分组',
     color: group.color || 'grey',
     tabs: tabsToSave
   });
-
-  const tabIdsToRemove = [];
-  for (const x of targetTabs) {
-    if (x.tab && x.tab.id > 0) tabIdsToRemove.push(x.tab.id);
-    if (x.duplicates && x.duplicates.length) {
-      tabIdsToRemove.push(...x.duplicates.filter(id => id > 0));
-    }
-  }
 
   // 必须在关闭标签之前写入未读标记: 若当前激活标签在被关列表中,
   // chrome.tabs.remove 会导致 Chrome 瞬间关闭 popup 进程, 延后写入会导致未读标记丢失
